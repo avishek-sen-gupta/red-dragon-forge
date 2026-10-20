@@ -64,6 +64,14 @@ source at `vendor/red-dragon`, which is never modified from this repo) and
    - `StubMissingProgram` completes the step with RC 0 in the program's place and logs a
      warning. The CLI uses it.
 
+   And an `UnknownReturnCodeStrategy` (`jackal.unknown_return_code`) for a COBOL step whose
+   `RETURN-CODE` is unknown when it ends, as after a tolerated `CALL` to a program outside the
+   run unit (`permit_unresolved_call_targets`):
+   - `RaiseUnknownReturnCode` stops the job with red-dragon's `SymbolicReturnCodeError`: no
+     return code is invented.
+   - `ZeroUnknownReturnCode` completes the step with RC 0 and logs a warning naming the step,
+     so `COND` and `IF` tests see 0. The CLI and `forge-run` use it.
+
    For each step:
    - Each step ends with one outcome (`jackal.results`): `Completed(rc)`, `Abended(code)`,
      `Bypassed(reason)`, `Flushed(cause)`, `SkippedUnresolved` or
@@ -268,6 +276,8 @@ needed. The grammar's source and licence are recorded in
 | `jackal/jackal/unresolved.py` | What the runner does with unresolved references (D7). |
 | `jackal/jackal/missing_data.py` | What the runner does with a DD it cannot allocate. |
 | `jackal/jackal/missing_program.py` | What the runner does with a program it cannot find. |
+| `jackal/jackal/unknown_return_code.py` | What the runner does with a step whose `RETURN-CODE` is unknown. |
+| `jackal/jackal/tolerances.py` | The runner's four tolerance strategies, held together. |
 | `jackal/jackal/parm.py` | `PARM=` region for COBOL `LINKAGE`. |
 | `jackal/jackal/tso.py` | Reads the programs a TSO batch step runs from its `SYSTSIN`. Used by cobble. |
 | `jackal/jackal/jcl/` | JCL parsing through the bridge JAR; procedure expansion. |

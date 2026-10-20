@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from interpreter.vm.builtins import core_builtins
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.bridge_parser import JclBridgeParser, JclSubprocessRunner
 from jackal.missing_data import StrictAllocation
@@ -25,12 +26,12 @@ from jackal.results import (
     Flushed,
 )
 from jackal.runner import JobRunner
+from jackal.unknown_return_code import RaiseUnknownReturnCode
 from jackal.unresolved import RaiseErrorStrategy
 from litter.package import Package
 from tests.covers import NotLanguageFeature, covers
 from tests.package_build import EMPTY, package
 from tests.system_build import scratch, system
-from interpreter.vm.builtins import core_builtins
 
 # Minimal COBOL that reads PARM-DATA and sets RETURN-CODE=42 when it equals 'HELLO     '.
 _PARM_PROGRAM = """\
@@ -65,6 +66,7 @@ def _runner(packaged: Package, tmp_path: Path) -> JobRunner:
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
+        unknown_return_code=RaiseUnknownReturnCode(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         package=packaged,
         system=system(tmp_path),

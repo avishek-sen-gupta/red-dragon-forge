@@ -21,6 +21,7 @@ from jackal.results import (
     SystemAbend,
 )
 from jackal.runner import JobRunner
+from jackal.unknown_return_code import RaiseUnknownReturnCode
 from jackal.unresolved import RaiseErrorStrategy
 from litter.package import Package
 from tests.covers import NotLanguageFeature, covers
@@ -71,6 +72,7 @@ def test_a_cobol_step_with_or_without_parm_reads_in_stream_cards_and_a_dummy_inp
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
+        unknown_return_code=RaiseUnknownReturnCode(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         builtins=core_builtins(),
     )
@@ -111,6 +113,7 @@ def test_a_cobol_step_writing_a_mod_dataset_appends_to_it(
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
+        unknown_return_code=RaiseUnknownReturnCode(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         builtins=core_builtins(),
     )
@@ -142,6 +145,7 @@ def test_a_cobol_program_that_never_ends_abends_s322_when_its_budget_runs_out(
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
+        unknown_return_code=RaiseUnknownReturnCode(),
         program_step_budget=2_000,
         builtins=core_builtins(),
     )
@@ -191,6 +195,7 @@ def test_a_cobol_open_labels_a_new_dataset_and_fails_status_39_on_a_conflicting_
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
+        unknown_return_code=RaiseUnknownReturnCode(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         builtins=core_builtins(),
     )
@@ -232,6 +237,7 @@ def test_a_cobol_step_writing_to_dummy_or_nullfile_keeps_nothing(
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
+        unknown_return_code=RaiseUnknownReturnCode(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         builtins=core_builtins(),
     )

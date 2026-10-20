@@ -253,15 +253,11 @@ _CALLER = """\
             "forge-run: CALL to __entry_NOSUCHPG, but nothing in this run unit is"
             " registered under it\n",
         ),
-        pytest.param(
+        (
             "[tolerant]\npermit_unresolved_call_targets = true\n",
             0,
             "RC=0\n",
             "",
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason="symbolic step RETURN-CODE has no result until the injected strategy lands — red-dragon-forge-evn7",
-            ),
         ),
     ],
 )

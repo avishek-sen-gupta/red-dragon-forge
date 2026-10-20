@@ -8,6 +8,7 @@ from functools import reduce
 from pathlib import Path
 
 from catnip.system_catalog import SystemCatalog
+from interpreter.cobol.symbolic_return_code_error import SymbolicReturnCodeError
 from interpreter.func_name import FuncName
 from interpreter.project.program_entry import ProgramEntry
 from interpreter.vm.builtin import Builtin
@@ -48,7 +49,9 @@ from jackal.results import (
     StepOutcome,
     StepResult,
 )
+from jackal.tolerances import Tolerances
 from jackal.tso_step import dsn_runs, run_tso_step
+from jackal.unknown_return_code import UnknownReturnCodeStrategy
 from jackal.unresolved import UnresolvedReferenceStrategy, referbacks_resolved
 from jackal.utilities import UTILITIES
 from litter.package import Package
@@ -142,6 +145,7 @@ class JobRunner:
         unresolved: UnresolvedReferenceStrategy,
         missing_data: MissingDataStrategy,
         missing_program: MissingProgramStrategy,
+        unknown_return_code: UnknownReturnCodeStrategy,
         program_step_budget: int,
         proclib_dirs: Sequence[Path] = (),
         *,
@@ -151,9 +155,9 @@ class JobRunner:
         self._package = package
         self._files = program_files_of(package.image)
         self._system = system
-        self._unresolved = unresolved
-        self._missing_data = missing_data
-        self._missing_program = missing_program
+        self._tolerances = Tolerances(
+            unresolved, missing_data, missing_program, unknown_return_code
+        )
         self._program_step_budget = program_step_budget
         self._permit_unresolved_call_targets = permit_unresolved_call_targets
         self._builtins = builtins
@@ -163,7 +167,7 @@ class JobRunner:
         return self.run_job(job, DatasetCatalog(scratch, self._system))
 
     def run_job(self, job: Job, catalog: DatasetCatalog) -> JobResult:
-        expanded = self._unresolved.admit(expand_or_fail(job, self._library))
+        expanded = self._tolerances.unresolved.admit(expand_or_fail(job, self._library))
         try:
             history = reduce(
                 lambda done, entry: self._next(
@@ -222,7 +226,7 @@ class JobRunner:
             step.parm,
             step.guard,
         )
-        match allocate(qualified, resolved, catalog, self._missing_data):
+        match allocate(qualified, resolved, catalog, self._tolerances.missing_data):
             case AllocationFailed() as failure:
                 return history.recorded(qualified, failure)
             case DdEnvironment() as env:
@@ -261,7 +265,18 @@ class JobRunner:
         catalog: DatasetCatalog,
     ) -> ProgramResult:
         if step.pgm.name not in self._package.image.programs:
-            return self._missing_program.settle(qualified, step.pgm)
+            return self._tolerances.missing_program.settle(qualified, step.pgm)
+        try:
+            return self._ran(step, env, catalog)
+        except SymbolicReturnCodeError as unknown:
+            return self._tolerances.unknown_return_code.settle(qualified, unknown)
+
+    def _ran(
+        self,
+        step: ProgramStep[StepReference],
+        env: DdEnvironment,
+        catalog: DatasetCatalog,
+    ) -> ProgramResult:
         return run_cobol_step(
             step,
             CompiledProgram(

@@ -10,18 +10,19 @@ from catnip.dataset import Dataset
 from catnip.declaration import Declaration, KsdsEntry
 from catnip.install import install
 from catnip.labels import RecordFormat, SequentialLabel
+from interpreter.vm.builtins import core_builtins
 from jackal.file_definitions import program_files_of
 from jackal.jcl.parser import parse_jcl
 from jackal.missing_data import StrictAllocation
 from jackal.missing_program import AbendMissingProgram
 from jackal.results import Completed
 from jackal.runner import JobRunner
+from jackal.unknown_return_code import RaiseUnknownReturnCode
 from jackal.unresolved import RaiseErrorStrategy
 from litter.package import Package
 from tests.covers import NotLanguageFeature, covers
 from tests.package_build import package
 from tests.system_build import job_catalog, system
-from interpreter.vm.builtins import core_builtins
 
 _DATA = "data/EBCDIC/AWS.M2.CARDDEMO"
 _TRAN_LRECL = 350
@@ -133,6 +134,7 @@ def test_the_statement_step_writes_the_statements(
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
+        unknown_return_code=RaiseUnknownReturnCode(),
         program_step_budget=_BUDGET,
         builtins=core_builtins(),
     )

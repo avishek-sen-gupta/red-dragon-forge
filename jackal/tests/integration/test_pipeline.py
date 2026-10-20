@@ -10,6 +10,7 @@ from jackal.missing_data import StrictAllocation
 from jackal.missing_program import AbendMissingProgram
 from jackal.results import Completed
 from jackal.runner import JobRunner
+from jackal.unknown_return_code import RaiseUnknownReturnCode
 from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
 from tests.package_build import package
@@ -37,6 +38,7 @@ def test_two_step_pipeline_transforms_through_intermediate(tmp_path, bridge_jar)
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
+        unknown_return_code=RaiseUnknownReturnCode(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         package=package(tmp_path / "package", bridge_jar, ("UPCASE", "STARRER")),
         system=system(tmp_path),

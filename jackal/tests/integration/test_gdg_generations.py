@@ -7,6 +7,7 @@ from pathlib import Path
 
 from catnip.gdg import Empty, GdgBase, GdgOrder, Scratch
 from catnip.system_catalog import NotCataloged
+from interpreter.vm.builtins import core_builtins
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.missing_data import (
     LenientAllocation,
@@ -17,14 +18,14 @@ from jackal.missing_program import AbendMissingProgram
 from jackal.model import DD, DdName, GenerationDSN, StepRef
 from jackal.results import AllocationError, AllocationFailed, Completed
 from jackal.runner import JobRunner
+from jackal.unknown_return_code import RaiseUnknownReturnCode
 from jackal.unresolved import RaiseErrorStrategy
 from jackal.value_parts import Value, literal
 from litter.package import Package
 from tests.covers import NotLanguageFeature, covers
-from tests.package_build import EMPTY, package
 from tests.model_build import dd, disp, job, program
+from tests.package_build import EMPTY, package
 from tests.system_build import gdg, job_catalog, scratch, system, upload
-from interpreter.vm.builtins import core_builtins
 
 
 def _gen(ddname: str, base: str, relative: int, *words: str) -> DD[StepRef]:
@@ -40,6 +41,7 @@ def _runner(
         unresolved=RaiseErrorStrategy(),
         missing_data=missing_data,
         missing_program=AbendMissingProgram(),
+        unknown_return_code=RaiseUnknownReturnCode(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         package=packaged,
         system=system(tmp_path),
