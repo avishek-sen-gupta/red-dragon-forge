@@ -11,7 +11,7 @@ are listed in [the cicada architecture page](../reference/cicada/architecture.md
 | cobble graph: TS queues as nodes | `red-dragon-forge-dbk.2` | not started |
 | cobble graph: `START TERMID` and `FROM` on `START_TRANSID` edges | `red-dragon-forge-dbk.3` | partial |
 | cobble graph: spool output linked to the program that writes it | `red-dragon-forge-dbk.4` | not started |
-| `FORMATTIME` honours its `ABSTIME` operand; `YYMMDD` and other date formats | `forge-4of` | partial |
+| `ASKTIME` stores local `ABSTIME`; `FORMATTIME` formats its `ABSTIME` operand in IR, `DATE` in the region's `DATFORM`; `env.toml` sets the time zone and `DATFORM` | `forge-4of` | supported |
 | Partial-key access: `GENERIC` and `KEYLENGTH` on `READ`/`STARTBR`/`DELETE`, `READ GTEQ`, `DELETE GENERIC NUMREC` | `red-dragon-forge-dbk.5` | supported |
 | Conditions outside the raisable set (`ENDFILE`, `ENDDATA`, `QIDERR`, `ITEMERR`) are raised | `forge-3ie` | partial |
 | `EIBRESP2` set per command and condition | `red-dragon-forge-dbk.8` | not started |

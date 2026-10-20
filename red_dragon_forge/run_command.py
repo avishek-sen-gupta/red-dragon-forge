@@ -200,6 +200,7 @@ def _region(
         permit_unresolved_call_targets=config.tolerant.permit_unresolved_call_targets,
         hooks=coprocessing.hooks,
         other_builtins=coprocessing.builtins,
+        clock=config.cics.clock(),
     )
 
 
