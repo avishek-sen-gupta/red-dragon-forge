@@ -438,7 +438,7 @@ fileignoreconfig:
 - filename: squall/testbed/db2-samples
   checksum: bb42ec8c655ac46b32f0e07aed4307ff02f2fd37f7235b4add20fa9f6e48a545
 - filename: .pre-commit-config.yaml
-  checksum: 2906a5730c25e5777aa6c9b2ff8c79f64d128a45e55e88d04fadc703a3795d23
+  checksum: 3aa8b79ca72d1025a5378ddaf2606f4da6a4d65075f45dfc91bd72dbb0583f72
 - filename: cobble/cobble/dataflow/depgraph/build.py
   checksum: e9392afe496d57931a660ef013b5b919f63f8caec9ec630f99689a6fa303e3ec
 - filename: catnip/tests/unit/test_variable_records.py
