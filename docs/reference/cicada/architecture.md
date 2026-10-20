@@ -124,7 +124,7 @@ name two of them define) and the start queue. `hooks` (`TransactionHooks`) fills
 `__cics_task_end_hook`, `__cics_syncpoint_hook` and `__cics_rollback_hook`, one entry each, each
 a no-op unless a composer passes another coprocessor's. Every task the region runs — dispatcher,
 conversational, `START`, `XCTL` — is given `builtins`. `LINK` runs its target with the same
-table, `__cics_task_end_hook` replaced by a no-op in a new mapping; it reaches the table through
+table in a new mapping, with `__cics_task_end_hook` replaced by a no-op and the abend builtins by ones that record the abend without running backout; it reaches the table through
 a closure over the variable `install_cics_runtime` binds it to, so the table is built once and
 never changed. No table is process-global, so two regions run side by side in one process.
 
@@ -132,10 +132,10 @@ never changed. No table is process-global, so two regions run side by side in on
 
 | Family | Verbs | Notes |
 |---|---|---|
-| Program control | `RETURN [TRANSID] [COMMAREA]`, `XCTL`, `LINK`, `ABEND` | `LINK` runs a pre-compiled program synchronously and copies the COMMAREA back. `XCTL` to a program the region lacks raises `PGMIDERR` at the statement, so `RESP` sees it and an unhandled one abends the task |
+| Program control | `RETURN [TRANSID] [COMMAREA]`, `XCTL`, `LINK`, `ABEND` | `LINK` runs a pre-compiled program synchronously and copies the COMMAREA back. An abend in the LINKed program comes back to the caller, which branches to its own `HANDLE ABEND` exit or abends the task with that program's code; backout runs once, only when no level handles it. `LINK` or `XCTL` to a program the region lacks raises `PGMIDERR` at the statement, so `RESP` sees it and an unhandled one abends the task |
 | Interval control | `START`, `RETRIEVE` | `START` queues a task that runs when the issuing task ends; `RETRIEVE` reads its `FROM` data. `INTERVAL`, `AFTER` and `AT` are parsed and recorded, not scheduled |
 | Unit of work | `SYNCPOINT`, `SYNCPOINT ROLLBACK` | act on a composed SQL runtime's unit of work; VSAM writes are not undone |
-| Conditions | `HANDLE CONDITION`, `IGNORE CONDITION`, `HANDLE ABEND LABEL`, `HANDLE ABEND CANCEL` | `RESP` and `NOHANDLE` suppress handler dispatch. An abend the program raises (the `ABEND` verb, an unhandled condition, an unsupported verb) transfers to the active `HANDLE ABEND LABEL` paragraph or section, and the exit is deactivated on entry; a handled abend does not run `on_abend`. `ABEND CANCEL` ignores the exit. `HANDLE ABEND RESET` and `PROGRAM` are logged no-ops |
+| Conditions | `HANDLE CONDITION`, `IGNORE CONDITION`, `HANDLE ABEND LABEL`, `HANDLE ABEND CANCEL` | `RESP` and `NOHANDLE` suppress handler dispatch. An abend the program raises (the `ABEND` verb, an unhandled condition, an unsupported verb, an unhandled abend in a program it LINKs to) transfers to the active `HANDLE ABEND LABEL` paragraph or section, and the exit is deactivated on entry; a handled abend does not run `on_abend`. `ABEND CANCEL` ignores the exit. `HANDLE ABEND RESET` and `PROGRAM` are logged no-ops |
 | BMS | `SEND MAP`, `RECEIVE MAP`, `SEND TEXT`, `SEND` | A bare `SEND FROM` (terminal control) writes its data unformatted, as `SEND TEXT` does; the screen is always erased |
 | File control | `READ`, `WRITE`, `REWRITE`, `DELETE`, `STARTBR`, `READNEXT`, `READPREV`, `ENDBR` | |
 | System | `ASSIGN`, `ASKTIME`, `FORMATTIME`, `INQUIRE`, `WRITEQ TD` | |

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from tests.covers import covers, NotLanguageFeature
 
-from cics.builtins.flow import make_link_builtin
+from cics.builtins.flow import make_link_builtin, make_link_resolve_builtin
 from cics.strategy import _resolve_cics_length_option
 from cics.types import CicsContext, DispatchKind, DispatchResult
 from cics.statements import CicsOperand
@@ -76,24 +76,16 @@ def _region_table():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_link_unknown_program_is_noop():
-    """LINK to a program not in program_cache logs a warning and returns 0."""
-    result_holder = [None]
-    context_holder = [_make_context()]
-    builtin = make_link_builtin(
-        {},
-        result_holder,
-        context_holder,
-        max_steps=10_000,
-        region_builtins=_region_table,
-    )
+def test_link_resolve_answers_pgmiderr_for_a_program_the_region_lacks():
+    """The resolve step answers NORMAL (0) for a program in program_cache and
+    PGMIDERR (27) for one that is not; LINK runs only after NORMAL."""
+    resolve = make_link_resolve_builtin({"MUTATOR": object()})
+    vm, _ = _make_vm_with_ws(bytearray(b"INIT"))
 
-    ws = bytearray(b"INIT")
-    vm, ws_addr = _make_vm_with_ws(ws)
-    result = builtin(_args("UNKNOWN", b"INIT", 0, 4), vm)
-
-    assert result.value == 0
-    assert bytes(vm.region_get(ws_addr)) == b"INIT"  # WS unchanged
+    assert (
+        resolve(_args("MUTATOR"), vm).value,
+        resolve(_args("UNKNOWN"), vm).value,
+    ) == (0, 27)
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -117,8 +109,38 @@ def test_link_writes_modified_commarea_back_to_ws():
     vm, ws_addr = _make_vm_with_ws(ws)
     result = builtin(_args("MUTATOR", b"INIT", 0, 4), vm)
 
-    assert result.value == 0
+    assert result.value == ""
     assert bytes(vm.region_get(ws_addr)) == b"DONE"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_link_answers_the_linked_programs_abcode_without_running_backout():
+    """An abend in the LINKed program comes back as its abcode. The inner
+    program's __cics_abend records the abend but runs no backout, and the
+    caller's result_holder is restored, so the caller's lowering decides."""
+    rollbacks: list[str] = []
+    outer_result = DispatchResult(kind=DispatchKind.RETURN_TRANSID, transid="CM00")
+    result_holder = [outer_result]
+
+    def _abending_run(linked, entry_point, *, max_steps, builtins, initial_vm):
+        builtins[FuncName("__cics_abend")](_args("LNK1"), initial_vm)
+        return initial_vm
+
+    builtin = make_link_builtin(
+        {"ABENDER": object()},
+        result_holder,
+        [_make_context()],
+        max_steps=10_000,
+        region_builtins=lambda: {
+            FuncName("__cics_abend"): lambda args, vm: rollbacks.append("rolled back")
+        },
+        _run_fn=_abending_run,
+    )
+    vm, _ = _make_vm_with_ws(bytearray(b"INIT"))
+
+    result = builtin(_args("ABENDER", b"INIT", 0, 4), vm)
+
+    assert (result.value, rollbacks, result_holder[0]) == ("LNK1", [], outer_result)
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
