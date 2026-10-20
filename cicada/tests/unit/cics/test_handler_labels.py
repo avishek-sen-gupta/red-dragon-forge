@@ -176,3 +176,21 @@ def test_paragraph_names_fold_case():
 
 def test_a_program_with_no_paragraphs_names_none():
     assert paragraph_names({"statements": []}) == frozenset()
+
+
+def test_handle_aid_numbers_its_targets_and_names_every_key_it_handles():
+    """An unlabelled key is named, so a RECEIVE checks it, but numbers no label."""
+    stmts = [
+        ExecCicsStatement(
+            verb="HANDLE AID",
+            options={"PF3": _operand("PARA-EXIT"), "CLEAR": None},
+        ),
+        ExecCicsStatement(verb="HANDLE CONDITION", options={"MAPFAIL": _operand("P")}),
+    ]
+
+    labels = collect_handler_labels(stmts, NO_SECTIONS)
+
+    assert (labels.indices, labels.aid_keys) == (
+        {CodeLabel("para_PARA-EXIT"): 1, CodeLabel("para_P"): 2},
+        frozenset({"PF3", "CLEAR"}),
+    )

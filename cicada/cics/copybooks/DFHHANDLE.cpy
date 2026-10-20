@@ -37,3 +37,11 @@
            05  DFH-HANDLER OCCURS 524 TIMES PIC S9(4) COMP.
       * HANDLE ABEND LABEL's label index, 0 meaning no active exit.
        01  DFH-ABEND-EXIT PIC S9(4) COMP VALUE 0.
+      * HANDLE AID's label index per attention key: ENTER, CLEAR,
+      * PA1-PA3, PF1-PF24, then ANYKEY. 0 is no handler, -1 an
+      * ignored key. DFH-AID-PENDING holds the index a RECEIVE
+      * branches to.
+       01  DFH-AID-HANDLER-BYTES PIC X(60) VALUE LOW-VALUES.
+       01  DFH-AID-HANDLER-TAB REDEFINES DFH-AID-HANDLER-BYTES.
+           05  DFH-AID-HANDLER OCCURS 30 TIMES PIC S9(4) COMP.
+       01  DFH-AID-PENDING PIC S9(4) COMP VALUE 0.

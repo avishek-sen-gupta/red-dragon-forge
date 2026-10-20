@@ -855,7 +855,7 @@ COBOL_CONVERSATIONAL_RECEIVE = """\
 """
 
 
-def _conversational_region(cobol_parser, transid):
+def _conversational_region(cobol_parser, transid, source=COBOL_CONVERSATIONAL_RECEIVE):
     context_holder = [CicsContext(transid=transid, commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
     screen_queue: queue.Queue = queue.Queue()
@@ -868,9 +868,7 @@ def _conversational_region(cobol_parser, transid):
         input_queue=queue.Queue(),
     )
     spec = build_cics_spec(conversational=True)
-    program = compile_cics_program(
-        COBOL_CONVERSATIONAL_RECEIVE.encode(), cobol_parser, spec
-    )
+    program = compile_cics_program(source.encode(), cobol_parser, spec)
     return ConversationalRegion(
         program,
         transid,
@@ -984,3 +982,71 @@ def test_a_handler_target_resolves_as_a_cobol_procedure_reference_does(
         DispatchKind.RETURN,
         "HANDLED0".encode("cp037"),
     )
+
+
+def _aid_handling(receive: str) -> str:
+    return f"""\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. HNDAID.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  CONVMAPI.
+           05  FLD1L PIC S9(4) COMP.
+           05  FLD1F PIC X.
+           05  FLD1I PIC X(8).
+       01  WS-RESP       PIC S9(8) COMP.
+       01  WS-CA         PIC X(8) VALUE SPACES.
+       PROCEDURE DIVISION.
+           EXEC CICS HANDLE AID PF3(PARA-PF3) ANYKEY(PARA-ANY)
+           END-EXEC.
+           EXEC CICS HANDLE CONDITION MAPFAIL(PARA-NOMAP) END-EXEC.
+{receive}
+           MOVE 'RECEIVED' TO WS-CA.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+       PARA-PF3.
+           MOVE 'PF3TAKEN' TO WS-CA.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+       PARA-ANY.
+           MOVE 'ANYKEY00' TO WS-CA.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+       PARA-NOMAP.
+           MOVE 'MAPFAIL0' TO WS-CA.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+"""
+
+
+_RECEIVE = """\
+           EXEC CICS RECEIVE MAP('CONVMAP') INTO(CONVMAPI) END-EXEC."""
+
+_RECEIVE_WITH_RESP = """\
+           EXEC CICS RECEIVE MAP('CONVMAP') INTO(CONVMAPI)
+               RESP(WS-RESP) END-EXEC."""
+
+_PF3_UNLABELLED_BEFORE_RECEIVE = """\
+           EXEC CICS HANDLE AID PF3 END-EXEC.
+           EXEC CICS RECEIVE MAP('CONVMAP') INTO(CONVMAPI) END-EXEC."""
+
+
+@pytest.mark.parametrize(
+    ("receive", "aid", "taken"),
+    [
+        pytest.param(_RECEIVE, "\xf3", "PF3TAKEN", id="named-key"),
+        pytest.param(_RECEIVE, "\xf5", "ANYKEY00", id="anykey-catches-another-pf"),
+        pytest.param(_RECEIVE, "\x6d", "ANYKEY00", id="anykey-catches-clear"),
+        pytest.param(_RECEIVE, "\x7d", "RECEIVED", id="anykey-leaves-enter"),
+        pytest.param(_RECEIVE_WITH_RESP, "\xf3", "RECEIVED", id="resp-suppresses"),
+        pytest.param(
+            _PF3_UNLABELLED_BEFORE_RECEIVE, "\xf3", "RECEIVED", id="unlabelled-ignores"
+        ),
+    ],
+)
+@covers(CobolFeature.EXEC_CICS)
+def test_handle_aid_branches_on_the_key_that_ended_the_receive(
+    cobol_parser, receive, aid, taken
+):
+    region = _conversational_region(cobol_parser, "HNDA", _aid_handling(receive))
+    region.start()
+
+    region.send(InputEvent(fields={"FLD1": "ABC"}, eibaid=aid))
+
+    assert region.result.commarea == taken.encode("cp037")
