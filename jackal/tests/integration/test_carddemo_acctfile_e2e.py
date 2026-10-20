@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 
@@ -15,20 +16,20 @@ from jackal.missing_data import StrictAllocation
 from jackal.missing_program import AbendMissingProgram
 from jackal.results import Completed
 from jackal.runner import JobRunner
+from jackal.unknown_return_code import ZeroUnknownReturnCode
 from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
 from tests.package_build import package
 from tests.system_build import job_catalog, system, upload
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="symbolic step RETURN-CODE has no result until the injected strategy lands — red-dragon-forge-evn7",
-)
 @pytest.mark.carddemo_e2e
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_acctfile_then_readacct_e2e(
-    tmp_path: Path, carddemo_home: Path, bridge_jar: str
+    tmp_path: Path,
+    carddemo_home: Path,
+    bridge_jar: str,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Run ACCTFILE.jcl (DELETE+DEFINE+REPRO) then READACCT.jcl (CBACT01C).
 
@@ -52,6 +53,7 @@ def test_acctfile_then_readacct_e2e(
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
+        unknown_return_code=ZeroUnknownReturnCode(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         package=package(
             tmp_path / "package", bridge_jar, ("CBACT01C",), cbl_dir, (cpy_dir,)
@@ -79,7 +81,11 @@ def test_acctfile_then_readacct_e2e(
 
     # --- Phase 2: READACCT.jcl -- CBACT01C reads KSDS, writes OUTFILE ---
     readacct_job = parse_jcl((jcl_dir / "READACCT.jcl").read_text())
-    readacct_result = runner.run_job(readacct_job, catalog)
+    with caplog.at_level(logging.WARNING, logger="jackal.unknown_return_code"):
+        readacct_result = runner.run_job(readacct_job, catalog)
+    assert [
+        r.getMessage() for r in caplog.records if r.name == "jackal.unknown_return_code"
+    ] == ["STEP05: RETURN-CODE is unknown after the step; completed with RC 0"]
 
     # READACCT has PREDEL (IEFBR14) + STEP05 (CBACT01C)
     step_names = [s.name for s in readacct_result.steps]

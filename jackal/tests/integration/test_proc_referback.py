@@ -3,17 +3,18 @@
 from pathlib import Path
 
 import pytest
+from interpreter.vm.builtins import core_builtins
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.parser import parse_jcl
 from jackal.missing_data import StrictAllocation
 from jackal.missing_program import AbendMissingProgram
 from jackal.results import Completed
 from jackal.runner import JobRunner
+from jackal.unknown_return_code import RaiseUnknownReturnCode
 from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
 from tests.package_build import EMPTY
 from tests.system_build import job_catalog, scratch, system
-from interpreter.vm.builtins import core_builtins
 
 
 @pytest.fixture(autouse=True)
@@ -36,6 +37,7 @@ def test_a_step_receives_a_dataset_passed_by_a_procs_step(tmp_path: Path):
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
+        unknown_return_code=RaiseUnknownReturnCode(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         package=EMPTY,
         system=system(tmp_path),

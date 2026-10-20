@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+from interpreter.vm.builtins import core_builtins
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.parser import parse_jcl
 from jackal.missing_data import StrictAllocation
@@ -10,11 +11,11 @@ from jackal.missing_program import AbendMissingProgram
 from jackal.model import SystemAbend
 from jackal.results import Abended, Completed
 from jackal.runner import JobRunner
+from jackal.unknown_return_code import RaiseUnknownReturnCode
 from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
 from tests.package_build import package
 from tests.system_build import scratch, system
-from interpreter.vm.builtins import core_builtins
 
 _RC4 = """\
        IDENTIFICATION DIVISION.
@@ -60,6 +61,7 @@ def test_a_tso_step_runs_its_programs_and_ends_with_the_highest_code(
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
+        unknown_return_code=RaiseUnknownReturnCode(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         package=package(tmp_path / "package", bridge_jar, ("RC4", "RC0"), src),
         system=system(tmp_path),

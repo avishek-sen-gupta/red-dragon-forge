@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 
 import pytest
+from interpreter.vm.builtins import core_builtins
 from jackal.cli import run
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.missing_data import StrictAllocation
@@ -14,13 +15,13 @@ from jackal.missing_program import (
 )
 from jackal.results import Abended, Completed, StepOutcome, SystemAbend
 from jackal.runner import JobRunner
+from jackal.unknown_return_code import RaiseUnknownReturnCode
 from jackal.unresolved import RaiseErrorStrategy
 from litter.package import Package
 from tests.covers import NotLanguageFeature, covers
 from tests.model_build import job, program
 from tests.package_build import built, package
 from tests.system_build import scratch, system
-from interpreter.vm.builtins import core_builtins
 
 _PGMA = """\
        IDENTIFICATION DIVISION.
@@ -60,6 +61,7 @@ def _outcomes(
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),
         missing_program=missing_program,
+        unknown_return_code=RaiseUnknownReturnCode(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         builtins=core_builtins(),
     )

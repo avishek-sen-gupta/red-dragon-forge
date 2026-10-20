@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 from catnip.labels import KsdsLabel, LabelPending, RecordFormat, SequentialLabel
 from catnip.system_catalog import CATALOG_FILE, NotCataloged, SystemCatalog
+from interpreter.vm.builtins import core_builtins
 from jackal.catalog import Dataset
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.missing_data import (
@@ -64,6 +65,7 @@ from jackal.results import (
     SystemAbend,
 )
 from jackal.runner import JobRunner
+from jackal.unknown_return_code import RaiseUnknownReturnCode
 from jackal.unresolved import (
     IgnoreStrategy,
     RaiseErrorStrategy,
@@ -71,9 +73,8 @@ from jackal.unresolved import (
     UnresolvedReferenceStrategy,
 )
 from tests.covers import NotLanguageFeature, covers
-from tests.package_build import EMPTY
 from tests.model_build import cond, dd, disp, job, program, ref
-from interpreter.vm.builtins import core_builtins
+from tests.package_build import EMPTY
 
 OK = Completed(0)
 FB80 = SequentialLabel(RecordFormat.FB, 80)
@@ -94,6 +95,7 @@ def _run(
         unresolved=unresolved,
         missing_data=missing_data,
         missing_program=missing_program,
+        unknown_return_code=RaiseUnknownReturnCode(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         proclib_dirs=proclib,
         builtins=core_builtins(),

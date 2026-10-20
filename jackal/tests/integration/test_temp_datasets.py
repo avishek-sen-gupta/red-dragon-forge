@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from interpreter.vm.builtins import core_builtins
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.missing_data import (
     LenientAllocation,
@@ -21,12 +22,12 @@ from jackal.model import (
 )
 from jackal.results import AllocationError, AllocationFailed, Completed
 from jackal.runner import JobRunner
+from jackal.unknown_return_code import RaiseUnknownReturnCode
 from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
-from tests.package_build import EMPTY
 from tests.model_build import dd, disp, job, program
+from tests.package_build import EMPTY
 from tests.system_build import scratch, system
-from interpreter.vm.builtins import core_builtins
 
 
 def _pass_dd(name: str) -> DD[StepRef]:
@@ -50,6 +51,7 @@ def _runner(tmp_path, missing_data: MissingDataStrategy = StrictAllocation()):
         unresolved=RaiseErrorStrategy(),
         missing_data=missing_data,
         missing_program=AbendMissingProgram(),
+        unknown_return_code=RaiseUnknownReturnCode(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         package=EMPTY,
         system=system(tmp_path),

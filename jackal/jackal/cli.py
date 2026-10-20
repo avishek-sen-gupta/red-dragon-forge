@@ -20,6 +20,7 @@ from jackal.missing_program import StubMissingProgram
 from jackal.model import Job
 from jackal.results import JobResult
 from jackal.runner import JobRunner
+from jackal.unknown_return_code import ZeroUnknownReturnCode
 from jackal.unresolved import RaiseErrorStrategy, UnresolvedReference
 from litter.open import open_package
 from litter.package import Package
@@ -73,6 +74,7 @@ def _runner(ap: argparse.ArgumentParser, args: argparse.Namespace) -> JobRunner:
         unresolved=RaiseErrorStrategy(),
         missing_data=LenientAllocation(),
         missing_program=StubMissingProgram(),
+        unknown_return_code=ZeroUnknownReturnCode(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         proclib_dirs=_proclibs(args.proclib),
         builtins=core_builtins(),
