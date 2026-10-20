@@ -448,11 +448,17 @@ def emit_indexed_write(
     )
 
 
+def _emit_split_on_normal(
+    ctx: EmitContext, r_res: Register, normal: CodeLabel, other: CodeLabel
+) -> None:
+    r_normal = _emit_binop(ctx, "==", r_res, ctx.const_to_reg(code_for("NORMAL")))
+    ctx.emit_inst(BranchIf(cond_reg=r_normal, branch_targets=(normal, other)))
+
+
 def _emit_return_when_normal(ctx: EmitContext, r_res: Register) -> None:
-    r_held = _emit_binop(ctx, "==", r_res, ctx.const_to_reg(code_for("NORMAL")))
     transfer_lbl = ctx.fresh_label("xctl_transfer")
     failed_lbl = ctx.fresh_label("xctl_failed")
-    ctx.emit_inst(BranchIf(cond_reg=r_held, branch_targets=(transfer_lbl, failed_lbl)))
+    _emit_split_on_normal(ctx, r_res, transfer_lbl, failed_lbl)
     ctx.emit_inst(Label_(label=transfer_lbl))
     ctx.emit_inst(Return_())
     ctx.emit_inst(Label_(label=failed_lbl))
@@ -1448,14 +1454,50 @@ class CicsLoweringStrategy:
         materialised: MaterialisedSectionedLayout,
     ) -> None:
         r_prog = emit_operand_value(ctx, opts.get("PROGRAM"), materialised)
+        r_res = _emit_call(ctx, "__cics_link_resolve", r_prog)
+        _emit_resp_and_raise(ctx, r_res, opts, materialised)
+        run_lbl = ctx.fresh_label("link_run")
+        done_lbl = ctx.fresh_label("link_done")
+        _emit_split_on_normal(ctx, r_res, run_lbl, done_lbl)
+        ctx.emit_inst(Label_(label=run_lbl))
+        self._emit_link_run(ctx, r_prog, opts, materialised)
+        ctx.emit_inst(Label_(label=done_lbl))
+
+    def _emit_link_run(
+        self,
+        ctx: EmitContext,
+        r_prog: Register,
+        opts: Options,
+        materialised: MaterialisedSectionedLayout,
+    ) -> None:
         commarea = _emit_link_commarea(ctx, opts.get("COMMAREA"), materialised)
         ca_len = _resolve_cics_length_option(
             opts.get("LENGTH"), commarea.length, ctx, materialised
         )
         r_off = _emit_int(ctx, commarea.offset)
         r_len = _emit_int(ctx, ca_len)
-        r_res = _emit_call(ctx, "__cics_link", r_prog, commarea.register, r_off, r_len)
-        _emit_resp_and_raise(ctx, r_res, opts, materialised)
+        r_abcode = _emit_call(
+            ctx, "__cics_link", r_prog, commarea.register, r_off, r_len
+        )
+        self._emit_linked_abend(ctx, r_abcode, materialised)
+
+    def _emit_linked_abend(
+        self,
+        ctx: EmitContext,
+        r_abcode: Register,
+        materialised: MaterialisedSectionedLayout,
+    ) -> None:
+        r_abended = _emit_binop(ctx, "!=", r_abcode, _emit_string(ctx, ""))
+        abended_lbl = ctx.fresh_label("link_abended")
+        returned_lbl = ctx.fresh_label("link_returned")
+        ctx.emit_inst(
+            BranchIf(cond_reg=r_abended, branch_targets=(abended_lbl, returned_lbl))
+        )
+        ctx.emit_inst(Label_(label=abended_lbl))
+        self._emit_abend_exit_check(ctx, materialised)
+        _emit_call(ctx, "__cics_abend", r_abcode)
+        ctx.emit_inst(Return_())
+        ctx.emit_inst(Label_(label=returned_lbl))
 
     # ── BIF DEEDIT ────────────────────────────────────────────────────────
 

@@ -24,7 +24,7 @@ are listed in [the cicada architecture page](../reference/cicada/architecture.md
 | Low-volume verbs: spool, `ROUTE`, `SEND PAGE`, `DELAY`, `GETMAIN`, `ENQ`/`DEQ`, terminal `INQUIRE`/`SET`, ISC | `forge-cfb` | not started |
 | Bare `SEND` (terminal control) | `forge-34j` | supported |
 | `HANDLE ABEND LABEL`/`CANCEL`: an abend the program raises transfers to the exit; `ABEND CANCEL` ignores it | `red-dragon-forge-cswt` | supported |
-| A LINKed program's abend reaches the caller's exit or abends the task (today it is discarded); `LINK` to an unknown program raises `PGMIDERR` | `red-dragon-forge-ysu4`, `red-dragon-forge-ch0o` | not started |
+| A LINKed program's abend reaches the caller's exit or abends the task; `LINK` to an unknown program raises `PGMIDERR` | `red-dragon-forge-ysu4`, `red-dragon-forge-ch0o` | supported |
 | Abends raised beneath the program (4038 `CALL` not found, program checks) reach a `HANDLE ABEND` exit | `red-dragon-forge-k0ny` | not started |
 | `HANDLE ABEND RESET`/`PROGRAM`, `ASSIGN ABCODE`, the `RECEIVE MAP` timeout through the exit | `red-dragon-forge-uo3t` | not started |
 | `RESETBR` | `forge-t12` | not started |

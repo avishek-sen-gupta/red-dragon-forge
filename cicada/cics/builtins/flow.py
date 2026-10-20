@@ -9,7 +9,12 @@ from types import MappingProxyType
 from typing import Protocol
 
 from cics.builtins.screen import CicsBuiltin
-from cics.cell import Holder, hold
+from cics.builtins.system import (
+    make_abend_builtin,
+    make_abend_unhandled_builtin,
+    make_abend_unsupported_builtin,
+)
+from cics.cell import Holder, held_or, hold
 from cics.conditions import code_for
 from cics.transaction_hooks import no_hook
 from cics.types import CicsContext, DispatchKind, DispatchResult
@@ -27,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 _TASK_END_HOOK = FuncName("__cics_task_end_hook")
 _COMMAREA = Address("rgn_commarea")
+_NOT_ABENDED = DispatchResult(kind=DispatchKind.RETURN)
 
 
 class RunLinked(Protocol):
@@ -113,10 +119,30 @@ def make_set_xctl_context_builtin(
     return __cics_set_xctl_context
 
 
-def _without_task_end(
+def _linked_table(
     builtins: Mapping[FuncName, Builtin],
+    result_holder: Holder[DispatchResult],
 ) -> Mapping[FuncName, Builtin]:
-    return MappingProxyType({**builtins, _TASK_END_HOOK: no_hook})
+    return MappingProxyType(
+        {
+            **builtins,
+            _TASK_END_HOOK: no_hook,
+            FuncName("__cics_abend"): make_abend_builtin(result_holder),
+            FuncName("__cics_abend_unhandled"): make_abend_unhandled_builtin(
+                result_holder
+            ),
+            FuncName("__cics_abend_unsupported"): make_abend_unsupported_builtin(
+                result_holder
+            ),
+        }
+    )
+
+
+def _abcode_of(result_holder: Holder[DispatchResult]) -> str:
+    result = held_or(result_holder, _NOT_ABENDED)
+    if result.kind != DispatchKind.ABEND:
+        return ""
+    return str(result.abcode)
 
 
 @dataclass(frozen=True)
@@ -147,18 +173,19 @@ def _linked_commarea(
     return bytes(final_vm.region_get(_COMMAREA) or b"")
 
 
-def _isolated_commarea(
+def _isolated_run(
     link: _Link,
     linked: LinkedProgram,
     name: str,
     context: CicsContext,
     commarea: bytes,
     result_holder: Holder[DispatchResult],
-) -> bytes:
+) -> tuple[bytes, str]:
     saved = result_holder[0]
     hold(result_holder, None)
     try:
-        return _linked_commarea(link, linked, name, context, commarea)
+        modified = _linked_commarea(link, linked, name, context, commarea)
+        return modified, _abcode_of(result_holder)
     finally:
         hold(result_holder, saved)
 
@@ -168,6 +195,25 @@ def _write_back(vm: VMState, modified: bytes, offset: int, length: int) -> None:
 
     if length > 0:
         _write_into_ws(vm, modified[:length], offset, length)
+
+
+def _link_target(args: Sequence[TypedValue]) -> str:
+    return _text(args, 0).strip("' ")
+
+
+def make_link_resolve_builtin(
+    program_cache: Mapping[str, LinkedProgram],
+) -> CicsBuiltin:
+    """Return __cics_link_resolve: NORMAL when the region holds the LINK target, PGMIDERR when not."""
+
+    def __cics_link_resolve(args: Sequence[TypedValue], vm: VMState) -> BuiltinResult:
+        name = _link_target(args)
+        if name not in program_cache:
+            logger.error("LINK to unknown program %r — PGMIDERR", name)
+            return BuiltinResult(value=code_for("PGMIDERR"))
+        return BuiltinResult(value=code_for("NORMAL"))
+
+    return __cics_link_resolve
 
 
 def make_link_builtin(
@@ -185,7 +231,12 @@ def make_link_builtin(
 
     Runs the named program synchronously with a copy of the caller's COMMAREA,
     then writes the modified COMMAREA back into the caller's WS at the given
-    offset/length. Uses save/restore on result_holder so the inner program's
+    offset/length, and answers the program's abend code, or "" when it did not
+    abend. The caller's lowering resolves the target first (__cics_link_resolve)
+    and routes a reported abend to its own exit or abends the task with that
+    code. The inner program's abend builtins never run on_abend: backout runs
+    once, where the abend is finally left unhandled. Uses save/restore on
+    result_holder so the inner program's
     EXEC CICS RETURN never affects outer transaction routing, and runs the
     inner program with the region's table (``region_builtins()``) with
     __cics_task_end_hook replaced by a no-op, so that RETURN does not fire a composed coprocessor's real task-end hook (e.g. squall's
@@ -201,12 +252,9 @@ def make_link_builtin(
     """
 
     def __cics_link(args: Sequence[TypedValue], vm: VMState) -> BuiltinResult:
-        name = _text(args, 0).strip("' ")
-        if name not in program_cache:
-            logger.warning("EXEC CICS LINK to unknown program %r — no-op", name)
-            return BuiltinResult(value=0)
-        modified = _isolated_commarea(
-            _Link(_run_fn, max_steps, _without_task_end(region_builtins())),
+        name = _link_target(args)
+        modified, abcode = _isolated_run(
+            _Link(_run_fn, max_steps, _linked_table(region_builtins(), result_holder)),
             program_cache[name],
             name,
             context_holder[0],
@@ -214,6 +262,6 @@ def make_link_builtin(
             result_holder,
         )
         _write_back(vm, modified, _int(args, 2), _int(args, 3))
-        return BuiltinResult(value=0)
+        return BuiltinResult(value=abcode)
 
     return __cics_link

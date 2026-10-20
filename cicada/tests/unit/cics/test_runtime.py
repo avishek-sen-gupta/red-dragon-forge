@@ -39,6 +39,7 @@ _CONSTRUCTOR_BUILTINS = frozenset(
         "__cics_init_eib",
         "__cics_inquire",
         "__cics_link",
+        "__cics_link_resolve",
         "__cics_read",
         "__cics_readnext",
         "__cics_readprev",

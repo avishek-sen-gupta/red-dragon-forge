@@ -101,6 +101,7 @@ def _flow_builtins(
 ) -> Mapping[FuncName, Builtin]:
     from cics.builtins.flow import (
         make_link_builtin,
+        make_link_resolve_builtin,
         make_set_return_context_builtin,
         make_set_xctl_context_builtin,
     )
@@ -114,6 +115,7 @@ def _flow_builtins(
             "__cics_set_xctl_context": make_set_xctl_context_builtin(
                 wiring.result_holder, wiring.program_cache
             ),
+            "__cics_link_resolve": make_link_resolve_builtin(wiring.program_cache),
             "__cics_link": make_link_builtin(
                 wiring.program_cache,
                 wiring.result_holder,

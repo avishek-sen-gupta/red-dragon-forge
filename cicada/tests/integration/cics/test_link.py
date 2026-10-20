@@ -240,3 +240,119 @@ def test_a_linked_program_reads_its_own_fields_at_its_own_offsets(cobol_parser):
         ("SNDMAP", "CALL"),
         ("LNKMAP", "DONE"),
     ]
+
+
+_ABENDER_SRC = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. ABENDER.
+       PROCEDURE DIVISION.
+           EXEC CICS ABEND ABCODE('LNK1') END-EXEC.
+"""
+
+
+def _linking_caller(handle_abend: str) -> str:
+    return f"""\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. LCALLER.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 WS-AFTER PIC X(8) VALUE 'AFTERLNK'.
+       01 WS-EXIT  PIC X(8) VALUE 'EXIT RAN'.
+       PROCEDURE DIVISION.
+{handle_abend}
+           EXEC CICS LINK PROGRAM('ABENDER') END-EXEC.
+           EXEC CICS SEND TEXT FROM(WS-AFTER) END-EXEC.
+           EXEC CICS RETURN END-EXEC.
+       CALLER-EXIT.
+           EXEC CICS SEND TEXT FROM(WS-EXIT) END-EXEC.
+           EXEC CICS RETURN END-EXEC.
+"""
+
+
+def _run_linking_region(caller_src: str, cobol_parser) -> tuple:
+    screen_q: queue.Queue = queue.Queue()
+    rollbacks: list[str] = []
+    result = run_carddemo_region(
+        program_sources={
+            "LCALLER": caller_src.encode(),
+            "ABENDER": _ABENDER_SRC.encode(),
+        },
+        parser=cobol_parser,
+        entry_transid="LC00",
+        screen_queue=screen_q,
+        input_queue=queue.Queue(),
+        transid_to_program={"LC00": "LCALLER", "AB00": "ABENDER"},
+        on_abend=lambda: rollbacks.append("rolled back"),
+    )
+    return result, drain(screen_q), rollbacks
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_an_abend_in_a_linked_program_abends_a_caller_without_an_exit(
+    cobol_parser,
+):
+    """With no exit at either level the task abends with the LINKed program's
+    code, the caller does not run on past the LINK, and backout runs once."""
+    result, screens, rollbacks = _run_linking_region(_linking_caller(""), cobol_parser)
+
+    assert (result.kind, result.abcode, screens, rollbacks) == (
+        DispatchKind.ABEND,
+        "LNK1",
+        [],
+        ["rolled back"],
+    )
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_an_abend_in_a_linked_program_reaches_the_callers_exit(cobol_parser):
+    """CICS searches for an exit from the abending program's level upward: the
+    caller's HANDLE ABEND exit handles the LINKed program's abend, so the task
+    ends normally and no backout runs."""
+    result, screens, rollbacks = _run_linking_region(
+        _linking_caller(
+            "           EXEC CICS HANDLE ABEND LABEL(CALLER-EXIT) END-EXEC."
+        ),
+        cobol_parser,
+    )
+
+    assert (result.kind, screens, rollbacks) == (
+        DispatchKind.RETURN,
+        [{"type": "text", "text": "EXIT RAN"}],
+        [],
+    )
+
+
+def _unknown_link(resp: str) -> str:
+    return f"""\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. LCALLER.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 WS-RESP       PIC S9(8) COMP.
+       01 WS-RESP-SHOWN PIC X(8).
+       PROCEDURE DIVISION.
+           EXEC CICS LINK PROGRAM('NOSUCH') {resp} END-EXEC.
+           MOVE WS-RESP TO WS-RESP-SHOWN.
+           EXEC CICS SEND TEXT FROM(WS-RESP-SHOWN) END-EXEC.
+           EXEC CICS RETURN END-EXEC.
+"""
+
+
+@covers(CobolFeature.EXEC_CICS)
+@pytest.mark.parametrize(
+    ("resp", "expected"),
+    [
+        (
+            "RESP(WS-RESP)",
+            (DispatchKind.RETURN, None, [{"type": "text", "text": "00000027"}], []),
+        ),
+        ("", (DispatchKind.ABEND, "AEIZ", [], ["rolled back"])),
+    ],
+    ids=["under-resp", "unhandled"],
+)
+def test_a_link_to_an_unknown_program_raises_pgmiderr(cobol_parser, resp, expected):
+    """LINK to a program the region lacks raises PGMIDERR: RESP sees 27 and
+    control continues; with nothing handling it the task abends."""
+    result, screens, rollbacks = _run_linking_region(_unknown_link(resp), cobol_parser)
+
+    assert (result.kind, result.abcode, screens, rollbacks) == expected
