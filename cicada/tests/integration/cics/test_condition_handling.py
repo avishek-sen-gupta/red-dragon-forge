@@ -329,7 +329,7 @@ COBOL_RAISABLE_FLAG = """\
            05  WS-CA-AFTER-HANDLE PIC X.
            05  WS-CA-AFTER-IGNORE PIC X.
            05  WS-CA-AFTER-AGAIN  PIC X.
-           05  WS-CA-PGMIDERR     PIC X.
+           05  WS-CA-TRANSIDERR   PIC X.
            05  WS-CA-NEIGHBOUR    PIC X.
        PROCEDURE DIVISION.
            EXEC CICS HANDLE CONDITION NOTFND(PARA-A) END-EXEC.
@@ -338,8 +338,8 @@ COBOL_RAISABLE_FLAG = """\
            MOVE DFH-RAISABLE(14) TO WS-CA-AFTER-IGNORE.
            EXEC CICS HANDLE CONDITION NOTFND(PARA-A) END-EXEC.
            MOVE DFH-RAISABLE(14) TO WS-CA-AFTER-AGAIN.
-           EXEC CICS HANDLE CONDITION PGMIDERR(PARA-A) END-EXEC.
-           MOVE DFH-RAISABLE(28) TO WS-CA-PGMIDERR.
+           EXEC CICS HANDLE CONDITION TRANSIDERR(PARA-A) END-EXEC.
+           MOVE DFH-RAISABLE(29) TO WS-CA-TRANSIDERR.
            MOVE DFH-RAISABLE(23) TO WS-CA-NEIGHBOUR.
            EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
        PARA-A.
@@ -352,7 +352,7 @@ def test_ignore_clears_the_raisable_flag_and_handle_restores_it(cobol_parser):
     """The raisable flag is what separates "ignored" from "never registered", and
     it does not depend on the label map, so this holds before Task 5.
 
-    PGMIDERR is the discriminating case: it is a real condition with a DFHRESP
+    TRANSIDERR is the discriminating case: it is a real condition with a DFHRESP
     code but is not in RAISABLE, so HANDLE must leave its flag 'N' rather than
     silently widening what this runtime raises. LENGERR's slot is read untouched
     to show the subscripted writes land on one slot and do not smear."""

@@ -120,10 +120,12 @@ COBOL_START_A = """\
 """
 
 
-def _spec_with_queue(context_holder, result_holder, start_queue, transid_map):
+def _spec_with_queue(
+    program_cache, context_holder, result_holder, start_queue, transid_map
+):
     runtime = install_cics_runtime(
         context_holder,
-        program_cache={},
+        program_cache=program_cache,
         result_holder=result_holder,
         start_queue=start_queue,
         transid_to_program=transid_map,
@@ -142,7 +144,7 @@ def test_start_queues_the_request_and_the_program_keeps_running(cobol_parser):
     result_holder: list = [None]
     start_queue = StartQueue()
     spec, builtins = _spec_with_queue(
-        context_holder, result_holder, start_queue, {"SRTB": "STARTB"}
+        {}, context_holder, result_holder, start_queue, {"SRTB": "STARTB"}
     )
     program = compile_cics_program(COBOL_START_A.encode(), cobol_parser, spec)
 
@@ -236,7 +238,9 @@ def test_retrieve_with_no_start_data_yields_enddata(cobol_parser):
     ]
     result_holder: list = [None]
     start_queue = StartQueue()
-    spec, builtins = _spec_with_queue(context_holder, result_holder, start_queue, {})
+    spec, builtins = _spec_with_queue(
+        {}, context_holder, result_holder, start_queue, {}
+    )
     program = compile_cics_program(COBOL_RETRIEVE_NO_DATA.encode(), cobol_parser, spec)
 
     result = run_cics(
@@ -285,13 +289,16 @@ def test_started_task_runs_and_retrieves_the_data(cobol_parser):
     result_holder: list = [None]
     start_queue = StartQueue()
     transid_map = {"SRTA": "STARTA", "SRTB": "STARTB"}
+    program_cache: dict = {}
     spec, builtins = _spec_with_queue(
-        context_holder, result_holder, start_queue, transid_map
+        program_cache, context_holder, result_holder, start_queue, transid_map
     )
-    program_cache = {
-        "STARTA": compile_cics_program(COBOL_START_A.encode(), cobol_parser, spec),
-        "STARTB": compile_cics_program(COBOL_START_B.encode(), cobol_parser, spec),
-    }
+    program_cache.update(
+        {
+            "STARTA": compile_cics_program(COBOL_START_A.encode(), cobol_parser, spec),
+            "STARTB": compile_cics_program(COBOL_START_B.encode(), cobol_parser, spec),
+        }
+    )
 
     region = CicsRegion(
         program_cache,
@@ -360,16 +367,21 @@ def test_xctl_after_a_start_runs_the_xctl_target_first(cobol_parser):
     result_holder: list = [None]
     start_queue = StartQueue()
     transid_map = {"SRTX": "STARTX", "SRTB": "STARTB"}
+    program_cache: dict = {}
     spec, builtins = _spec_with_queue(
-        context_holder, result_holder, start_queue, transid_map
+        program_cache, context_holder, result_holder, start_queue, transid_map
     )
-    program_cache = {
-        "STARTX": compile_cics_program(
-            COBOL_START_THEN_XCTL.encode(), cobol_parser, spec
-        ),
-        "XCTLTGT": compile_cics_program(COBOL_XCTL_TARGET.encode(), cobol_parser, spec),
-        "STARTB": compile_cics_program(COBOL_START_B.encode(), cobol_parser, spec),
-    }
+    program_cache.update(
+        {
+            "STARTX": compile_cics_program(
+                COBOL_START_THEN_XCTL.encode(), cobol_parser, spec
+            ),
+            "XCTLTGT": compile_cics_program(
+                COBOL_XCTL_TARGET.encode(), cobol_parser, spec
+            ),
+            "STARTB": compile_cics_program(COBOL_START_B.encode(), cobol_parser, spec),
+        }
+    )
 
     region = CicsRegion(
         program_cache,
@@ -426,16 +438,23 @@ def test_xctl_from_a_non_terminal_started_task_keeps_its_empty_terminal(cobol_pa
     result_holder: list = [None]
     start_queue = StartQueue()
     transid_map = {"SRTN": "STARTN", "SRTM": "STARTM"}
+    program_cache: dict = {}
     spec, builtins = _spec_with_queue(
-        context_holder, result_holder, start_queue, transid_map
+        program_cache, context_holder, result_holder, start_queue, transid_map
     )
-    program_cache = {
-        "STARTN": compile_cics_program(
-            COBOL_START_NON_TERMINAL.encode(), cobol_parser, spec
-        ),
-        "STARTM": compile_cics_program(COBOL_STARTED_XCTL.encode(), cobol_parser, spec),
-        "TERMPRB": compile_cics_program(COBOL_EIBTRMID.encode(), cobol_parser, spec),
-    }
+    program_cache.update(
+        {
+            "STARTN": compile_cics_program(
+                COBOL_START_NON_TERMINAL.encode(), cobol_parser, spec
+            ),
+            "STARTM": compile_cics_program(
+                COBOL_STARTED_XCTL.encode(), cobol_parser, spec
+            ),
+            "TERMPRB": compile_cics_program(
+                COBOL_EIBTRMID.encode(), cobol_parser, spec
+            ),
+        }
+    )
 
     region = CicsRegion(
         program_cache,
@@ -502,16 +521,21 @@ def test_started_task_runs_before_the_next_transid(cobol_parser):
     result_holder: list = [None]
     start_queue = StartQueue()
     transid_map = {"SRTA": "STARTA2", "SRTB": "STARTB", "SRTC": "STARTC"}
+    program_cache: dict = {}
     spec, builtins = _spec_with_queue(
-        context_holder, result_holder, start_queue, transid_map
+        program_cache, context_holder, result_holder, start_queue, transid_map
     )
-    program_cache = {
-        "STARTA2": compile_cics_program(
-            COBOL_START_THEN_TRANSID.encode(), cobol_parser, spec
-        ),
-        "STARTB": compile_cics_program(COBOL_START_B.encode(), cobol_parser, spec),
-        "STARTC": compile_cics_program(COBOL_NEXT_TRANSID.encode(), cobol_parser, spec),
-    }
+    program_cache.update(
+        {
+            "STARTA2": compile_cics_program(
+                COBOL_START_THEN_TRANSID.encode(), cobol_parser, spec
+            ),
+            "STARTB": compile_cics_program(COBOL_START_B.encode(), cobol_parser, spec),
+            "STARTC": compile_cics_program(
+                COBOL_NEXT_TRANSID.encode(), cobol_parser, spec
+            ),
+        }
+    )
 
     region = CicsRegion(
         program_cache,
@@ -572,7 +596,7 @@ def _run_one(cobol_parser, source, transid_map, start_queue):
     ]
     result_holder: list = [None]
     spec, builtins = _spec_with_queue(
-        context_holder, result_holder, start_queue, transid_map
+        {}, context_holder, result_holder, start_queue, transid_map
     )
     program = compile_cics_program(source.encode(), cobol_parser, spec)
     return run_cics(
@@ -660,9 +684,10 @@ def test_non_terminal_started_task_runs_and_send_map_is_invreq(cobol_parser):
     transid_map = {"SRTA": "STARTNT", "SRTD": "STARTD"}
     screen_queue: queue.Queue = queue.Queue()
     input_queue: queue.Queue = queue.Queue()
+    program_cache: dict = {}
     runtime = install_cics_runtime(
         context_holder,
-        program_cache={},
+        program_cache=program_cache,
         result_holder=result_holder,
         start_queue=start_queue,
         transid_to_program=transid_map,
@@ -671,14 +696,16 @@ def test_non_terminal_started_task_runs_and_send_map_is_invreq(cobol_parser):
         input_queue=input_queue,
     )
     spec = build_cics_spec()
-    program_cache = {
-        "STARTNT": compile_cics_program(
-            COBOL_START_NOTERM.encode(), cobol_parser, spec
-        ),
-        "STARTD": compile_cics_program(
-            COBOL_NONTERMINAL_TASK.encode(), cobol_parser, spec
-        ),
-    }
+    program_cache.update(
+        {
+            "STARTNT": compile_cics_program(
+                COBOL_START_NOTERM.encode(), cobol_parser, spec
+            ),
+            "STARTD": compile_cics_program(
+                COBOL_NONTERMINAL_TASK.encode(), cobol_parser, spec
+            ),
+        }
+    )
 
     region = CicsRegion(
         program_cache,
@@ -726,9 +753,10 @@ def test_a_non_terminal_send_map_without_resp_abends(cobol_parser):
     transid_map = {"SRTA": "STARTNT", "SRTD": "STARTD"}
     screen_queue: queue.Queue = queue.Queue()
     input_queue: queue.Queue = queue.Queue()
+    program_cache: dict = {}
     runtime = install_cics_runtime(
         context_holder,
-        program_cache={},
+        program_cache=program_cache,
         result_holder=result_holder,
         start_queue=start_queue,
         transid_to_program=transid_map,
@@ -737,14 +765,16 @@ def test_a_non_terminal_send_map_without_resp_abends(cobol_parser):
         input_queue=input_queue,
     )
     spec = build_cics_spec()
-    program_cache = {
-        "STARTNT": compile_cics_program(
-            COBOL_START_NOTERM.encode(), cobol_parser, spec
-        ),
-        "STARTD": compile_cics_program(
-            COBOL_NONTERMINAL_TASK_UNHANDLED.encode(), cobol_parser, spec
-        ),
-    }
+    program_cache.update(
+        {
+            "STARTNT": compile_cics_program(
+                COBOL_START_NOTERM.encode(), cobol_parser, spec
+            ),
+            "STARTD": compile_cics_program(
+                COBOL_NONTERMINAL_TASK_UNHANDLED.encode(), cobol_parser, spec
+            ),
+        }
+    )
 
     region = CicsRegion(
         program_cache,
@@ -827,13 +857,18 @@ def test_two_starts_run_in_order_each_with_its_own_data(cobol_parser):
     result_holder: list = [None]
     start_queue = StartQueue()
     transid_map = {"SRTA": "STARTTW", "SRTB": "STARTB"}
+    program_cache: dict = {}
     spec, builtins = _spec_with_queue(
-        context_holder, result_holder, start_queue, transid_map
+        program_cache, context_holder, result_holder, start_queue, transid_map
     )
-    program_cache = {
-        "STARTTW": compile_cics_program(COBOL_START_TWICE.encode(), cobol_parser, spec),
-        "STARTB": compile_cics_program(COBOL_START_B.encode(), cobol_parser, spec),
-    }
+    program_cache.update(
+        {
+            "STARTTW": compile_cics_program(
+                COBOL_START_TWICE.encode(), cobol_parser, spec
+            ),
+            "STARTB": compile_cics_program(COBOL_START_B.encode(), cobol_parser, spec),
+        }
+    )
     region = CicsRegion(
         program_cache,
         transid_map,
@@ -886,15 +921,18 @@ def test_start_data_is_consumed_by_the_first_retrieve(cobol_parser):
     result_holder: list = [None]
     start_queue = StartQueue()
     transid_map = {"SRTA": "STARTA", "SRTB": "RTVTWICE"}
+    program_cache: dict = {}
     spec, builtins = _spec_with_queue(
-        context_holder, result_holder, start_queue, transid_map
+        program_cache, context_holder, result_holder, start_queue, transid_map
     )
-    program_cache = {
-        "STARTA": compile_cics_program(COBOL_START_A.encode(), cobol_parser, spec),
-        "RTVTWICE": compile_cics_program(
-            COBOL_RETRIEVE_TWICE.encode(), cobol_parser, spec
-        ),
-    }
+    program_cache.update(
+        {
+            "STARTA": compile_cics_program(COBOL_START_A.encode(), cobol_parser, spec),
+            "RTVTWICE": compile_cics_program(
+                COBOL_RETRIEVE_TWICE.encode(), cobol_parser, spec
+            ),
+        }
+    )
     region = CicsRegion(
         program_cache,
         transid_map,
@@ -976,13 +1014,16 @@ def _looping_region(cobol_parser, sources, transid_map):
     context_holder: list = [None]
     result_holder: list = [None]
     start_queue = StartQueue()
+    program_cache: dict = {}
     spec, builtins = _spec_with_queue(
-        context_holder, result_holder, start_queue, transid_map
+        program_cache, context_holder, result_holder, start_queue, transid_map
     )
-    program_cache = {
-        name: compile_cics_program(source.encode(), cobol_parser, spec)
-        for name, source in sources.items()
-    }
+    program_cache.update(
+        {
+            name: compile_cics_program(source.encode(), cobol_parser, spec)
+            for name, source in sources.items()
+        }
+    )
     return CicsRegion(
         program_cache,
         transid_map,
@@ -1112,17 +1153,20 @@ def test_a_task_started_with_no_from_retrieves_enddata(cobol_parser):
     result_holder: list = [None]
     start_queue = StartQueue()
     transid_map = {"SRTF": "STARTNF", "SRTR": "RTVNONE"}
+    program_cache: dict = {}
     spec, builtins = _spec_with_queue(
-        context_holder, result_holder, start_queue, transid_map
+        program_cache, context_holder, result_holder, start_queue, transid_map
     )
-    program_cache = {
-        "STARTNF": compile_cics_program(
-            COBOL_START_NO_FROM.encode(), cobol_parser, spec
-        ),
-        "RTVNONE": compile_cics_program(
-            COBOL_RETRIEVE_NO_DATA.encode(), cobol_parser, spec
-        ),
-    }
+    program_cache.update(
+        {
+            "STARTNF": compile_cics_program(
+                COBOL_START_NO_FROM.encode(), cobol_parser, spec
+            ),
+            "RTVNONE": compile_cics_program(
+                COBOL_RETRIEVE_NO_DATA.encode(), cobol_parser, spec
+            ),
+        }
+    )
 
     region = CicsRegion(
         program_cache,
@@ -1169,18 +1213,21 @@ def test_start_data_nobody_retrieved_does_not_reach_the_next_task(cobol_parser):
     result_holder: list = [None]
     start_queue = StartQueue()
     transid_map = {"SRTA": "STARTA", "SRTB": "NORTRV", "SRTR": "RTVNONE"}
+    program_cache: dict = {}
     spec, builtins = _spec_with_queue(
-        context_holder, result_holder, start_queue, transid_map
+        program_cache, context_holder, result_holder, start_queue, transid_map
     )
-    program_cache = {
-        "STARTA": compile_cics_program(COBOL_START_A.encode(), cobol_parser, spec),
-        "NORTRV": compile_cics_program(
-            COBOL_STARTED_NO_RETRIEVE.encode(), cobol_parser, spec
-        ),
-        "RTVNONE": compile_cics_program(
-            COBOL_RETRIEVE_NO_DATA.encode(), cobol_parser, spec
-        ),
-    }
+    program_cache.update(
+        {
+            "STARTA": compile_cics_program(COBOL_START_A.encode(), cobol_parser, spec),
+            "NORTRV": compile_cics_program(
+                COBOL_STARTED_NO_RETRIEVE.encode(), cobol_parser, spec
+            ),
+            "RTVNONE": compile_cics_program(
+                COBOL_RETRIEVE_NO_DATA.encode(), cobol_parser, spec
+            ),
+        }
+    )
 
     region = CicsRegion(
         program_cache,

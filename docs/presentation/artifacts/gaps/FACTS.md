@@ -42,7 +42,7 @@ Unsupported verbs now **abend loudly** and are recorded
 | CALLed subprograms using HANDLE CONDITION cannot compile (copybook prepass reaches main source only) | — | `forge-43l` fixed 2026-10-20 |
 | `SYNCPOINT` / `SYNCPOINT ROLLBACK` | 20 | `forge-urh`, `forge-s10` |
 | `RESETBR` | 8 | `forge-t12` |
-| `SEND` (terminal control, no map) | — | `forge-34j`, `cicada-0du` |
+| `SEND` (terminal control, no map) | — | `forge-34j`, `cicada-0du` fixed 2026-10-20 |
 | `HANDLE AID` is a registered no-op | 10 | `forge-xcs` |
 | `PUSH HANDLE` / `POP HANDLE` | — | `forge-sk5` |
 | SPOOL, ROUTE, DELAY, GETMAIN, ENQ/DEQ tail | 116 / 25 / 25 / 7 / 3+3 | `forge-cfb` |

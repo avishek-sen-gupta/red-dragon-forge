@@ -123,10 +123,11 @@ def _drive_to_user_delete(tmp_path: Path, bridge_jar):
     context_holder = [None]
     result_holder: list = [None]
     start_queue = StartQueue()
+    program_cache: dict = {}
     runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
-        program_cache={},
+        program_cache=program_cache,
         start_queue=start_queue,
         result_holder=result_holder,
         vsam_engine=engine,
@@ -139,11 +140,13 @@ def _drive_to_user_delete(tmp_path: Path, bridge_jar):
     adminmenu = compile_cics_program(adminmenu_path.read_bytes(), parser, spec)
     userdel = compile_cics_program(userdel_path.read_bytes(), parser, spec)
 
-    program_cache = {
-        "COSGN00C": signon,
-        "COADM01C": adminmenu,
-        "COUSR03C": userdel,
-    }
+    program_cache.update(
+        {
+            "COSGN00C": signon,
+            "COADM01C": adminmenu,
+            "COUSR03C": userdel,
+        }
+    )
     transid_to_program = {"CC00": "COSGN00C", "CA00": "COADM01C", "CU03": "COUSR03C"}
     region = CicsRegion(
         program_cache,

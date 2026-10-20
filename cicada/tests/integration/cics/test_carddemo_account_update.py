@@ -193,10 +193,11 @@ def _drive_to_account_update(tmp_path: Path, bridge_jar):
     context_holder = [None]
     result_holder: list = [None]
     start_queue = StartQueue()
+    program_cache: dict = {}
     runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
-        program_cache={},
+        program_cache=program_cache,
         start_queue=start_queue,
         result_holder=result_holder,
         vsam_engine=engine,
@@ -209,7 +210,7 @@ def _drive_to_account_update(tmp_path: Path, bridge_jar):
     menu = compile_cics_program(menu_path.read_bytes(), parser, spec)
     acctview = compile_cics_program(acctview_path.read_bytes(), parser, spec)
 
-    program_cache = {"COSGN00C": signon, "COMEN01C": menu, "COACTUPC": acctview}
+    program_cache.update({"COSGN00C": signon, "COMEN01C": menu, "COACTUPC": acctview})
     transid_to_program = {"CC00": "COSGN00C", "CM00": "COMEN01C", "CAUP": "COACTUPC"}
     region = CicsRegion(
         program_cache,

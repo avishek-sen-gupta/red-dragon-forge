@@ -10,6 +10,7 @@ from typing import Protocol
 
 from cics.builtins.screen import CicsBuiltin
 from cics.cell import Holder, hold
+from cics.conditions import code_for
 from cics.transaction_hooks import no_hook
 from cics.types import CicsContext, DispatchKind, DispatchResult
 from interpreter.address import Address
@@ -85,6 +86,7 @@ def make_set_return_context_builtin(
 
 def make_set_xctl_context_builtin(
     result_holder: Holder[DispatchResult],
+    program_cache: Mapping[str, LinkedProgram],
 ) -> CicsBuiltin:
     """Return __cics_set_xctl_context builtin.
 
@@ -94,15 +96,19 @@ def make_set_xctl_context_builtin(
     def __cics_set_xctl_context(
         args: Sequence[TypedValue], vm: VMState
     ) -> BuiltinResult:
+        program = _text(args, 0).strip()
+        if program not in program_cache:
+            logger.error("XCTL to unknown program %r — PGMIDERR", program)
+            return BuiltinResult(value=code_for("PGMIDERR"))
         hold(
             result_holder,
             DispatchResult(
                 kind=DispatchKind.XCTL,
-                program=_text(args, 0).strip(),
+                program=program,
                 commarea=_bytes(args, 1),
             ),
         )
-        return BuiltinResult(value=None)
+        return BuiltinResult(value=code_for("NORMAL"))
 
     return __cics_set_xctl_context
 

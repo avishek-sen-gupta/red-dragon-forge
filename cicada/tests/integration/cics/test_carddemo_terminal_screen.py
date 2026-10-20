@@ -55,10 +55,11 @@ def _driver(
     screens: queue.Queue = queue.Queue()
     inputs: queue.Queue = queue.Queue()
     context_holder, result_holder, start_queue = [None], [None], StartQueue()
+    programs: dict = {}
     runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
-        program_cache={},
+        program_cache=programs,
         start_queue=start_queue,
         result_holder=result_holder,
         vsam_engine=_usrsec_engine(tmp_path / "vsam"),
@@ -66,10 +67,14 @@ def _driver(
         input_queue=inputs,
     )
     spec = build_cics_spec()
-    programs = {
-        p: compile_cics_program((app / "cbl" / f"{p}.cbl").read_bytes(), parser, spec)
-        for p in transactions.values()
-    }
+    programs.update(
+        {
+            p: compile_cics_program(
+                (app / "cbl" / f"{p}.cbl").read_bytes(), parser, spec
+            )
+            for p in transactions.values()
+        }
+    )
     region = CicsRegion(
         programs,
         transactions,

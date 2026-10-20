@@ -112,7 +112,7 @@ def _flow_builtins(
                 wiring.result_holder
             ),
             "__cics_set_xctl_context": make_set_xctl_context_builtin(
-                wiring.result_holder
+                wiring.result_holder, wiring.program_cache
             ),
             "__cics_link": make_link_builtin(
                 wiring.program_cache,
