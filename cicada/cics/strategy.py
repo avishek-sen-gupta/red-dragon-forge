@@ -1007,7 +1007,7 @@ class CicsLoweringStrategy:
         # Consume-and-clear: handler_source is shared with every other module
         # compile_cobol lowers off the same dialect_parser, and each module is
         # fully parsed and lowered before the next starts.
-        labels = collect_handler_labels(drain(self._handler_source))
+        labels = collect_handler_labels(drain(self._handler_source), ctx.procedures)
         self._scan.set(replace(self._scan.get(), handler_labels=labels))
         ctx.emit_inst(
             CallFunction(
@@ -1027,9 +1027,9 @@ class CicsLoweringStrategy:
         still in hand."""
         scan = self._scan.get()
         unknown = sorted(
-            (paragraph, scan.handler_labels.conditions[paragraph])
-            for paragraph in scan.handler_labels.indices
-            if paragraph not in scan.paragraph_names | scan.section_names
+            (name, condition)
+            for name, condition in scan.handler_labels.conditions.items()
+            if name not in scan.paragraph_names | scan.section_names
         )
         if not unknown:
             return
@@ -1079,7 +1079,7 @@ class CicsLoweringStrategy:
         ]
         raise NotImplementedError(
             f"Module registers EXEC CICS HANDLE CONDITION handlers "
-            f"({sorted(self._scan.get().handler_labels.indices)}) but is missing "
+            f"({sorted(self._scan.get().handler_labels.conditions)}) but is missing "
             f"{' and '.join(missing)} from its DATA DIVISION. "
             "build_cics_spec's source_prepass injects COPY DFHHANDLE. "
             "(DFH-HANDLER/DFH-RAISABLE) and COPY DFHEIBLK. (EIBRESP) into "
@@ -1154,7 +1154,8 @@ class CicsLoweringStrategy:
     ) -> None:
         label = opts.get("LABEL")
         if isinstance(label, CicsOperand) and not label.is_literal:
-            index = self._scan.get().handler_labels.index_of(label.text)
+            target = ctx.procedures.procedure(label.text, "", ctx.section)
+            index = self._scan.get().handler_labels.index_of(target)
             self._emit_abend_exit_write(ctx, index, materialised)
             return
         if "CANCEL" in opts:
@@ -1206,8 +1207,8 @@ class CicsLoweringStrategy:
         r_exit = self._emit_decode_abend_exit(ctx, materialised)
         self._emit_abend_exit_write(ctx, 0, materialised)
         labels = self._scan.get().handler_labels
-        for name in sorted(labels.abend_exits):
-            self._emit_handler_match(ctx, r_exit, (name, labels.index_of(name)))
+        for handler in labels.abend_exit_handlers():
+            self._emit_handler_match(ctx, r_exit, handler)
         ctx.emit_inst(Return_())
         ctx.emit_inst(Label_(label=skip_lbl))
 
@@ -1398,10 +1399,13 @@ class CicsLoweringStrategy:
         for condition, operand in opts.items():
             self._emit_condition_entry(ctx, verb, (condition, operand), materialised)
 
-    def _handler_index(self, handles: bool, operand: Operand) -> int:
-        labels = self._scan.get().handler_labels
-        registers = handles and isinstance(operand, CicsOperand)
-        return labels.index_of(_operand_text(operand, "")) if registers else 0
+    def _handler_index(self, ctx: EmitContext, handles: bool, operand: Operand) -> int:
+        """The dispatch index of the procedure this HANDLE names, resolved from
+        the statement's own section as a PERFORM or GO TO there would be."""
+        if not (handles and isinstance(operand, CicsOperand)):
+            return 0
+        target = ctx.procedures.procedure(_operand_text(operand, ""), "", ctx.section)
+        return self._scan.get().handler_labels.index_of(target)
 
     def _emit_condition_entry(
         self,
@@ -1413,7 +1417,7 @@ class CicsLoweringStrategy:
         condition, operand = entry
         handles = verb == "HANDLE CONDITION"
         slot = condition_slot(verb, condition)
-        r_idx = _emit_int(ctx, self._handler_index(handles, operand))
+        r_idx = _emit_int(ctx, self._handler_index(ctx, handles, operand))
         emit_indexed_write(
             ctx, "DFH-HANDLER", slot, ctx.emit_to_string(r_idx), materialised
         )
@@ -1545,21 +1549,16 @@ class CicsLoweringStrategy:
         )
 
     def _emit_handler_match(
-        self, ctx: EmitContext, idx_reg: Register, handler: tuple[str, int]
+        self, ctx: EmitContext, idx_reg: Register, handler: tuple[CodeLabel, int]
     ) -> None:
-        name, index = handler
+        label, index = handler
         cmp_reg = _emit_binop(ctx, "==", idx_reg, ctx.const_to_reg(index))
         match_lbl = ctx.fresh_label("cond_match")
         next_lbl = ctx.fresh_label("cond_next")
         ctx.emit_inst(BranchIf(cond_reg=cmp_reg, branch_targets=(match_lbl, next_lbl)))
         ctx.emit_inst(Label_(label=match_lbl))
-        ctx.emit_inst(Branch(label=self._procedure_label(name)))
+        ctx.emit_inst(Branch(label=label))
         ctx.emit_inst(Label_(label=next_lbl))
-
-    def _procedure_label(self, name: str) -> CodeLabel:
-        if name in self._scan.get().section_names:
-            return CodeLabel(f"section_{name.upper()}")
-        return CodeLabel(f"para_{name}")
 
     def _emit_dispatcher(
         self, ctx: EmitContext, materialised: MaterialisedSectionedLayout
