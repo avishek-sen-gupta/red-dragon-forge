@@ -35,7 +35,7 @@ Unsupported verbs now **abend loudly** and are recorded
 
 | Gap | Estate occurrences [ONLINE doc] | Issue |
 |---|---|---|
-| `BIF DEEDIT` | 992 | `forge-00t` P1 |
+| `BIF DEEDIT` | 992 | `forge-00t` fixed 2026-09-14 |
 | Temporary storage `READQ/WRITEQ/DELETEQ TS` | 98 / 88 / 144 | `forge-o94` P1 |
 | `SEND MAP`/`RECEIVE MAP` drop MAPSET, CURSOR, ERASE, FREEKB | — | `forge-qh5` P1 |
 | `ASKTIME`/`FORMATTIME` ABSTIME operand ignored, date formats missing | — | `forge-4of` P1 |
@@ -178,7 +178,7 @@ From `cobble/docs/outstanding-issues.md` (section headings, status as written) a
    DD concatenation (`1o2.5`) → IDCAMS breadth incl. VERIFY/GDG define (`1o2.6`) → DCB
    (`1o2.12`) → PDS/PDSE (`1o2.16`) → abend model (`1o2.19`) → deeper DFSORT/ICETOOL
    (`1o2.24`). CardDemo batch tier: `cicada-ncx`.
-2. **CICS verb surface:** BIF DEEDIT (`forge-00t`), TS queues (`forge-o94`), BMS map options
+2. **CICS verb surface:** TS queues (`forge-o94`), BMS map options
    (`forge-qh5`), time formatting (`forge-4of`), SYNCPOINT (`forge-urh`/`forge-s10`), RESETBR
    (`forge-t12`), HANDLE AID (`forge-xcs`), PUSH/POP HANDLE (`forge-sk5`), low-volume tail
    (`forge-cfb`); conversational epic `cicada-lkx`; CardDemo online epic `red-dragon-pz9g`.

@@ -58,7 +58,7 @@ Missing when analysed, with status now:
 | Verb | Occurrences | Status 2026-09-14 |
 |---|---|---|
 | `START` | 3,021 | implemented (`cicada/cics/strategy.py:933`) |
-| `BIF DEEDIT` | 992 | open `forge-00t` (P1) |
+| `BIF DEEDIT` | 992 | implemented (`strategy.py` `_lower_bif_deedit`, `forge-00t` closed) |
 | `RETRIEVE` | 920 | implemented (`strategy.py:955`) |
 | `IGNORE CONDITION` | 820 | implemented (`strategy.py:1213`) |
 | `UNLOCK` | 457 | no-op by design, single-task emulation (`strategy.py` `_SYS_VERBS`); `cicada-lkx.3` open |
