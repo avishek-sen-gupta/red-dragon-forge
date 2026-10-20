@@ -46,6 +46,8 @@ All paths are under `cicada/`.
 |---|---|
 | `cics/strategy.py` | `CicsLoweringStrategy`: lowers each verb. Builds no builtins |
 | `cics/runtime.py` | `install_cics_runtime`: the runtime surface. Builds the `__cics_*` service builtins over the region's live state and composes the region's builtins table |
+| `cics/region_clock.py`, `cics/dat_form.py` | the region clock: the local time `ASKTIME` reads and the `DATFORM` a `FORMATTIME DATE` follows |
+| `cics/formattime_ir.py` | `FORMATTIME` as IR: an `ABSTIME`'s calendar date and time of day, rendered per output option |
 | `cics/cics_runtime.py` | `CicsRuntime`: what `install_cics_runtime` returns |
 | `cics/transaction_hooks.py` | `TransactionHooks`: the task-end, syncpoint and rollback hooks, each a no-op by default |
 | `cics/strategy_stores.py` | the strategy's writes into state it does not own |
@@ -138,7 +140,7 @@ never changed. No table is process-global, so two regions run side by side in on
 | Conditions | `HANDLE CONDITION`, `IGNORE CONDITION`, `HANDLE ABEND LABEL`, `HANDLE ABEND CANCEL` | `RESP` and `NOHANDLE` suppress handler dispatch. An abend the program raises (the `ABEND` verb, an unhandled condition, an unsupported verb, an unhandled abend in a program it LINKs to) transfers to the active `HANDLE ABEND LABEL` paragraph or section, and the exit is deactivated on entry; a handled abend does not run `on_abend`. `ABEND CANCEL` ignores the exit. `HANDLE ABEND RESET` and `PROGRAM` are logged no-ops. A handler target resolves as a COBOL procedure reference does: its case folds, and a paragraph name declared in several sections means the copy in the `HANDLE` statement's section |
 | BMS | `SEND MAP`, `RECEIVE MAP`, `SEND TEXT`, `SEND` | A bare `SEND FROM` (terminal control) writes its data unformatted, as `SEND TEXT` does; the screen is always erased |
 | File control | `READ`, `WRITE`, `REWRITE`, `DELETE`, `STARTBR`, `READNEXT`, `READPREV`, `ENDBR` | `GENERIC` keys, `KEYLENGTH` (literal or data-name), `READ GTEQ`, and `DELETE GENERIC NUMREC` are lowered to IR: the lowering cuts a generic key to `KEYLENGTH` bytes, raises `INVREQ` for a `KEYLENGTH` without `GENERIC` that is not the file's key length, and deletes generically in a loop over `READ` and `DELETE` |
-| System | `ASSIGN`, `ASKTIME`, `FORMATTIME`, `INQUIRE`, `WRITEQ TD` | |
+| System | `ASSIGN`, `ASKTIME`, `FORMATTIME`, `INQUIRE`, `WRITEQ TD` | `ASKTIME ABSTIME` stores the region clock's local time in milliseconds since 1900. `FORMATTIME` is IR over the `ABSTIME` it is given: `YYYYMMDD`, `DDMMYYYY`, `YYMMDD`, `DDMMYY`, `MMDDYY`, `DATE` and `FULLDATE` (in the region's `DATFORM` order), `DATEFORM`, `TIME` and `YEAR`, with `DATESEP` and `TIMESEP`; any other output option is logged at lowering and its field left unchanged. The region clock (`cics.region_clock.RegionClock`) defaults to the machine's local time and `DATFORM` `MMDDYY` |
 | Built-in functions | `BIF DEEDIT` | |
 | No-ops | `UNLOCK`, `HANDLE AID` | `UNLOCK` has nothing to release with one task; `HANDLE AID` is not dispatched |
 

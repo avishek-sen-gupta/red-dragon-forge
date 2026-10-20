@@ -16,7 +16,7 @@ from cics.builtins.system import (
     make_asktime_builtin,
     make_assign_builtin,
     make_bif_deedit_builtin,
-    make_formattime_builtin,
+    make_datform_builtin,
     make_handle_abend_builtin,
     make_handle_noop_builtin,
     make_init_eib_builtin,
@@ -27,6 +27,7 @@ from cics.builtins.system import (
 from cics.cell import Holder
 from cics.cics_runtime import CicsRuntime
 from cics.interval import StartQueue
+from cics.region_clock import LOCAL_CLOCK, RegionClock
 from cics.strategy import NOT_SUPPLIED, Absent
 from cics.terminal import InputChannel, ScreenChannel
 from cics.transaction_hooks import TransactionHooks
@@ -70,15 +71,15 @@ class _Wiring:
 
 
 def _system_builtins(
-    wiring: _Wiring, identity: tuple[str, str, str]
+    wiring: _Wiring, identity: tuple[str, str, str], clock: RegionClock
 ) -> Mapping[FuncName, Builtin]:
     applid, sysid, userid = identity
     return _named(
         {
             "__cics_assign": make_assign_builtin(applid, sysid, userid),
-            "__cics_asktime": make_asktime_builtin(),
+            "__cics_asktime": make_asktime_builtin(clock.now),
+            "__cics_datform": make_datform_builtin(clock.datform),
             "__cics_bif_deedit": make_bif_deedit_builtin(),
-            "__cics_formattime": make_formattime_builtin(),
             "__cics_inquire": make_inquire_builtin(wiring.program_cache),
             "__cics_writeq_td": make_writeq_td_builtin(wiring.td_queue.append),
             "__cics_handle_abend": make_handle_abend_builtin(),
@@ -258,13 +259,13 @@ def _io_builtins(
 
 def _core_entries(
     wiring: _Wiring,
-    identity: tuple[str, str, str],
+    region: _Region,
     on_abend: Callable[[], None],
     region_builtins: RegionBuiltins,
 ) -> Mapping[FuncName, Builtin]:
     return {
         FuncName("__cics_init_eib"): make_init_eib_builtin(wiring.context_holder),
-        **_system_builtins(wiring, identity),
+        **_system_builtins(wiring, region.identity, region.clock),
         **_abend_builtins(wiring, on_abend),
         **_flow_builtins(wiring, region_builtins),
     }
@@ -302,6 +303,7 @@ class _Region:
     transid_to_program: Mapping[str, str]
     region_termid: str
     identity: tuple[str, str, str]
+    clock: RegionClock
 
 
 def _entries(
@@ -313,7 +315,7 @@ def _entries(
 ) -> Mapping[FuncName, Builtin]:
     return MappingProxyType(
         {
-            **_core_entries(wiring, region.identity, on_abend, region_builtins),
+            **_core_entries(wiring, region, on_abend, region_builtins),
             **_hook_builtins(hooks),
             **_io_builtins(
                 wiring, region.channels, region.receive_timeout, region.vsam_engine
@@ -360,6 +362,7 @@ def install_cics_runtime(
     permit_unresolved_call_targets: bool = True,
     hooks: TransactionHooks = NO_HOOKS,
     other_builtins: Mapping[FuncName, Builtin] = _NO_BUILTINS,
+    clock: RegionClock = LOCAL_CLOCK,
 ) -> CicsRuntime:
     wiring = _wiring(
         context_holder,
@@ -376,5 +379,6 @@ def install_cics_runtime(
         transid_to_program=transid_to_program,
         region_termid=region_termid,
         identity=(applid, sysid, userid),
+        clock=clock,
     )
     return _runtime(wiring, region, hooks, on_abend, other_builtins)

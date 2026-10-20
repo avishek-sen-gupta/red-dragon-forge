@@ -78,6 +78,21 @@ class FakeCtx:
         self.emit_inst(("to_string", out, value_reg))
         return out
 
+    def emit_decode_field(self, region_reg, fl, offset_reg=None, *, extent=None, span=None):  # type: ignore[no-untyped-def]
+        out = self.fresh_reg()
+        self.emit_inst(("decode", out, fl.name))
+        return out
+
+    def fresh_name(self, prefix: str) -> str:
+        self._counter += 1
+        return f"{prefix}_{self._counter}"
+
+    def fresh_label(self, prefix: str):  # type: ignore[no-untyped-def]
+        from interpreter.ir import CodeLabel
+
+        self._counter += 1
+        return CodeLabel(f"{prefix}_{self._counter}")
+
     def const_to_reg(self, value, *, span=None):  # type: ignore[no-untyped-def]
         from interpreter.instructions import Const
         from interpreter.types.type_expr import UNKNOWN
@@ -323,9 +338,43 @@ def test_lower_formattime_yyyymmdd_emits_copy_back_to_field() -> None:
     calls = [
         i
         for i in ctx.emitted
-        if isinstance(i, CallFunction) and str(i.func_name) == "__cics_formattime"
+        if isinstance(i, CallFunction) and str(i.func_name).startswith("__cics_")
     ]
-    assert len(calls) == 1
+    assert calls == []
     assert len(ctx.encode_writes) == 1
     _, fl, _, _ = ctx.encode_writes[0]
     assert fl.name == "WS-D"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_lower_formattime_writes_each_output_and_asks_only_date_for_the_datform(
+    caplog,
+) -> None:
+    from interpreter.instructions import CallFunction
+
+    ctx = FakeCtx({"WS-T": (0, 8), "WS-D1": (8, 10), "WS-D2": (18, 8)})
+    _make_strategy().lower(
+        ctx,
+        FakeStmt(
+            "FORMATTIME",
+            {
+                "ABSTIME": CicsOperand("WS-T", False),
+                "YYYYMMDD": CicsOperand("WS-D1", False),
+                "DATE": CicsOperand("WS-D2", False),
+                "DAYOFWEEK": CicsOperand("WS-D2", False),
+            },
+        ),
+        MATERIALISED,
+    )
+
+    written = [fl.name for (_, fl, _, _) in ctx.encode_writes]
+    datform_calls = [
+        i
+        for i in ctx.emitted
+        if isinstance(i, CallFunction) and str(i.func_name) == "__cics_datform"
+    ]
+    assert (written, len(datform_calls), caplog.messages) == (
+        ["WS-D1", "WS-D2"],
+        1,
+        ["FORMATTIME DAYOFWEEK is not implemented; its field is left unchanged"],
+    )
