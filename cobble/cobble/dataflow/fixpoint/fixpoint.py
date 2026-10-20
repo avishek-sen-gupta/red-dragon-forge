@@ -319,6 +319,33 @@ def _one_tally(statement: Statement, index: CellIndex) -> _Tally:
     return _Tally(writes=len(operands), covered=_resolved(operands, index))
 
 
+def _target_operands(statement: Statement) -> tuple[RefModOperand, ...]:
+    if isinstance(statement, UnmodelledWrite):
+        return tuple(statement.targets)
+    if not isinstance(statement, HANDLED):
+        return ()
+    return tuple(write_operands(statement))
+
+
+def _warn_untracked(
+    program: str, found: tuple[tuple[str, Statement], ...], index: CellIndex
+) -> None:
+    missing = tuple(
+        (node_id, operand.name)
+        for node_id, statement in found
+        for operand in _target_operands(statement)
+        if operand_extents(operand, index).reason == "unknown-name"
+    )
+    for node_id, name in missing:
+        logger.warning(
+            "fields: %s %s writes %s, which has no memory definition;"
+            " the write is not tracked",
+            program,
+            node_id,
+            name,
+        )
+
+
 def _tally(found: tuple[tuple[str, Statement], ...], index: CellIndex) -> _Tally:
     counted = tuple(_one_tally(statement, index) for _, statement in found)
     return _Tally(
@@ -752,6 +779,7 @@ def analyse(
     statements = with_unmodelled(statement_index(asg), unpruned, condition_index(asg))
     cfg = fallthroughs_pruned(unpruned, paragraph_order(asg), statements)
     found = _statements_at(cfg, statements)
+    _warn_untracked(cfg.program, found, index)
     tally = _tally(found, index)
     live = _live(asg, cfg, statements, index, options)
     entry = _entry_node(asg)

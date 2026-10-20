@@ -277,18 +277,25 @@ def test_every_resolvable_write_is_covered_in_a_program_with_no_unknown_names(fl
     assert flow.covered == flow.writes
 
 
-def test_a_write_to_an_undeclared_name_counts_against_coverage(flow_of):
+def test_a_write_to_an_undeclared_name_counts_against_coverage_and_is_warned(
+    flow_of, caplog
+):
     """The denominator comes from the source, so an unreached write is visible."""
-    flow = flow_of(
-        [
-            {
-                "name": "MAIN",
-                "statements": [_move("WS-A", "WS-B"), _move("WS-A", "WS-GONE")],
-            }
-        ]
-    )
+    with caplog.at_level(logging.WARNING, logger=fixpoint.__name__):
+        flow = flow_of(
+            [
+                {
+                    "name": "MAIN",
+                    "statements": [_move("WS-A", "WS-B"), _move("WS-A", "WS-GONE")],
+                }
+            ]
+        )
     assert flow.writes == 2
     assert flow.covered == 1
+    assert caplog.messages == [
+        "fields: PROGA MAIN/1 writes WS-GONE, which has no memory definition;"
+        " the write is not tracked"
+    ]
 
 
 def test_an_unhandled_statement_class_is_counted_not_ignored(flow_of):
