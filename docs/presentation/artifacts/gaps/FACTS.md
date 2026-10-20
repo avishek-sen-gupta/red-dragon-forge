@@ -43,7 +43,7 @@ Unsupported verbs now **abend loudly** and are recorded
 | `SYNCPOINT` / `SYNCPOINT ROLLBACK` | 20 | `forge-urh`, `forge-s10` |
 | `RESETBR` | 8 | `forge-t12` |
 | `SEND` (terminal control, no map) | — | `forge-34j`, `cicada-0du` fixed 2026-10-20 |
-| `HANDLE AID` is a registered no-op | 10 | `forge-xcs` |
+| `HANDLE AID` is a registered no-op | 10 | `forge-xcs` fixed 2026-10-21 |
 | `PUSH HANDLE` / `POP HANDLE` | — | `forge-sk5` |
 | SPOOL, ROUTE, DELAY, GETMAIN, ENQ/DEQ tail | 116 / 25 / 25 / 7 / 3+3 | `forge-cfb` |
 | `NOTOPEN` raisable but never produced | — | `forge-bxh` |
@@ -180,7 +180,7 @@ From `cobble/docs/outstanding-issues.md` (section headings, status as written) a
    (`1o2.24`). CardDemo batch tier: `cicada-ncx`.
 2. **CICS verb surface:** TS queues (`forge-o94`), BMS map options
    (`forge-qh5`), time formatting (`forge-4of`), SYNCPOINT (`forge-urh`/`forge-s10`), RESETBR
-   (`forge-t12`), HANDLE AID (`forge-xcs`), PUSH/POP HANDLE (`forge-sk5`), low-volume tail
+   (`forge-t12`), PUSH/POP HANDLE (`forge-sk5`), low-volume tail
    (`forge-cfb`); conversational epic `cicada-lkx`; CardDemo online epic `red-dragon-pz9g`.
 3. **COBOL engine correctness:** fixed-point decimal arithmetic (`red-dragon-4q25.1`),
    SORT/MERGE verbs (`red-dragon-429q`), fail loud on unhandled statements and expressions

@@ -9,7 +9,6 @@ from cics.builtins.system import (
     make_datform_builtin,
     make_writeq_td_builtin,
     make_handle_abend_builtin,
-    make_handle_noop_builtin,
     make_abend_builtin,
     make_abend_unhandled_builtin,
     make_abend_unsupported_builtin,
@@ -84,17 +83,6 @@ def test_handle_abend_is_noop():
     builtin = make_handle_abend_builtin()
     result = builtin([], _vm())
     assert isinstance(result, BuiltinResult)
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_handle_noop_builtin_is_callable_noop():
-    # HANDLE CONDITION / HANDLE AID are explicit no-ops for now (deferred to the
-    # HANDLE-machinery follow-up). They must ignore their registration args and
-    # return cleanly without touching VM state.
-    builtin = make_handle_noop_builtin("HANDLE CONDITION")
-    result = builtin([typed("PGMIDERR", UNKNOWN), typed("ERR-PARA", UNKNOWN)], _vm())
-    assert isinstance(result, BuiltinResult)
-    assert result.value is None
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)

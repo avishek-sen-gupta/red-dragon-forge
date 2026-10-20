@@ -14,6 +14,14 @@ from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Literal, Protocol, TypeAlias, TypeGuard, TypeVar, cast
 
+from cics.aid_handling import (
+    IGNORED,
+    emit_aid_dispatcher,
+    emit_aid_registration,
+    emit_aid_tail,
+    has_aid_tables,
+)
+from cics.aid_keys import AID_SLOTS
 from cics.builtins.system import (
     ASSIGN_SUBOPTIONS,
 )
@@ -28,6 +36,7 @@ from cics.handler_labels import (
 )
 from cics.statements import CicsOperand, ExecCicsStatement
 from cics.strategy_stores import drain, note_unsupported
+from cics.table_cells import emit_indexed_write
 from cics.vsam.key_match import KeyMatch
 from cobol_asg.cobol_expression import BinOpNode, FieldRefNode, LiteralNode
 from cobol_asg.ref_mod import (
@@ -92,9 +101,6 @@ _SYS_VERBS: Mapping[str, str] = MappingProxyType(
         "ASSIGN": "__cics_assign",
         "INQUIRE": "__cics_inquire",
         "HANDLE ABEND": "__cics_handle_abend",
-        # HANDLE AID is still an explicit no-op — AID dispatch is out of scope for
-        # the condition-handling work.
-        "HANDLE AID": "__cics_handle_aid",
         # Nothing to release: this runtime emulates one task at a time, so a VSAM
         # record lock has no other task to exclude. A real no-op, not a gap --
         # see cicada-lkx.3.
@@ -427,25 +433,6 @@ def condition_slot(verb: str, condition: str) -> int:
             " and regenerate cics/copybooks/DFHHANDLE.cpy; add it to RAISABLE only"
             " if this runtime actually raises it."
         ) from exc
-
-
-def emit_indexed_write(
-    ctx: EmitContext,
-    name: str,
-    index: int,
-    value_str_reg: Register,
-    materialised: MaterialisedSectionedLayout,
-) -> None:
-    """Write into a fixed element of a table. emit_copy_back_str deliberately
-    does not thread subscripts, so the handler table needs its own path."""
-    if not ctx.has_field(name, materialised):
-        return
-    ref, region_reg = ctx.resolve_field_ref(
-        name, materialised, subscripts=(LiteralNode(str(index)),)
-    )
-    ctx.emit_encode_and_write(
-        region_reg, ref.fl, value_str_reg, ref.offset_reg, extent=ref.extent
-    )
 
 
 def _emit_split_on_normal(
@@ -1077,6 +1064,7 @@ class CicsLoweringStrategy:
                 "ASSIGN": self._lower_assign,
                 "FORMATTIME": self._lower_formattime,
                 "ASKTIME": self._lower_asktime,
+                "HANDLE AID": self._lower_handle_aid,
                 "WRITEQ TD": self._lower_writeq_td,
                 "LINK": self._lower_link,
                 "BIF DEEDIT": self._lower_bif_deedit,
@@ -1121,7 +1109,21 @@ class CicsLoweringStrategy:
             )
         )
         self._emit_dispatcher_if_needed(ctx, materialised)
+        self._emit_aid_dispatcher_if_needed(ctx, materialised)
         self._emit_abend_exit_if_needed(ctx, materialised)
+
+    def _emit_aid_dispatcher_if_needed(
+        self, ctx: EmitContext, materialised: MaterialisedSectionedLayout
+    ) -> None:
+        labels = self._scan.get().handler_labels
+        if not (labels.aid_keys and has_aid_tables(ctx, materialised)):
+            return
+        skip_lbl = ctx.fresh_label("aid_dispatch_skip")
+        ctx.emit_inst(Branch(label=skip_lbl))
+        emit_aid_dispatcher(
+            ctx, labels.indices.items(), self._emit_handler_match, materialised
+        )
+        ctx.emit_inst(Label_(label=skip_lbl))
 
     def _reject_unknown_handler_targets(self) -> None:
         """A handler naming a paragraph the module does not define compiles to a
@@ -1141,7 +1143,7 @@ class CicsLoweringStrategy:
             f"{condition}({paragraph})" for paragraph, condition in unknown
         )
         raise NotImplementedError(
-            f"EXEC CICS HANDLE CONDITION names {named}, but this module defines "
+            f"EXEC CICS HANDLE names {named}, but this module defines "
             "no such paragraph or section. The dispatcher would branch to a label no block "
             "owns, which ends the task silently instead of transferring control."
         )
@@ -1394,7 +1396,25 @@ class CicsLoweringStrategy:
         r_map = emit_operand_value(ctx, map_op, materialised)
         r_names = _emit_map_field_names(ctx, verb, map_op, opts, materialised)
         r_res = self._emit_map_call(ctx, verb, r_map, r_names, opts, materialised)
-        _emit_resp_and_raise(ctx, r_res, opts, materialised)
+        emit_resp_writeback(ctx, r_res, opts, materialised)
+        self._emit_aid_tail_if_needed(ctx, verb, opts, materialised)
+        emit_raise_tail(ctx, opts, materialised)
+
+    def _emit_aid_tail_if_needed(
+        self,
+        ctx: EmitContext,
+        verb: str,
+        opts: Options,
+        materialised: MaterialisedSectionedLayout,
+    ) -> None:
+        """A HANDLE AID for the key that ended the RECEIVE takes precedence over a
+        HANDLE CONDITION it raised (CICS: "MAPFAIL and other exception
+        conditions"), and RESP or NOHANDLE suppresses both."""
+        keys = self._scan.get().handler_labels.aid_keys
+        if verb != "RECEIVE MAP" or not keys or "RESP" in opts or "NOHANDLE" in opts:
+            return
+        if has_aid_tables(ctx, materialised):
+            emit_aid_tail(ctx, keys, materialised)
 
     def _emit_map_call(
         self,
@@ -1509,6 +1529,23 @@ class CicsLoweringStrategy:
         _emit_resp_and_raise(ctx, r_res, opts, materialised)
 
     # ── Condition handler registration ────────────────────────────────────
+
+    def _lower_handle_aid(
+        self,
+        ctx: EmitContext,
+        verb: str,
+        opts: Options,
+        materialised: MaterialisedSectionedLayout,
+    ) -> None:
+        for unknown in (option for option in opts if option not in AID_SLOTS):
+            logger.warning("EXEC CICS HANDLE AID %s is not implemented", unknown)
+        for key, operand in ((k, o) for k, o in opts.items() if k in AID_SLOTS):
+            index = (
+                self._handler_index(ctx, True, operand)
+                if isinstance(operand, CicsOperand)
+                else IGNORED
+            )
+            emit_aid_registration(ctx, key, index, materialised)
 
     def _lower_condition(
         self,

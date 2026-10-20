@@ -35,7 +35,7 @@ from `cobble/`: `uv run --no-sync python -m cobble.bms_render --config config/ca
 - BMS: SEND MAP, RECEIVE MAP, SEND TEXT (`_BMS_VERBS`, `builtins/screen.py`).
 - File control: READ, WRITE, REWRITE, DELETE; STARTBR, READNEXT, READPREV, ENDBR (`_VSAM_POINT_VERBS`, `_VSAM_BROWSE_VERBS`, `builtins/vsam.py`).
 - System: ASSIGN, ASKTIME, FORMATTIME, INQUIRE, WRITEQ TD, HANDLE ABEND, HANDLE CONDITION / IGNORE CONDITION, RESP/NOHANDLE → EIBRESP (`_SYS_VERBS`, `builtins/system.py`).
-- Explicit no-ops: HANDLE AID, UNLOCK (single-task emulation) (`strategy.py:73-79`). Any other verb lowers to `__cics_abend_unsupported` — a loud ABEND, not a silent skip (`strategy.py:1302-1316`).
+- Explicit no-op: UNLOCK (single-task emulation). HANDLE AID dispatches after RECEIVE MAP (`cics/aid_handling.py`, forge-xcs). Any other verb lowers to `__cics_abend_unsupported` — a loud ABEND, not a silent skip (`strategy.py:1302-1316`).
 
 ## Limitations (honest)
 - This capture's screen renderings are field values only, from the same `bms_render` used before TN3270 shipped. `TerminalScreen` (`cicada/cics/screen/terminal_screen.py`) now models cursor position, attribute overrides and DATAONLY/MAPONLY, and `forge-run`'s `[cics]` mode shows all three live in a real 3270 emulator (see the cicada README); a caption under an overlapping field still inherits that field's colour, and a shorter field still clips characters it carries over — both need per-character attributes, not modelled yet.

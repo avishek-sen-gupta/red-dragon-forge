@@ -1,4 +1,4 @@
-"""Number a program's HANDLE CONDITION and HANDLE ABEND LABEL target procedures.
+"""Number a program's HANDLE CONDITION, HANDLE AID and HANDLE ABEND LABEL target procedures.
 
 The dispatcher's cascade compares a runtime index against compile-time constants,
 so every procedure a program can transfer to needs an index before the first
@@ -23,6 +23,7 @@ from interpreter.ir import CodeLabel
 
 _HANDLE = "HANDLE CONDITION"
 _HANDLE_ABEND = "HANDLE ABEND"
+_HANDLE_AID = "HANDLE AID"
 _ABEND_LABEL = "LABEL"
 
 
@@ -40,6 +41,7 @@ class HandlerLabels:
     indices: Mapping[CodeLabel, int]
     conditions: Mapping[str, str]
     abend_exits: frozenset[CodeLabel] = frozenset()
+    aid_keys: frozenset[str] = frozenset()
 
     def index_of(self, label: CodeLabel) -> int:
         return self.indices.get(label, 0)
@@ -70,7 +72,9 @@ def _targets(
 
 
 def _names_a_target(verb: str, option: str) -> bool:
-    return verb == _HANDLE or (verb == _HANDLE_ABEND and option == _ABEND_LABEL)
+    return verb in (_HANDLE, _HANDLE_AID) or (
+        verb == _HANDLE_ABEND and option == _ABEND_LABEL
+    )
 
 
 def candidate_labels(name: str, procedures: ProcedureLabels) -> tuple[CodeLabel, ...]:
@@ -88,8 +92,8 @@ def candidate_labels(name: str, procedures: ProcedureLabels) -> tuple[CodeLabel,
 def collect_handler_labels(
     statements: Sequence[ExecCicsStatement], procedures: ProcedureLabels
 ) -> HandlerLabels:
-    """Number each HANDLE CONDITION and HANDLE ABEND LABEL target procedure in
-    first-appearance order."""
+    """Number each HANDLE CONDITION, HANDLE AID and HANDLE ABEND LABEL target
+    procedure in first-appearance order, and name every key a HANDLE AID names."""
     targets = _targets(statements)
     labels = tuple(
         dict.fromkeys(
@@ -104,6 +108,12 @@ def collect_handler_labels(
             for option, name in targets
             if option == _ABEND_LABEL
             for label in candidate_labels(name, procedures)
+        ),
+        aid_keys=frozenset(
+            key
+            for stmt in statements
+            if stmt.verb == _HANDLE_AID
+            for key in stmt.options
         ),
     )
 

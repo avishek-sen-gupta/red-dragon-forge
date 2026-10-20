@@ -18,7 +18,6 @@ from cics.builtins.system import (
     make_bif_deedit_builtin,
     make_datform_builtin,
     make_handle_abend_builtin,
-    make_handle_noop_builtin,
     make_init_eib_builtin,
     make_inquire_builtin,
     make_runtime_noop_builtin,
@@ -137,7 +136,6 @@ def _abend_builtins(
 ) -> Mapping[FuncName, Builtin]:
     return _named(
         {
-            "__cics_handle_aid": make_handle_noop_builtin("HANDLE AID"),
             "__cics_unlock": make_runtime_noop_builtin(
                 "EXEC CICS UNLOCK",
                 "single-task emulation holds no lock another task could see",
