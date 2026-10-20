@@ -49,7 +49,7 @@
         "START": "implemented", "RETRIEVE": "implemented", "IGNORE CONDITION": "implemented",
         "UNLOCK": "no-op by design (single-task emulation; cicada-lkx.3 open)",
         "BIF DEEDIT": "implemented", "TS queues": "open forge-o94",
-        "SYNCPOINT": "open forge-urh / forge-s10", "RESETBR": "open forge-t12",
+        "SYNCPOINT": "open forge-urh / forge-s10", "RESETBR": "implemented",
         "SPOOL/ROUTE/DELAY/GETMAIN/ENQ/DEQ": "open forge-cfb"
       }
     }

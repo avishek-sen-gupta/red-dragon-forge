@@ -28,7 +28,7 @@ are listed in [the cicada architecture page](../reference/cicada/architecture.md
 | A LINKed program's abend reaches the caller's exit or abends the task; `LINK` to an unknown program raises `PGMIDERR` | `red-dragon-forge-ysu4`, `red-dragon-forge-ch0o` | supported |
 | Abends raised beneath the program (4038 `CALL` not found, program checks) reach a `HANDLE ABEND` exit | `red-dragon-forge-k0ny` | not started |
 | `HANDLE ABEND RESET`/`PROGRAM`, `ASSIGN ABCODE`, the `RECEIVE MAP` timeout through the exit | `red-dragon-forge-uo3t` | not started |
-| `RESETBR` | `forge-t12` | not started |
+| `RESETBR` | `forge-t12` | supported |
 | `HANDLE AID` dispatch after `RECEIVE MAP` | `forge-xcs` | supported |
 | `NOTOPEN` produced from file open/close state | `forge-bxh` | not started |
 | `XCTL` to an unknown program raises `PGMIDERR` in the program instead of crashing the driver | `forge-6jj` | supported |

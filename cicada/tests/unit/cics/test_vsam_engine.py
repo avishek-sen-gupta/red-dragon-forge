@@ -17,6 +17,7 @@ from cics.vsam.eibresp import (
     RESP_NOTFND,
     RESP_DUPREC,
     RESP_ENDFILE,
+    RESP_INVREQ,
 )
 from cics.vsam.key_match import KeyMatch
 from cics.vsam.file_table import cics_files
@@ -337,3 +338,22 @@ def test_startbr_defaults_to_gteq(tmp_path: Path) -> None:
     assert isinstance(rec_read, RecordRead)
     rec = rec_read.record
     assert rec[:4] == b"CC03"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_resetbr_repositions_an_open_browse_and_needs_one(tmp_path: Path) -> None:
+    engine = _engine_with_records(tmp_path, [_rec("AA01"), _rec("BB02"), _rec("CC03")])
+    cursor = ("task0", "TESTDS", "cur0")
+    without = engine.resetbr("TESTDS", b"AA01", cursor)
+    engine.startbr("TESTDS", b"AA01", cursor)
+    engine.readnext("TESTDS", cursor)
+    engine.readnext("TESTDS", cursor)
+
+    reset = engine.resetbr("TESTDS", b"AA01", cursor, start=KeyMatch.EQUAL)
+    again = engine.readnext("TESTDS", cursor)
+
+    assert (without, reset, again) == (
+        RESP_INVREQ,
+        RESP_NORMAL,
+        RecordRead(_rec("AA01"), RESP_NORMAL),
+    )

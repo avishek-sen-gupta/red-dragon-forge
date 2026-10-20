@@ -1083,7 +1083,7 @@ SQL reaching Db2 — case NOT FOUND
   </div>
   <div class="legend"><i style="background:var(--phosphor)"></i>implemented <i style="background:var(--red)"></i>open work</div>
   <div class="source">docs/analysis/2026-09-01-index-items-search-and-cics-verb-gaps.md (Defect E) · artifacts/scale/scale.json</div>
-  <aside class="notes">START, RETRIEVE, IGNORE CONDITION and BIF DEEDIT were missing when first analysed and are now implemented — frequency data sets the order of work. Remaining open by volume: temporary storage queues (144 DELETEQ + 98 READQ + 88 WRITEQ), then a long tail (SPOOL, RESETBR). SYNCPOINT has since been implemented for the Db2 tier.</aside>
+  <aside class="notes">START, RETRIEVE, IGNORE CONDITION and BIF DEEDIT were missing when first analysed and are now implemented — frequency data sets the order of work. Remaining open by volume: temporary storage queues (144 DELETEQ + 98 READQ + 88 WRITEQ), then a long tail (SPOOL, ROUTE, DELAY). SYNCPOINT has since been implemented for the Db2 tier.</aside>
 </section>
 
 <section>
@@ -1139,7 +1139,7 @@ SQL reaching Db2 — case NOT FOUND
       </ul></div>
     <div class="card warn"><h3>Online (CICS)</h3>
       <ul>
-        <li>Temporary storage queues, RESETBR</li>
+        <li>Temporary storage queues</li>
         <li>SEND MAP options: CURSOR, ERASE, FREEKB</li>
         <li>One terminal at a time; conversational (non-pseudo-conversational) programs</li>
         <li>One task at a time</li>

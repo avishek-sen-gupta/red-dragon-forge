@@ -124,7 +124,7 @@ _RESP_PRODUCING_VERBS = frozenset({"INQUIRE"})
 _VSAM_POINT_VERBS = frozenset({"READ", "WRITE", "REWRITE", "DELETE"})
 
 # Implicit single cursor per file.
-_VSAM_BROWSE_VERBS = frozenset({"STARTBR", "READNEXT", "READPREV", "ENDBR"})
+_VSAM_BROWSE_VERBS = frozenset({"STARTBR", "RESETBR", "READNEXT", "READPREV", "ENDBR"})
 
 _BMS_VERBS: Mapping[str, str] = MappingProxyType(
     {
@@ -838,21 +838,24 @@ _BrowseEmitter: TypeAlias = (
 )
 
 
-def _emit_vsam_startbr(
-    ctx: EmitContext,
-    r_file: Register,
-    opts: Options,
-    materialised: MaterialisedSectionedLayout,
-) -> Register:
-    r_klen = _emit_keylen(ctx, opts, materialised)
-    r_key = _emit_vsam_key(ctx, opts, r_klen, materialised)
-    r_start = _emit_string(ctx, _browse_start(opts).name)
-    return _emit_keylength_checked(
-        ctx,
-        _RecordKey(r_file, r_key, r_klen),
-        opts,
-        lambda: _emit_call(ctx, "__cics_startbr", r_file, r_key, r_start),
-    )
+def _vsam_position_browse(builtin: str) -> _BrowseEmitter:
+    def emit(
+        ctx: EmitContext,
+        r_file: Register,
+        opts: Options,
+        materialised: MaterialisedSectionedLayout,
+    ) -> Register:
+        r_klen = _emit_keylen(ctx, opts, materialised)
+        r_key = _emit_vsam_key(ctx, opts, r_klen, materialised)
+        r_start = _emit_string(ctx, _browse_start(opts).name)
+        return _emit_keylength_checked(
+            ctx,
+            _RecordKey(r_file, r_key, r_klen),
+            opts,
+            lambda: _emit_call(ctx, builtin, r_file, r_key, r_start),
+        )
+
+    return emit
 
 
 def _vsam_read_browse(builtin: str) -> _BrowseEmitter:
@@ -879,7 +882,8 @@ def _emit_vsam_endbr(
 
 _VSAM_BROWSE_EMITTERS: Mapping[str, _BrowseEmitter] = MappingProxyType(
     {
-        "STARTBR": _emit_vsam_startbr,
+        "STARTBR": _vsam_position_browse("__cics_startbr"),
+        "RESETBR": _vsam_position_browse("__cics_resetbr"),
         "READNEXT": _vsam_read_browse("__cics_readnext"),
         "READPREV": _vsam_read_browse("__cics_readprev"),
         "ENDBR": _emit_vsam_endbr,

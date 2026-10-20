@@ -162,6 +162,22 @@ def make_vsam_startbr_builtin(engine: VsamEngine) -> CicsBuiltin:
     return __cics_startbr
 
 
+def make_vsam_resetbr_builtin(engine: VsamEngine) -> CicsBuiltin:
+    """RESETBR: args (file, key_bytes, key_match_name); returns resp.
+
+    Repositions the file's open browse; INVREQ when there is none.
+    """
+
+    def __cics_resetbr(args: Sequence[TypedValue], vm: VMState) -> BuiltinResult:
+        fname = _file(args, 0)
+        resp = engine.resetbr(
+            fname, _bytes(args, 1), (_TASK_ID, fname, "0"), start=_key_match(args, 2)
+        )
+        return BuiltinResult(value=resp)
+
+    return __cics_resetbr
+
+
 def make_vsam_readnext_builtin(engine: VsamEngine) -> CicsBuiltin:
     """READNEXT: args (file, into_offset, into_length); returns resp.
 
