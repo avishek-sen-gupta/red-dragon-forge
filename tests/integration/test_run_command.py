@@ -17,9 +17,12 @@ import pytest
 from catnip.dataset import Dataset
 from catnip.labels import RecordFormat, SequentialLabel
 from catnip.system_catalog import SystemCatalog
+from interpreter.func_name import FuncName
+from interpreter.vm.vm_types import VMState
 from jackal.cli import run as jackal_run
 
 from red_dragon_forge.build_command import run as forge_build
+from red_dragon_forge.run_command import cics_region
 from red_dragon_forge.run_command import run as forge_run
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -407,6 +410,33 @@ def test_cics_serves_sign_on_from_a_package(
         "                             User ID     :          (8 Char)                    ",
         "                             Password    :          (8 Char)                    ",
     ]
+
+
+def test_a_cics_region_reads_its_datform_from_env_toml(
+    tmp_path: Path, carddemo_system: Path
+) -> None:
+    bms = tmp_path / "bms"
+    bms.mkdir()
+    shutil.copy(_APP / "bms" / "COSGN00.bms", bms / "COSGN00.bms")
+    package = _built(
+        tmp_path,
+        'programs = ["COSGN00C"]\nlink = ["COSGN00C"]\ncoprocessors = ["cics"]\n'
+        f'[cics]\nbms_dirs = ["{bms}"]\n'
+        f'csd_files = ["{_APP / "csd" / "CARDDEMO.CSD"}"]\n',
+        f'copybook_dirs = ["{_APP / "cpy"}"]\n',
+    )
+    env = _env(
+        tmp_path,
+        "env.toml",
+        package,
+        carddemo_system,
+        '[cics]\ninitial_transid = "CC00"\ndatform = "YYMMDD"\n',
+    )
+
+    region = cics_region(env, os.environ)
+
+    datform = region.builtins[FuncName("__cics_datform")]([], VMState())
+    assert datform.value == "YYMMDD"
 
 
 @pytest.mark.usefixtures("db2_dsn")

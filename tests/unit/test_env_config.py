@@ -1,8 +1,11 @@
 """env.toml picks its mode by the one section present, and stops naming any fault before anything runs."""
 
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
+from cics.dat_form import DatForm
+from cics.region_clock import LOCAL_CLOCK
 from litter.manifest import Manifest
 from litter.transaction import Transaction
 
@@ -138,3 +141,28 @@ def test_an_env_toml_the_package_cannot_satisfy_names_its_fault(
         check_against(path, config, mode, _MANIFEST)
 
     assert str(refused.value) == message
+
+
+def test_a_cics_region_clock_follows_its_timezone_and_datform(tmp_path: Path) -> None:
+    named = load_env_config(
+        _written(
+            tmp_path, _TOP + _CICS + 'timezone = "Asia/Kolkata"\ndatform = "DDMMYY"\n'
+        )
+    )[1]
+    unnamed = load_env_config(_written(tmp_path, _TOP + _CICS))[1]
+
+    assert isinstance(named, CicsRun) and isinstance(unnamed, CicsRun)
+    clock, local = named.clock(), unnamed.clock()
+    assert (clock.now().utcoffset(), clock.datform, local.now, local.datform) == (
+        timedelta(hours=5, minutes=30),
+        DatForm.DDMMYY,
+        LOCAL_CLOCK.now,
+        DatForm.MMDDYY,
+    )
+
+
+def test_an_unknown_timezone_is_refused(tmp_path: Path) -> None:
+    with pytest.raises(ConfigError) as refused:
+        load_env_config(_written(tmp_path, _TOP + _CICS + 'timezone = "Mars/Base"\n'))
+
+    assert str(refused.value) == "env.toml: cics.timezone: invalid timezone: Mars/Base"

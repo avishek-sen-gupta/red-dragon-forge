@@ -13,6 +13,7 @@ from catnip.system_catalog import SystemCatalog
 from cics.bms.catalog import MapCatalog, catalog_from_json
 from cics.dispatcher import MAX_COMMAREA, CicsRegion
 from cics.interval import StartQueue
+from cics.region_clock import LOCAL_CLOCK, RegionClock
 from cics.runtime import NO_HOOKS, install_cics_runtime
 from cics.screen.driver import PseudoConversationalDriver
 from cics.transaction_hooks import TransactionHooks
@@ -98,6 +99,7 @@ def assemble_region(
     permit_unresolved_call_targets: bool = True,
     hooks: TransactionHooks = NO_HOOKS,
     other_builtins: Mapping[FuncName, Builtin] = _NO_BUILTINS,
+    clock: RegionClock = LOCAL_CLOCK,
 ) -> ServedRegion:
     wiring = _wiring()
     manifest = package.manifest
@@ -119,6 +121,7 @@ def assemble_region(
         permit_unresolved_call_targets=permit_unresolved_call_targets,
         hooks=hooks,
         other_builtins=other_builtins,
+        clock=clock,
     )
     region = _region(
         program_cache,

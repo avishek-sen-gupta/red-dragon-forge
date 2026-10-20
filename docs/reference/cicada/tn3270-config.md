@@ -15,7 +15,7 @@ CardDemo are in [run-carddemo.md](../../how-to/run-carddemo.md); its configs are
 | source, copybook and stub directories | `build.toml` | `[paths]` |
 | BMS mapset directories, CSD files | `build.toml` | `[cics]` |
 | the system directory | `env.toml` | `[paths] system` |
-| first transaction, host, port | `env.toml` | `[cics]` |
+| first transaction, host, port, time zone, `DATFORM` | `env.toml` | `[cics]` |
 | the Db2 connection | `env.toml` | `[sql]`, with `SQUALL_DB2_DSN` |
 
 Nothing is discovered: every program a transaction program CALLs, and every stub it reaches, is

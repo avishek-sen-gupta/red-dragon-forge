@@ -42,6 +42,8 @@ proclib_dirs = ["proc"]
 initial_transid = "CC00"
 host = "127.0.0.1"                  # default
 port = 3270                         # default
+timezone = "Asia/Kolkata"           # IANA name; the machine's local time when omitted
+datform = "MMDDYY"                  # default; or DDMMYY, YYMMDD
 ```
 
 The section present picks the mode.
@@ -51,6 +53,10 @@ The section present picks the mode.
 | `[plain]` | a one-step job built in code: `EXEC PGM=<program>` with one `DD DSN=<dataset>,DISP=SHR` per `[plain.files]` entry, run by jackal with its CLI's defaults | `RC=<n>`; exit 1 on an abend, else 0 |
 | `[jcl]` | the job, run by jackal against the package | jackal's per-step lines and exit status ([jackal CLI](../jackal/cli.md)) |
 | `[cics]` | a region assembled from the package (`cics.tn3270.region.assemble_region`), served until interrupted | |
+
+`[cics] timezone` is the zone `ASKTIME` reads the region's local time in, and `datform` is the
+region's `DATFORM`, the order of a `FORMATTIME DATE` or `FULLDATE`. An unknown zone stops the
+run: `env.toml: cics.timezone: invalid timezone: Mars/Base`.
 
 `[plain]` describes no dataset: each one is cataloged in the system directory, which supplies its
 record format and length.
