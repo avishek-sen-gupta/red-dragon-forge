@@ -196,10 +196,11 @@ def _drive_to_account_view(tmp_path: Path, bridge_jar):
     context_holder = [None]
     result_holder: list = [None]
     start_queue = StartQueue()
+    program_cache: dict = {}
     runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
-        program_cache={},
+        program_cache=program_cache,
         start_queue=start_queue,
         result_holder=result_holder,
         vsam_engine=engine,
@@ -212,7 +213,7 @@ def _drive_to_account_view(tmp_path: Path, bridge_jar):
     menu = compile_cics_program(menu_path.read_bytes(), parser, spec)
     acctview = compile_cics_program(acctview_path.read_bytes(), parser, spec)
 
-    program_cache = {"COSGN00C": signon, "COMEN01C": menu, "COACTVWC": acctview}
+    program_cache.update({"COSGN00C": signon, "COMEN01C": menu, "COACTVWC": acctview})
     transid_to_program = {"CC00": "COSGN00C", "CM00": "COMEN01C", "CAVW": "COACTVWC"}
     region = CicsRegion(
         program_cache,
@@ -295,3 +296,80 @@ def test_real_carddemo_account_view_detail(tmp_path, bridge_jar):
 
     assert r5.kind == DispatchKind.RETURN_TRANSID
     assert (r5.transid or "").strip() == "CAVW"
+
+
+_DFHPF3 = "\xf3"
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_real_carddemo_abend_routine_reports_a_missing_menu_program(
+    tmp_path, bridge_jar
+):
+    """A region holding COACTVWC without its menu program. PF3 issues XCTL to
+    COMEN01C with no RESP, so CICS raises PGMIDERR, nothing handles it and the
+    task abends; COACTVWC's HANDLE ABEND LABEL(ABEND-ROUTINE) takes over, SENDs
+    ABEND-DATA (COACTVWC.cbl:916-935) and ends the task with ABEND 9999. Backout
+    runs once, for the final abend."""
+    from cobol_asg.cobol_parser import ProLeapCobolParser
+    from cobol_asg.copybook_search import CopybookSearch
+    from cobol_asg.subprocess_runner import RealSubprocessRunner
+
+    app = Path(_CARDDEMO_HOME)
+    sym_dir = tmp_path / "sym"
+    generate_symbolic_copybooks(
+        bms_dir=app / "bms", out_dir=sym_dir, hlasm_export_bin=HLASM_EXPORT_BIN
+    )
+    parser = ProLeapCobolParser(
+        RealSubprocessRunner(),
+        bridge_jar,
+        copybooks=CopybookSearch(
+            dirs=(sym_dir, app / "cpy", app / "cpy-bms", _CICS_COPYBOOKS)
+        ),
+    )
+    screen_q: queue.Queue = queue.Queue()
+    input_q: queue.Queue = queue.Queue()
+    context_holder = [None]
+    result_holder: list = [None]
+    start_queue = StartQueue()
+    program_cache: dict = {}
+    transid_to_program = {"CAVW": "COACTVWC"}
+    rollbacks: list[str] = []
+    runtime = install_cics_runtime(
+        context_holder,
+        transid_to_program=transid_to_program,
+        program_cache=program_cache,
+        start_queue=start_queue,
+        result_holder=result_holder,
+        vsam_engine=_make_engine(tmp_path),
+        screen_queue=screen_q,
+        input_queue=input_q,
+        on_abend=lambda: rollbacks.append("rolled back"),
+    )
+    program_cache["COACTVWC"] = compile_cics_program(
+        (app / "cbl" / "COACTVWC.cbl").read_bytes(), parser, build_cics_spec()
+    )
+    region = CicsRegion(
+        program_cache,
+        transid_to_program,
+        screen_q,
+        input_q,
+        context_holder=context_holder,
+        start_queue=start_queue,
+        result_holder=result_holder,
+        max_steps=2_000_000,
+        min_commarea_len=2000,
+        builtins=runtime.builtins,
+    )
+
+    first = region.start("CAVW", commarea=b"", input_event=InputEvent(eibaid=_DFHENTER))
+    drain(screen_q)
+    abended = region.step(input_event=InputEvent(eibaid=_DFHPF3))
+
+    abend_data = "".ljust(4) + "COACTVWC".ljust(8) + "".ljust(50) + "".ljust(72)
+    assert (first.kind, abended.kind, abended.abcode, drain(screen_q), rollbacks) == (
+        DispatchKind.RETURN_TRANSID,
+        DispatchKind.ABEND,
+        "9999",
+        [{"type": "text", "text": abend_data}],
+        ["rolled back"],
+    )

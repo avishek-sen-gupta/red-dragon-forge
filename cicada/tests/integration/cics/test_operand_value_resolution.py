@@ -79,19 +79,24 @@ COBOL_XCTL_FIELD = """\
 """
 
 
+_REGION_PROGRAMS = ("PROG0001", "COADM01C", "PROG0003", "COMEN01C")
+
+
 def _run(source: str, parser) -> "object":
     import queue
 
     context_holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
+    program_cache: dict = {}
     runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
-        program_cache={},
+        program_cache=program_cache,
         result_holder=result_holder,
     )
     spec = build_cics_spec()
     program = compile_cics_program(source.encode(), parser, spec)
+    program_cache.update({name: program for name in _REGION_PROGRAMS})
     return run_cics(
         program,
         context_holder[0],

@@ -242,10 +242,11 @@ def _drive_through_turn4(tmp_path, bridge_jar):
     context_holder = [None]
     result_holder: list = [None]
     start_queue = StartQueue()
+    program_cache: dict = {}
     runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
-        program_cache={},
+        program_cache=program_cache,
         start_queue=start_queue,
         result_holder=result_holder,
         vsam_engine=_usrsec_engine(tmp_path / "vsam"),
@@ -261,11 +262,13 @@ def _drive_through_turn4(tmp_path, bridge_jar):
     # The CSD/region configuration: which program backs each transid. This is the
     # static config the system is set up with (NOT per-turn hardcoding). The
     # region deduces the next (program, transid) from each DispatchResult.
-    program_cache = {
-        "COSGN00C": signon,
-        "COMEN01C": menu,
-        "COACTVWC": acct,
-    }
+    program_cache.update(
+        {
+            "COSGN00C": signon,
+            "COMEN01C": menu,
+            "COACTVWC": acct,
+        }
+    )
     transid_to_program = {"CC00": "COSGN00C", "CM00": "COMEN01C", "CAVW": "COACTVWC"}
     # COMEN01C/COACTVWC index a commarea (CARDDEMO-COMMAREA) larger than the 100
     # bytes sign-on starts with; pad to 400 so EIBCALEN covers the menu/view
@@ -498,10 +501,11 @@ def _compile_update_programs(tmp_path, bridge_jar, root=None):
     result_holder: list = [None]
     engine = _usrsec_engine(root or (tmp_path / "vsam"))
     start_queue = StartQueue()
+    program_cache: dict = {}
     runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
-        program_cache={},
+        program_cache=program_cache,
         start_queue=start_queue,
         result_holder=result_holder,
         vsam_engine=engine,
@@ -513,9 +517,9 @@ def _compile_update_programs(tmp_path, bridge_jar, root=None):
     signon = compile_cics_program(signon_path.read_bytes(), parser, spec)
     menu = compile_cics_program(menu_path.read_bytes(), parser, spec)
     acctupd = compile_cics_program(acctupd_path.read_bytes(), parser, spec)
+    program_cache.update({"COSGN00C": signon, "COMEN01C": menu, "COACTUPC": acctupd})
     return (
-        signon,
-        menu,
+        program_cache,
         acctupd,
         screen_q,
         input_q,
@@ -535,8 +539,7 @@ def _drive_to_coactupc(tmp_path, bridge_jar, root=None):
     ``root`` to put the shared VsamEngine's system catalog under a directory.
     """
     (
-        signon,
-        menu,
+        program_cache,
         acctupd,
         screen_q,
         input_q,
@@ -548,11 +551,6 @@ def _drive_to_coactupc(tmp_path, bridge_jar, root=None):
     ) = _compile_update_programs(tmp_path, bridge_jar, root=root)
 
     # Region config: this run routes the menu's option '02' to COACTUPC.
-    program_cache = {
-        "COSGN00C": signon,
-        "COMEN01C": menu,
-        "COACTUPC": acctupd,
-    }
     transid_to_program = {"CC00": "COSGN00C", "CM00": "COMEN01C", "CAUP": "COACTUPC"}
     region = CicsRegion(
         program_cache,
@@ -914,10 +912,11 @@ def _drive_to_cotrn02c(tmp_path, bridge_jar, root=None):
     result_holder: list = [None]
     engine = _add_engine(root or (tmp_path / "vsam"))
     start_queue = StartQueue()
+    program_cache: dict = {}
     runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
-        program_cache={},
+        program_cache=program_cache,
         start_queue=start_queue,
         result_holder=result_holder,
         vsam_engine=engine,
@@ -940,11 +939,13 @@ def _drive_to_cotrn02c(tmp_path, bridge_jar, root=None):
         source_search_dirs=[app / "cbl"],
     )
 
-    program_cache = {
-        "COSGN00C": signon,
-        "COMEN01C": menu,
-        "COTRN02C": tranadd,
-    }
+    program_cache.update(
+        {
+            "COSGN00C": signon,
+            "COMEN01C": menu,
+            "COTRN02C": tranadd,
+        }
+    )
     transid_to_program = {"CC00": "COSGN00C", "CM00": "COMEN01C", "CT02": "COTRN02C"}
     region = CicsRegion(
         program_cache,

@@ -318,6 +318,27 @@ def test_send_text_with_literal_text_still_works():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_bare_send_lowers_to_the_send_text_builtin():
+    """A bare EXEC CICS SEND FROM(...) (terminal control, no map) writes its data
+    to the screen as unformatted text, through the SEND TEXT builtin, instead of
+    abending UNSP."""
+    from interpreter.instructions import CallFunction, Const
+    from cics.statements import CicsOperand, ExecCicsStatement
+
+    ctx = _Ctx()
+    stmt = ExecCicsStatement(
+        verb="SEND", options={"FROM": CicsOperand("ABEND DATA", True)}
+    )
+    _strategy().lower(ctx, stmt, materialised=None)
+
+    calls = [i for i in ctx.emitted if isinstance(i, CallFunction)]
+    consts = {i.result_reg: i.value for i in ctx.emitted if isinstance(i, Const)}
+    assert [(c.func_name, [consts[a] for a in c.args]) for c in calls] == [
+        (FuncName("__cics_send_text"), ["ABEND DATA"])
+    ]
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_send_text_from_resolves_the_named_field():
     """SEND TEXT FROM(WS-MESSAGE) must resolve WS-MESSAGE's runtime value, not
     paint the field name itself onto the screen (the FROM operand was

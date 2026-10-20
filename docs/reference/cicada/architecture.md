@@ -132,11 +132,11 @@ never changed. No table is process-global, so two regions run side by side in on
 
 | Family | Verbs | Notes |
 |---|---|---|
-| Program control | `RETURN [TRANSID] [COMMAREA]`, `XCTL`, `LINK`, `ABEND` | `LINK` runs a pre-compiled program synchronously and copies the COMMAREA back |
+| Program control | `RETURN [TRANSID] [COMMAREA]`, `XCTL`, `LINK`, `ABEND` | `LINK` runs a pre-compiled program synchronously and copies the COMMAREA back. `XCTL` to a program the region lacks raises `PGMIDERR` at the statement, so `RESP` sees it and an unhandled one abends the task |
 | Interval control | `START`, `RETRIEVE` | `START` queues a task that runs when the issuing task ends; `RETRIEVE` reads its `FROM` data. `INTERVAL`, `AFTER` and `AT` are parsed and recorded, not scheduled |
 | Unit of work | `SYNCPOINT`, `SYNCPOINT ROLLBACK` | act on a composed SQL runtime's unit of work; VSAM writes are not undone |
-| Conditions | `HANDLE CONDITION`, `IGNORE CONDITION`, `HANDLE ABEND` | `RESP` and `NOHANDLE` suppress handler dispatch |
-| BMS | `SEND MAP`, `RECEIVE MAP`, `SEND TEXT` | |
+| Conditions | `HANDLE CONDITION`, `IGNORE CONDITION`, `HANDLE ABEND LABEL`, `HANDLE ABEND CANCEL` | `RESP` and `NOHANDLE` suppress handler dispatch. An abend the program raises (the `ABEND` verb, an unhandled condition, an unsupported verb) transfers to the active `HANDLE ABEND LABEL` paragraph or section, and the exit is deactivated on entry; a handled abend does not run `on_abend`. `ABEND CANCEL` ignores the exit. `HANDLE ABEND RESET` and `PROGRAM` are logged no-ops |
+| BMS | `SEND MAP`, `RECEIVE MAP`, `SEND TEXT`, `SEND` | A bare `SEND FROM` (terminal control) writes its data unformatted, as `SEND TEXT` does; the screen is always erased |
 | File control | `READ`, `WRITE`, `REWRITE`, `DELETE`, `STARTBR`, `READNEXT`, `READPREV`, `ENDBR` | |
 | System | `ASSIGN`, `ASKTIME`, `FORMATTIME`, `INQUIRE`, `WRITEQ TD` | |
 | Built-in functions | `BIF DEEDIT` | |
@@ -153,7 +153,7 @@ that holds it: in a region assembled from a package every name maps to the one i
 task, an `XCTL` and a `LINK` each enter it by the program's name. With
 `permit_unresolved_call_targets` false, a `CALL` to a program the image lacks abends the task
 with code 4038 (LE's module-not-found `U4038`): `run_cics` logs `TRANSID: <error> — abending
-4038` and runs the region's `on_abend`; HANDLE ABEND is not driven. It builds a fresh VM with `make_cics_initial_vm`:
+4038` and runs the region's `on_abend`; a `HANDLE ABEND` exit is not taken for it, because the abend is raised beneath the program (`red-dragon-forge-k0ny`). It builds a fresh VM with `make_cics_initial_vm`:
 the COMMAREA is argument 0 and binds the first LINKAGE 01 item. It returns a `DispatchResult`
 of kind `RETURN`, `RETURN_TRANSID`, `XCTL` or `ABEND`.
 
@@ -162,7 +162,7 @@ of kind `RETURN`, `RETURN_TRANSID`, `XCTL` or `ABEND`.
 | Result | Next |
 |---|---|
 | `RETURN_TRANSID` | the program the transaction table maps the transid to; unknown transid abends `TRNI` |
-| `XCTL` | the named program, same transid; unknown program abends `PGMI` |
+| `XCTL` | the named program, same transid. The `XCTL` builtin holds an `XCTL` only for a program in the region's cache, so the `PGMI` abend here is reached only when the dispatcher's cache differs from the runtime's |
 | `RETURN`, `ABEND` | stop |
 
 Two drivers share that rule:

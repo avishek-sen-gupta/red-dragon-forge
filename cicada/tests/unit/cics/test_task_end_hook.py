@@ -38,6 +38,15 @@ class _Ctx:
     def has_field(self, name, materialised):
         return False
 
+    def emit_to_string(self, value_reg, *, span=None):
+        return value_reg
+
+    def const_to_reg(self, value):
+        return self.fresh_reg()
+
+    def fresh_label(self, prefix):
+        return f"{prefix}_{self.fresh_reg()}"
+
 
 def _install(hooks: TransactionHooks = TransactionHooks()):
     return install_cics_runtime(

@@ -59,11 +59,11 @@ _PADB = """\
            STOP RUN.
 """
 
-_XCTLA = """\
+_RTRNA = """\
        IDENTIFICATION DIVISION.
-       PROGRAM-ID. XCTLA.
+       PROGRAM-ID. RTRNA.
        PROCEDURE DIVISION.
-           EXEC CICS XCTL PROGRAM('NOSUCH') END-EXEC.
+           EXEC CICS RETURN TRANSID('NOSU') END-EXEC.
            STOP RUN.
 """
 
@@ -225,17 +225,17 @@ def test_a_dispatcher_abend_reaches_the_regions_on_abend(
     served = _region(
         tmp_path,
         bridge_jar,
-        _written(tmp_path, {"XCTLA": _XCTLA}),
-        (Transaction("XCTA", "XCTLA"),),
+        _written(tmp_path, {"RTRNA": _RTRNA}),
+        (Transaction("RTNA", "RTRNA"),),
         (),
         {},
         (CICS_COPYBOOKS,),
         on_abend=lambda: calls.append("rolled back"),
     )
 
-    result = served.driver.region.start("XCTA", input_event=InputEvent())
+    result = served.driver.region.start("RTNA", input_event=InputEvent())
 
-    assert (result.kind, calls) == (DispatchKind.XCTL, ["rolled back"])
+    assert (result.kind, calls) == (DispatchKind.RETURN_TRANSID, ["rolled back"])
 
 
 @covers(CobolFeature.EXEC_CICS)
@@ -246,9 +246,9 @@ def test_a_dispatcher_abend_without_an_on_abend_ends_the_task_quietly(
         open_package(
             build(
                 name="region",
-                programs=("XCTLA",),
-                link=("XCTLA",),
-                sources=_written(tmp_path, {"XCTLA": _XCTLA}),
+                programs=("RTRNA",),
+                link=("RTRNA",),
+                sources=_written(tmp_path, {"RTRNA": _RTRNA}),
                 parser=ProLeapCobolParser(
                     RealSubprocessRunner(),
                     bridge_jar,
@@ -258,7 +258,7 @@ def test_a_dispatcher_abend_without_an_on_abend_ends_the_task_quietly(
                 copybook_dirs=(CICS_COPYBOOKS,),
                 work_dir=tmp_path / "work",
                 out_dir=tmp_path / "out",
-                transactions=(Transaction("XCTA", "XCTLA"),),
+                transactions=(Transaction("RTNA", "RTRNA"),),
                 files=(),
                 mapsets={},
                 tolerant=False,
@@ -268,14 +268,14 @@ def test_a_dispatcher_abend_without_an_on_abend_ends_the_task_quietly(
     )
 
     with caplog.at_level(logging.ERROR, logger="cics.dispatcher"):
-        result = served.driver.region.start("XCTA", input_event=InputEvent())
+        result = served.driver.region.start("RTNA", input_event=InputEvent())
 
     dispatcher = [r.getMessage() for r in caplog.records if r.name == "cics.dispatcher"]
 
     assert (result.kind, served.driver.region.done, dispatcher) == (
-        DispatchKind.XCTL,
+        DispatchKind.RETURN_TRANSID,
         True,
-        ["XCTL to unknown program 'NOSUCH'"],
+        ["Unknown transid 'NOSU' from RETURN TRANSID"],
     )
 
 

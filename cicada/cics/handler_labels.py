@@ -1,4 +1,4 @@
-"""Collect a program's HANDLE CONDITION target paragraphs and number them.
+"""Number a program's HANDLE CONDITION and HANDLE ABEND LABEL target paragraphs.
 
 The dispatcher's cascade compares a runtime index against compile-time constants,
 so every paragraph a program can transfer to needs an index before the first
@@ -15,6 +15,8 @@ from cics.cics_visitor import CicsOperand
 from cics.statements import ExecCicsStatement
 
 _HANDLE = "HANDLE CONDITION"
+_HANDLE_ABEND = "HANDLE ABEND"
+_ABEND_LABEL = "LABEL"
 
 
 @dataclass(frozen=True)
@@ -28,6 +30,7 @@ class HandlerLabels:
 
     indices: Mapping[str, int]
     conditions: Mapping[str, str]
+    abend_exits: frozenset[str] = frozenset()
 
     def index_of(self, paragraph: str) -> int:
         return self.indices.get(paragraph, 0)
@@ -42,21 +45,30 @@ def _targets(
     return tuple(
         (condition, operand.text)
         for stmt in statements
-        if stmt.verb == _HANDLE
         for condition, operand in stmt.options.items()
-        if isinstance(operand, CicsOperand) and not operand.is_literal
+        if _names_a_target(stmt.verb, condition)
+        and isinstance(operand, CicsOperand)
+        and not operand.is_literal
     )
+
+
+def _names_a_target(verb: str, option: str) -> bool:
+    return verb == _HANDLE or (verb == _HANDLE_ABEND and option == _ABEND_LABEL)
 
 
 def collect_handler_labels(
     statements: Sequence[ExecCicsStatement],
 ) -> HandlerLabels:
-    """Number each HANDLE CONDITION target paragraph in first-appearance order."""
+    """Number each HANDLE CONDITION and HANDLE ABEND LABEL target paragraph in
+    first-appearance order."""
     targets = _targets(statements)
     paragraphs = tuple(dict.fromkeys(paragraph for _, paragraph in targets))
     return HandlerLabels(
         indices={name: index for index, name in enumerate(paragraphs, start=1)},
         conditions={paragraph: condition for condition, paragraph in reversed(targets)},
+        abend_exits=frozenset(
+            paragraph for option, paragraph in targets if option == _ABEND_LABEL
+        ),
     )
 
 
@@ -87,6 +99,15 @@ def paragraph_names(program_dict: Mapping[str, object]) -> frozenset[str]:
     )
     return frozenset(
         name for container in containers for name in _paragraph_names_of(container)
+    )
+
+
+def section_names(program_dict: Mapping[str, object]) -> frozenset[str]:
+    """Every section name a ``Branch(CodeLabel("section_<NAME>"))`` can reach."""
+    return frozenset(
+        str(section["name"])
+        for section in _as_sequence(program_dict.get("sections", ()))
+        if isinstance(section, dict) and "name" in section
     )
 
 

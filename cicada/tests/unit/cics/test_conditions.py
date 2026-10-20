@@ -29,7 +29,7 @@ def test_codes_match_the_values_already_used_across_the_runtime():
     assert code_for("MAPFAIL") == 36
 
 
-def test_the_raisable_set_is_the_corpus_nine_plus_the_fct_miss():
+def test_the_raisable_set_is_the_corpus_nine_plus_the_fct_miss_and_pgmiderr():
     assert RAISABLE == frozenset(
         {
             "NOTOPEN",
@@ -42,6 +42,7 @@ def test_the_raisable_set_is_the_corpus_nine_plus_the_fct_miss():
             "DUPKEY",
             "DUPREC",
             "DISABLED",
+            "PGMIDERR",
         }
     )
 
@@ -51,7 +52,7 @@ def test_normal_is_never_raisable():
     assert is_raisable_code(0) is False
 
 
-def test_the_raisable_codes_are_the_ten_written_down_here():
+def test_the_raisable_codes_are_the_eleven_written_down_here():
     """Written out independently of CONDITION_CODES: is_raisable_code is defined
     as membership in the codes of RAISABLE, so checking it against code_for()
     would restate the same dict rather than test it. A code that changed on one
@@ -67,6 +68,7 @@ def test_the_raisable_codes_are_the_ten_written_down_here():
         18,
         19,
         22,
+        27,
         36,
         84,
     }

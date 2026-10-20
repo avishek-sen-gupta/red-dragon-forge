@@ -349,3 +349,39 @@ def test_send_text_from_puts_the_fields_value_on_the_screen_channel(cobol_parser
     assert screens[0]["type"] == "text"
     # WS-MESSAGE is PIC X(20); its decoded value is space-padded to that width.
     assert screens[0]["text"].rstrip() == "HELLO FROM CARDDEMO"
+
+
+# A bare SEND (terminal control, no map), as CardDemo's abend routines issue it.
+BARESEND_PGM_SRC = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. BSNDPGM.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 WS-MESSAGE PIC X(20) VALUE 'HELLO FROM CARDDEMO'.
+       PROCEDURE DIVISION.
+           EXEC CICS SEND FROM(WS-MESSAGE) LENGTH(10) ERASE NOHANDLE
+           END-EXEC.
+           EXEC CICS RETURN END-EXEC.
+"""
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_a_bare_send_puts_its_data_on_the_screen_channel(cobol_parser):
+    """SEND FROM(WS-MESSAGE) LENGTH(10) shows the first ten bytes of WS-MESSAGE as
+    unformatted text and the task runs on to its RETURN."""
+    screen_q: queue.Queue = queue.Queue()
+    input_q: queue.Queue = queue.Queue()
+
+    result = run_carddemo_region(
+        transid_to_program={"CC00": "BSNDPGM"},
+        program_sources={"BSNDPGM": BARESEND_PGM_SRC.encode()},
+        parser=cobol_parser,
+        entry_transid="CC00",
+        screen_queue=screen_q,
+        input_queue=input_q,
+    )
+
+    assert (result.kind, drain(screen_q)) == (
+        DispatchKind.RETURN,
+        [{"type": "text", "text": "HELLO FROM"}],
+    )

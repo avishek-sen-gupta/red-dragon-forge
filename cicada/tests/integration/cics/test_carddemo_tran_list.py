@@ -160,10 +160,11 @@ def _drive_to_tran_list(tmp_path: Path, bridge_jar):
     context_holder = [None]
     result_holder: list = [None]
     start_queue = StartQueue()
+    program_cache: dict = {}
     runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
-        program_cache={},
+        program_cache=program_cache,
         start_queue=start_queue,
         result_holder=result_holder,
         vsam_engine=_tran_list_engine(tmp_path),
@@ -176,7 +177,7 @@ def _drive_to_tran_list(tmp_path: Path, bridge_jar):
     menu = compile_cics_program(menu_path.read_bytes(), parser, spec)
     tranlist = compile_cics_program(tranlist_path.read_bytes(), parser, spec)
 
-    program_cache = {"COSGN00C": signon, "COMEN01C": menu, "COTRN00C": tranlist}
+    program_cache.update({"COSGN00C": signon, "COMEN01C": menu, "COTRN00C": tranlist})
     transid_to_program = {"CC00": "COSGN00C", "CM00": "COMEN01C", "CT00": "COTRN00C"}
     region = CicsRegion(
         program_cache,

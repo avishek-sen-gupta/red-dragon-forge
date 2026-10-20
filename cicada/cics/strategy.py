@@ -23,6 +23,7 @@ from cics.handler_labels import (
     HandlerLabels,
     collect_handler_labels,
     paragraph_names,
+    section_names,
 )
 from cics.statements import CicsOperand, ExecCicsStatement
 from cics.strategy_stores import drain, note_unsupported
@@ -124,8 +125,11 @@ _BMS_VERBS: Mapping[str, str] = MappingProxyType(
         "SEND MAP": "__cics_send_map",
         "RECEIVE MAP": "__cics_receive_map",
         "SEND TEXT": "__cics_send_text",
+        "SEND": "__cics_send_text",
     }
 )
+
+_TEXT_SEND_VERBS = frozenset({"SEND TEXT", "SEND"})
 
 _SEND_MAP_OPTIONS = (
     "ERASE",
@@ -444,6 +448,16 @@ def emit_indexed_write(
     )
 
 
+def _emit_return_when_normal(ctx: EmitContext, r_res: Register) -> None:
+    r_held = _emit_binop(ctx, "==", r_res, ctx.const_to_reg(code_for("NORMAL")))
+    transfer_lbl = ctx.fresh_label("xctl_transfer")
+    failed_lbl = ctx.fresh_label("xctl_failed")
+    ctx.emit_inst(BranchIf(cond_reg=r_held, branch_targets=(transfer_lbl, failed_lbl)))
+    ctx.emit_inst(Label_(label=transfer_lbl))
+    ctx.emit_inst(Return_())
+    ctx.emit_inst(Label_(label=failed_lbl))
+
+
 def emit_resp_writeback(
     ctx: EmitContext,
     r_resp_result: Register,
@@ -463,6 +477,9 @@ def emit_resp_writeback(
 
 
 _CONDITION_TABLE_FIELDS = ("DFH-HANDLER", "DFH-RAISABLE", "EIBRESP")
+
+_ABEND_EXIT_FIELD = "DFH-ABEND-EXIT"
+_ABEND_EXIT_LABEL = CodeLabel("__cics_abend_exit")
 
 
 def has_condition_tables(
@@ -896,6 +913,7 @@ class _ModuleScan:
 
     handler_labels: HandlerLabels
     paragraph_names: frozenset[str]
+    section_names: frozenset[str] = frozenset()
 
 
 Lowerer: TypeAlias = (
@@ -942,6 +960,7 @@ class CicsLoweringStrategy:
                 "RETURN": self._lower_return,
                 "XCTL": self._lower_xctl,
                 "ABEND": self._lower_abend,
+                "HANDLE ABEND": self._lower_handle_abend,
                 "SYNCPOINT": self._lower_syncpoint,
                 "SYNCPOINT ROLLBACK": self._lower_syncpoint_rollback,
                 "START": self._lower_start,
@@ -963,7 +982,13 @@ class CicsLoweringStrategy:
         logger.debug("DFHRESP prepass on program dict")
         # Same consume-and-clear discipline as handler_source: both are gathered
         # from this one module's parse and read once, at its procedure entry.
-        self._scan.set(replace(self._scan.get(), paragraph_names=paragraph_names(data)))
+        self._scan.set(
+            replace(
+                self._scan.get(),
+                paragraph_names=paragraph_names(data),
+                section_names=section_names(data),
+            )
+        )
         result = resolve_dfhresp_nodes(data)
         logger.debug("DFHRESP prepass done")
         return cast("dict[str, V]", result)
@@ -986,6 +1011,7 @@ class CicsLoweringStrategy:
             )
         )
         self._emit_dispatcher_if_needed(ctx, materialised)
+        self._emit_abend_exit_if_needed(ctx, materialised)
 
     def _reject_unknown_handler_targets(self) -> None:
         """A handler naming a paragraph the module does not define compiles to a
@@ -997,7 +1023,7 @@ class CicsLoweringStrategy:
         unknown = sorted(
             (paragraph, scan.handler_labels.conditions[paragraph])
             for paragraph in scan.handler_labels.indices
-            if paragraph not in scan.paragraph_names
+            if paragraph not in scan.paragraph_names | scan.section_names
         )
         if not unknown:
             return
@@ -1006,7 +1032,7 @@ class CicsLoweringStrategy:
         )
         raise NotImplementedError(
             f"EXEC CICS HANDLE CONDITION names {named}, but this module defines "
-            "no such paragraph. The dispatcher would branch to a label no block "
+            "no such paragraph or section. The dispatcher would branch to a label no block "
             "owns, which ends the task silently instead of transferring control."
         )
 
@@ -1096,8 +1122,9 @@ class CicsLoweringStrategy:
     ) -> None:
         r_prog = emit_operand_value(ctx, opts.get("PROGRAM"), materialised)
         r_ca = _copy_in_or_empty(ctx, opts.get("COMMAREA"), materialised)
-        _emit_call(ctx, "__cics_set_xctl_context", r_prog, r_ca)
-        ctx.emit_inst(Return_())
+        r_res = _emit_call(ctx, "__cics_set_xctl_context", r_prog, r_ca)
+        _emit_resp_and_raise(ctx, r_res, opts, materialised)
+        _emit_return_when_normal(ctx, r_res)
 
     def _lower_abend(
         self,
@@ -1106,9 +1133,77 @@ class CicsLoweringStrategy:
         opts: Options,
         materialised: MaterialisedSectionedLayout,
     ) -> None:
+        if "CANCEL" not in opts:
+            self._emit_abend_exit_check(ctx, materialised)
         r_code = _emit_string(ctx, _operand_text(opts.get("ABCODE"), "UNKN"))
         _emit_call(ctx, "__cics_abend", r_code)
         ctx.emit_inst(Return_())
+
+    def _lower_handle_abend(
+        self,
+        ctx: EmitContext,
+        verb: str,
+        opts: Options,
+        materialised: MaterialisedSectionedLayout,
+    ) -> None:
+        label = opts.get("LABEL")
+        if isinstance(label, CicsOperand) and not label.is_literal:
+            index = self._scan.get().handler_labels.index_of(label.text)
+            self._emit_abend_exit_write(ctx, index, materialised)
+            return
+        if "CANCEL" in opts:
+            self._emit_abend_exit_write(ctx, 0, materialised)
+            return
+        self._lower_system(ctx, verb, opts, materialised)
+
+    def _emit_abend_exit_write(
+        self, ctx: EmitContext, index: int, materialised: MaterialisedSectionedLayout
+    ) -> None:
+        r_index = ctx.emit_to_string(_emit_int(ctx, index))
+        emit_copy_back_str(ctx, _ABEND_EXIT_FIELD, r_index, materialised)
+
+    def _has_abend_exit(
+        self, ctx: EmitContext, materialised: MaterialisedSectionedLayout
+    ) -> bool:
+        exits = self._scan.get().handler_labels.abend_exits
+        return bool(exits) and ctx.has_field(_ABEND_EXIT_FIELD, materialised)
+
+    def _emit_decode_abend_exit(
+        self, ctx: EmitContext, materialised: MaterialisedSectionedLayout
+    ) -> Register:
+        ref, region_reg = ctx.resolve_field_ref(_ABEND_EXIT_FIELD, materialised)
+        return ctx.emit_decode_field(
+            region_reg, ref.fl, ref.offset_reg, extent=ref.extent
+        )
+
+    def _emit_abend_exit_check(
+        self, ctx: EmitContext, materialised: MaterialisedSectionedLayout
+    ) -> None:
+        if not self._has_abend_exit(ctx, materialised):
+            return
+        r_exit = self._emit_decode_abend_exit(ctx, materialised)
+        r_active = _emit_binop(ctx, "!=", r_exit, ctx.const_to_reg(0))
+        no_exit = ctx.fresh_label("abend_no_exit")
+        ctx.emit_inst(
+            BranchIf(cond_reg=r_active, branch_targets=(_ABEND_EXIT_LABEL, no_exit))
+        )
+        ctx.emit_inst(Label_(label=no_exit))
+
+    def _emit_abend_exit_if_needed(
+        self, ctx: EmitContext, materialised: MaterialisedSectionedLayout
+    ) -> None:
+        if not self._has_abend_exit(ctx, materialised):
+            return
+        skip_lbl = ctx.fresh_label("abend_exit_skip")
+        ctx.emit_inst(Branch(label=skip_lbl))
+        ctx.emit_inst(Label_(label=_ABEND_EXIT_LABEL))
+        r_exit = self._emit_decode_abend_exit(ctx, materialised)
+        self._emit_abend_exit_write(ctx, 0, materialised)
+        labels = self._scan.get().handler_labels
+        for name in sorted(labels.abend_exits):
+            self._emit_handler_match(ctx, r_exit, (name, labels.index_of(name)))
+        ctx.emit_inst(Return_())
+        ctx.emit_inst(Label_(label=skip_lbl))
 
     def _lower_syncpoint(
         self,
@@ -1180,7 +1275,7 @@ class CicsLoweringStrategy:
         opts: Options,
         materialised: MaterialisedSectionedLayout,
     ) -> None:
-        if verb == "SEND TEXT":
+        if verb in _TEXT_SEND_VERBS:
             _lower_send_text(ctx, opts, materialised)
             return
         # MAP name (may be a dynamic data-name) -> runtime value via the resolver.
@@ -1391,6 +1486,7 @@ class CicsLoweringStrategy:
         logger.warning(
             "CicsLoweringStrategy: unimplemented verb %r — emitting an abend", verb
         )
+        self._emit_abend_exit_check(ctx, materialised)
         r_verb = _emit_string(ctx, verb)
         _emit_call(ctx, "__cics_abend_unsupported", r_verb)
         # Ends the task, as EXEC CICS ABEND's own lowering does. Without it the
@@ -1415,8 +1511,13 @@ class CicsLoweringStrategy:
         next_lbl = ctx.fresh_label("cond_next")
         ctx.emit_inst(BranchIf(cond_reg=cmp_reg, branch_targets=(match_lbl, next_lbl)))
         ctx.emit_inst(Label_(label=match_lbl))
-        ctx.emit_inst(Branch(label=CodeLabel(f"para_{name}")))
+        ctx.emit_inst(Branch(label=self._procedure_label(name)))
         ctx.emit_inst(Label_(label=next_lbl))
+
+    def _procedure_label(self, name: str) -> CodeLabel:
+        if name in self._scan.get().section_names:
+            return CodeLabel(f"section_{name.upper()}")
+        return CodeLabel(f"para_{name}")
 
     def _emit_dispatcher(
         self, ctx: EmitContext, materialised: MaterialisedSectionedLayout
@@ -1432,6 +1533,7 @@ class CicsLoweringStrategy:
         )
         for handler in self._scan.get().handler_labels.indices.items():
             self._emit_handler_match(ctx, idx_reg, handler)
+        self._emit_abend_exit_check(ctx, materialised)
         r_resp = self._emit_decode_eibresp(ctx, materialised)
         _emit_call(ctx, "__cics_abend_unhandled", r_resp)
         ctx.emit_inst(Return_())

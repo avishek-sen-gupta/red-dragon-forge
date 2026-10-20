@@ -10,6 +10,8 @@ from interpreter.vm.vm_types import VMState
 from interpreter.types.typed_value import typed
 from interpreter.types.type_expr import UNKNOWN
 
+_LINKED = object()
+
 
 def _vm() -> VMState:
     return VMState()
@@ -42,12 +44,25 @@ def test_set_return_context_with_transid():
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_set_xctl_context():
     holder: list[DispatchResult | None] = [None]
-    builtin = make_set_xctl_context_builtin(holder)
+    builtin = make_set_xctl_context_builtin(holder, {"COCRDLIC": _LINKED})
     args = [
         typed("COCRDLIC", UNKNOWN),
         typed(b"", UNKNOWN),
     ]
-    builtin(args, _vm())
+    resp = builtin(args, _vm()).value
     assert holder[0] is not None
-    assert holder[0].kind == DispatchKind.XCTL
-    assert holder[0].program == "COCRDLIC"
+    assert (resp, holder[0].kind, holder[0].program) == (
+        0,
+        DispatchKind.XCTL,
+        "COCRDLIC",
+    )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_set_xctl_context_to_an_unknown_program_answers_pgmiderr():
+    """A program the region lacks is CICS's PGMIDERR (27); nothing is held, so
+    the issuing program keeps control."""
+    holder: list[DispatchResult | None] = [None]
+    builtin = make_set_xctl_context_builtin(holder, {})
+    resp = builtin([typed("NOSUCH", UNKNOWN), typed(b"", UNKNOWN)], _vm()).value
+    assert (resp, holder[0]) == (27, None)

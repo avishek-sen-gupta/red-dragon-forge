@@ -35,7 +35,8 @@ CONDITION_CODES: dict[str, int] = {
 }
 
 # The conditions this runtime raises: the ones the production corpus codes
-# HANDLE CONDITION for, plus DISABLED. Everything else keeps writing EIBRESP and
+# HANDLE CONDITION for, plus DISABLED and PGMIDERR (an XCTL to a program the
+# region lacks, which CardDemo issues without RESP). Everything else keeps writing EIBRESP and
 # nothing more, which is exactly as truthful as it is today.
 #
 # DISABLED is not a corpus-handled condition; it is what VsamEngine returns for a
@@ -54,6 +55,7 @@ RAISABLE: frozenset[str] = frozenset(
         "DUPKEY",
         "DUPREC",
         "DISABLED",
+        "PGMIDERR",
     }
 )
 
