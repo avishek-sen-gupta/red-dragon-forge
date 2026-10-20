@@ -1076,14 +1076,14 @@ SQL reaching Db2 — case NOT FOUND
     <div class="bar"><span class="label">READNEXT</span><div class="track"><div class="fill" style="width:25.5%"></div></div><span class="val">2,434</span></div>
     <div class="bar"><span class="label">STARTBR</span><div class="track"><div class="fill" style="width:25.3%"></div></div><span class="val">2,414</span></div>
     <div class="bar"><span class="label">REWRITE</span><div class="track"><div class="fill" style="width:18.9%"></div></div><span class="val">1,806</span></div>
-    <div class="bar gap"><span class="label">BIF DEEDIT</span><div class="track"><div class="fill" style="width:10.4%"></div></div><span class="val">992</span></div>
+    <div class="bar"><span class="label">BIF DEEDIT</span><div class="track"><div class="fill" style="width:10.4%"></div></div><span class="val">992</span></div>
     <div class="bar"><span class="label">RETRIEVE</span><div class="track"><div class="fill" style="width:9.6%"></div></div><span class="val">920</span></div>
     <div class="bar"><span class="label">IGNORE COND.</span><div class="track"><div class="fill" style="width:8.6%"></div></div><span class="val">820</span></div>
     <div class="bar gap"><span class="label">TS queues</span><div class="track"><div class="fill" style="width:3.5%"></div></div><span class="val">330</span></div>
   </div>
   <div class="legend"><i style="background:var(--phosphor)"></i>implemented <i style="background:var(--red)"></i>open work</div>
   <div class="source">docs/analysis/2026-09-01-index-items-search-and-cics-verb-gaps.md (Defect E) · artifacts/scale/scale.json</div>
-  <aside class="notes">START, RETRIEVE and IGNORE CONDITION were missing when first analysed and are now implemented — frequency data sets the order of work. Remaining open by volume: BIF DEEDIT (992), temporary storage queues (144 DELETEQ + 98 READQ + 88 WRITEQ), then a long tail (SPOOL, RESETBR). SYNCPOINT has since been implemented for the Db2 tier.</aside>
+  <aside class="notes">START, RETRIEVE, IGNORE CONDITION and BIF DEEDIT were missing when first analysed and are now implemented — frequency data sets the order of work. Remaining open by volume: temporary storage queues (144 DELETEQ + 98 READQ + 88 WRITEQ), then a long tail (SPOOL, RESETBR). SYNCPOINT has since been implemented for the Db2 tier.</aside>
 </section>
 
 <section>
@@ -1139,7 +1139,7 @@ SQL reaching Db2 — case NOT FOUND
       </ul></div>
     <div class="card warn"><h3>Online (CICS)</h3>
       <ul>
-        <li>BIF DEEDIT, temporary storage queues, RESETBR</li>
+        <li>Temporary storage queues, RESETBR</li>
         <li>SEND MAP options: CURSOR, ERASE, FREEKB</li>
         <li>One terminal at a time; conversational (non-pseudo-conversational) programs</li>
         <li>One task at a time</li>
@@ -1161,7 +1161,7 @@ SQL reaching Db2 — case NOT FOUND
   <table>
     <tr><th>Track</th><th>Next</th><th>Why first</th></tr>
     <tr><td><strong>Batch breadth</strong></td><td>GDG → SORT subset + IEBGENER → DD concatenation → IDCAMS breadth → DCB → PDS</td><td>SORT + IEBGENER + IDCAMS: over half of all estate steps</td></tr>
-    <tr><td><strong>CICS surface</strong></td><td>BIF DEEDIT → TS queues → BMS map options → time formats → SYNCPOINT</td><td>DEEDIT alone: 992 uses</td></tr>
+    <tr><td><strong>CICS surface</strong></td><td>TS queues → BMS map options → time formats → SYNCPOINT</td><td>TS queues: 330 uses</td></tr>
     <tr><td><strong>Engine correctness</strong></td><td>Fixed-point decimal arithmetic → SORT/MERGE verbs → an error on anything unhandled</td><td>The tools are only useful if results are byte-exact</td></tr>
     <tr><td><strong>SQL</strong></td><td>Indicators + tolerant coercion → dynamic SQL / CALL → full SQLCA</td><td>Syncpoint shipped; these are what the next Db2 programs hit</td></tr>
     <tr><td><strong>Estate onboarding</strong></td><td>Error-tolerant ingest → dataflow at scale → source positions → screen text</td><td>First contact with any new estate</td></tr>

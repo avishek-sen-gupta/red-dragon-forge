@@ -57,7 +57,7 @@ All paths are under `cicada/`.
 | `cics/preprocessor.py` | `apply_cics_prepass`: injects `COPY DFHEIBLK.` after `WORKING-STORAGE SECTION.` |
 | `cics/dfhresp_prepass.py` | `resolve_dfhresp_nodes`: replaces `DFHRESP(x)` nodes with numeric literals |
 | `cics/conditions.py` | condition names, DFHRESP codes, the raisable set, the `UNSP` abend code |
-| `cics/handler_labels.py` | numbers the paragraphs `HANDLE CONDITION` can jump to |
+| `cics/handler_labels.py` | numbers the paragraphs and sections `HANDLE CONDITION` and `HANDLE ABEND LABEL` can jump to, by red-dragon's procedure label |
 | `cics/interval.py` | `StartQueue`, `StartRequest`: pending `START` requests |
 | `cics/dispatcher.py` | `run_cics`, `_advance_routing`, `_run_dispatcher_with_runner`, `CicsRegion` |
 | `cics/vm_init.py` | `make_cics_initial_vm` |
@@ -135,7 +135,7 @@ never changed. No table is process-global, so two regions run side by side in on
 | Program control | `RETURN [TRANSID] [COMMAREA]`, `XCTL`, `LINK`, `ABEND` | `LINK` runs a pre-compiled program synchronously and copies the COMMAREA back. An abend in the LINKed program comes back to the caller, which branches to its own `HANDLE ABEND` exit or abends the task with that program's code; backout runs once, only when no level handles it. `LINK` or `XCTL` to a program the region lacks raises `PGMIDERR` at the statement, so `RESP` sees it and an unhandled one abends the task |
 | Interval control | `START`, `RETRIEVE` | `START` queues a task that runs when the issuing task ends; `RETRIEVE` reads its `FROM` data. `INTERVAL`, `AFTER` and `AT` are parsed and recorded, not scheduled |
 | Unit of work | `SYNCPOINT`, `SYNCPOINT ROLLBACK` | act on a composed SQL runtime's unit of work; VSAM writes are not undone |
-| Conditions | `HANDLE CONDITION`, `IGNORE CONDITION`, `HANDLE ABEND LABEL`, `HANDLE ABEND CANCEL` | `RESP` and `NOHANDLE` suppress handler dispatch. An abend the program raises (the `ABEND` verb, an unhandled condition, an unsupported verb, an unhandled abend in a program it LINKs to) transfers to the active `HANDLE ABEND LABEL` paragraph or section, and the exit is deactivated on entry; a handled abend does not run `on_abend`. `ABEND CANCEL` ignores the exit. `HANDLE ABEND RESET` and `PROGRAM` are logged no-ops |
+| Conditions | `HANDLE CONDITION`, `IGNORE CONDITION`, `HANDLE ABEND LABEL`, `HANDLE ABEND CANCEL` | `RESP` and `NOHANDLE` suppress handler dispatch. An abend the program raises (the `ABEND` verb, an unhandled condition, an unsupported verb, an unhandled abend in a program it LINKs to) transfers to the active `HANDLE ABEND LABEL` paragraph or section, and the exit is deactivated on entry; a handled abend does not run `on_abend`. `ABEND CANCEL` ignores the exit. `HANDLE ABEND RESET` and `PROGRAM` are logged no-ops. A handler target resolves as a COBOL procedure reference does: its case folds, and a paragraph name declared in several sections means the copy in the `HANDLE` statement's section |
 | BMS | `SEND MAP`, `RECEIVE MAP`, `SEND TEXT`, `SEND` | A bare `SEND FROM` (terminal control) writes its data unformatted, as `SEND TEXT` does; the screen is always erased |
 | File control | `READ`, `WRITE`, `REWRITE`, `DELETE`, `STARTBR`, `READNEXT`, `READPREV`, `ENDBR` | |
 | System | `ASSIGN`, `ASKTIME`, `FORMATTIME`, `INQUIRE`, `WRITEQ TD` | |
