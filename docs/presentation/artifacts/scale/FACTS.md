@@ -66,7 +66,7 @@ Missing when analysed, with status now:
 | `SPOOLOPEN/WRITE/CLOSE` | 116 | open `forge-cfb` |
 | `ROUTE` / `DELAY` | 25 / 25 | open `forge-cfb` |
 | `SYNCPOINT` | 20 | open `forge-urh`, `forge-s10` (ROLLBACK) |
-| `RESETBR` | 8 | open `forge-t12` |
+| `RESETBR` | 8 | implemented (`forge-t12` closed) |
 | `GETMAIN` / `ENQ` / `DEQ` | 7 / 3 / 3 | open `forge-cfb` |
 
 "`START` alone outranks every implemented verb except the top three." [ONLINE]

@@ -41,7 +41,7 @@ Unsupported verbs now **abend loudly** and are recorded
 | `ASKTIME`/`FORMATTIME` ABSTIME operand ignored, date formats missing | — | `forge-4of` P1 |
 | CALLed subprograms using HANDLE CONDITION cannot compile (copybook prepass reaches main source only) | — | `forge-43l` fixed 2026-10-20 |
 | `SYNCPOINT` / `SYNCPOINT ROLLBACK` | 20 | `forge-urh`, `forge-s10` |
-| `RESETBR` | 8 | `forge-t12` |
+| `RESETBR` | 8 | `forge-t12` fixed 2026-10-21 |
 | `SEND` (terminal control, no map) | — | `forge-34j`, `cicada-0du` fixed 2026-10-20 |
 | `HANDLE AID` is a registered no-op | 10 | `forge-xcs` fixed 2026-10-21 |
 | `PUSH HANDLE` / `POP HANDLE` | — | `forge-sk5` |
@@ -179,8 +179,8 @@ From `cobble/docs/outstanding-issues.md` (section headings, status as written) a
    (`1o2.12`) → PDS/PDSE (`1o2.16`) → abend model (`1o2.19`) → deeper DFSORT/ICETOOL
    (`1o2.24`). CardDemo batch tier: `cicada-ncx`.
 2. **CICS verb surface:** TS queues (`forge-o94`), BMS map options
-   (`forge-qh5`), time formatting (`forge-4of`), SYNCPOINT (`forge-urh`/`forge-s10`), RESETBR
-   (`forge-t12`), PUSH/POP HANDLE (`forge-sk5`), low-volume tail
+   (`forge-qh5`), time formatting (`forge-4of`), SYNCPOINT (`forge-urh`/`forge-s10`),
+   PUSH/POP HANDLE (`forge-sk5`), low-volume tail
    (`forge-cfb`); conversational epic `cicada-lkx`; CardDemo online epic `red-dragon-pz9g`.
 3. **COBOL engine correctness:** fixed-point decimal arithmetic (`red-dragon-4q25.1`),
    SORT/MERGE verbs (`red-dragon-429q`), fail loud on unhandled statements and expressions

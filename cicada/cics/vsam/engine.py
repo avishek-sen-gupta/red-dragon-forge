@@ -9,7 +9,13 @@ from dataclasses import dataclass
 from catnip.catalog_stores import Table
 from catnip.dataset import Dataset
 from catnip.labels import KsdsLabel, PathView
-from cics.vsam.eibresp import RESP_DISABLED, RESP_NORMAL, RESP_NOTFND, to_eibresp
+from cics.vsam.eibresp import (
+    RESP_DISABLED,
+    RESP_INVREQ,
+    RESP_NORMAL,
+    RESP_NOTFND,
+    to_eibresp,
+)
 from cics.vsam.key_match import KeyMatch
 from cics.vsam.no_record import NoRecord
 from cics.vsam.read_outcome import ReadOutcome
@@ -253,6 +259,18 @@ class VsamEngine:
             return RESP_NOTFND
         self._browse.put(cursor_key, drv)
         return RESP_NORMAL
+
+    def resetbr(
+        self,
+        file_name: str,
+        key: bytes,
+        cursor_key: _CursorKey,
+        start: KeyMatch = KeyMatch.GTEQ,
+    ) -> int:
+        if not self._browse.has(cursor_key):
+            return RESP_INVREQ
+        self._browse.take(cursor_key).close()
+        return self.startbr(file_name, key, cursor_key, start)
 
     def readnext(self, file_name: str, cursor_key: _CursorKey) -> ReadOutcome:
         return _outcome(self._browse.get(cursor_key).read_seq())

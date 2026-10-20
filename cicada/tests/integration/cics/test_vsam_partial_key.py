@@ -197,3 +197,53 @@ def test_a_generic_delete_removes_every_record_with_the_prefix(cobol_parser, tmp
     assert [
         engine.read("KEYED", k.encode("cp037")) == NoRecord(RESP_NOTFND) for k in _KEYS
     ] == [False, True, True, False]
+
+
+_RESET_TO_THE_FIRST_RECORD = """\
+           EXEC CICS STARTBR FILE('KEYED') RIDFLD(WS-KEY) END-EXEC.
+           EXEC CICS READNEXT FILE('KEYED') INTO(WS-REC) RIDFLD(WS-KEY)
+               END-EXEC.
+           EXEC CICS READNEXT FILE('KEYED') INTO(WS-REC) RIDFLD(WS-KEY)
+               END-EXEC.
+           MOVE 'AAAA0001' TO WS-KEY.
+           EXEC CICS RESETBR FILE('KEYED') RIDFLD(WS-KEY) EQUAL
+               RESP(WS-RESP) END-EXEC.
+           EXEC CICS READNEXT FILE('KEYED') INTO(WS-REC) RIDFLD(WS-KEY)
+               END-EXEC.
+           EXEC CICS ENDBR FILE('KEYED') END-EXEC."""
+
+_RESET_TO_A_GENERIC_KEY = """\
+           EXEC CICS STARTBR FILE('KEYED') RIDFLD(WS-KEY) END-EXEC.
+           MOVE 'CCCC9999' TO WS-KEY.
+           EXEC CICS RESETBR FILE('KEYED') RIDFLD(WS-KEY) GENERIC
+               KEYLENGTH(4) GTEQ RESP(WS-RESP) END-EXEC.
+           EXEC CICS READNEXT FILE('KEYED') INTO(WS-REC) RIDFLD(WS-KEY)
+               END-EXEC.
+           EXEC CICS ENDBR FILE('KEYED') END-EXEC."""
+
+_RESET_WITHOUT_A_BROWSE = """\
+           EXEC CICS RESETBR FILE('KEYED') RIDFLD(WS-KEY)
+               RESP(WS-RESP) END-EXEC."""
+
+
+@pytest.mark.parametrize(
+    "statements, expected",
+    [
+        pytest.param(
+            _RESET_TO_THE_FIRST_RECORD,
+            _out("AAAA0001body", 0, 0),
+            id="back-to-an-earlier-key",
+        ),
+        pytest.param(
+            _RESET_TO_A_GENERIC_KEY, _out("CCCC0001body", 0, 0), id="generic-key"
+        ),
+        pytest.param(_RESET_WITHOUT_A_BROWSE, _out("", 16, 0), id="no-browse-invreq"),
+    ],
+)
+@covers(CobolFeature.EXEC_CICS)
+def test_resetbr_repositions_the_open_browse(
+    cobol_parser, tmp_path, statements, expected
+):
+    engine = _engine(tmp_path)
+
+    assert _run(cobol_parser, engine, _program("AAAA0001", statements)) == expected

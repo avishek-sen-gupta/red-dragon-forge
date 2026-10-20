@@ -58,7 +58,7 @@ fileignoreconfig:
 - filename: squall/tests/unit/test_varchar.py
   checksum: a1f391fcd89d92d1bcffb74b3423cfdf30b458d80238234adac35ffbdea04728
 - filename: cicada/cics/builtins/vsam.py
-  checksum: 6d342d5cb5c5e956a91530f23b1f4dc268f0a597965601cf62de2137aa8a00e0
+  checksum: 3b2a10fa8d2cfea351ddd45b3e5b0154797dce21c76735f061c98c3032ca4423
 - filename: cicada/tests/unit/cics/test_vsam_engine.py
   checksum: cd90c602694687443844feb59c611902f3b5bc7f67dfa9f5c26283178de5003b
 - filename: docs/superpowers/plans/2026-07-04-cics-sql-composition.md
@@ -282,7 +282,7 @@ fileignoreconfig:
 - filename: docs/reference/cobble/config.md
   checksum: d9c0bd9e47fbf8c7179eb1f16ac736bdc06d292918de10c4237998f4fe69292b
 - filename: docs/reference/cicada/architecture.md
-  checksum: d7c6c95adfa75cadaa13ad3f6eb6e6afa1a9867b497c7baf8e2edd97e80240b8
+  checksum: 9cc7ca852738ae1f86da613773143cc51b9aceae9e2d940f1166d5b1f9581c4b
 - filename: docs/reference/squall/architecture.md
   checksum: 6762bfe25e78985f1c2a968ee1c98263adb685da553753b0b3ebde865bcde319
 - filename: docs/superpowers/specs/2026-10-08-docs-consolidation-design.md
@@ -336,7 +336,7 @@ fileignoreconfig:
 - filename: cicada/tests/integration/cics/test_carddemo_user_list.py
   checksum: e9da1e433e65aa8f210e0cc263f93fdbff1f874c23c88029afe941b47c15a7dc
 - filename: cicada/cics/vsam/engine.py
-  checksum: c1493ac3f98bc466b182f8df2d42a171095c631028c2af933d80525414253282
+  checksum: a8b839cdde563fdaa3313d035feffdfdf2f6ae82d4441fa186176f82d4a6b31d
 - filename: cicada/tests/vsam_system.py
   checksum: a1338614fbd2226f6e566a6dd83f5c84cc5a0196ffdf25561bd2d9f172fe9aed
 - filename: cicada/tests/integration/cics/test_vsam_roundtrip.py
@@ -448,7 +448,7 @@ fileignoreconfig:
 - filename: docs/presentation/artifacts/scale/FACTS.md
   checksum: d7c51ccd450352ce3a7175014c7fb49e15684636b805c8f97baf3c25537612d1
 - filename: cicada/cics/strategy.py
-  checksum: 5e0dae7c94a5565fc3bf6fe61cbc6b282202550b5ff5fb34e5fc1121475ba0e7
+  checksum: d7389646e578f57e0f82a9c72a53e6dce2a8f264024cad7a1ec11271121c833a
 - filename: docs/records/analysis/2026-09-01-index-items-search-and-cics-verb-gaps.md
   checksum: 5aa2e413c049919431f5e87e80c3795a9e708b247c331732d074e7936a34c8d4
 - filename: cicada/cics/runtime.py
@@ -456,7 +456,7 @@ fileignoreconfig:
 - filename: cicada/cics/vsam/key_match.py
   checksum: e5fadc1363f443d00de811006090586bf33ac8fb82c441138c215c2ca96c86ab
 - filename: cicada/tests/integration/cics/test_vsam_partial_key.py
-  checksum: 8081d76b68404f08c2097bd59033b2abced0b5b854411e3434a06a3e4d4b4e33
+  checksum: 21cac841ee143cc8e7421be8fa7f14f6d6e9132992643d21c0cf98a8ccb3e810
 - filename: cicada/cics/aid_keys.py
   checksum: 6f432e87282b603d4901881ce50f7a27866306aecd054e2875af97120714d8f6
 - filename: cicada/tests/integration/cics/test_condition_handling.py

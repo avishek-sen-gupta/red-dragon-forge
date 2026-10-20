@@ -52,6 +52,7 @@ _CONSTRUCTOR_BUILTINS = frozenset(
         "__cics_set_return_context",
         "__cics_set_xctl_context",
         "__cics_start",
+        "__cics_resetbr",
         "__cics_startbr",
         "__cics_syncpoint_hook",
         "__cics_task_end_hook",
