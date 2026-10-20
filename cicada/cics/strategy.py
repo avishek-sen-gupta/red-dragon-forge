@@ -1020,11 +1020,10 @@ class CicsLoweringStrategy:
         one — the same mechanism lower_goto relies on for a GOTO to a later
         paragraph.
 
-        Handlers registered but DFH-HANDLER or EIBRESP missing means forge-43l
-        has bitten this module: source_prepass injects the copybooks into the
-        main compiled source only, so a disk-resolved CALL callee must bring
-        its own. Raising beats compiling a module whose handlers silently never
-        dispatch.
+        Handlers registered but DFH-HANDLER or EIBRESP missing means the module
+        was lowered without the CICS source_prepass, which injects both
+        copybooks into every compiled program. Raising beats compiling a module
+        whose handlers silently never dispatch.
         """
         self._reject_unknown_handler_targets()
         if has_condition_tables(ctx, materialised):
@@ -1050,11 +1049,9 @@ class CicsLoweringStrategy:
             f"Module registers EXEC CICS HANDLE CONDITION handlers "
             f"({sorted(self._scan.get().handler_labels.indices)}) but is missing "
             f"{' and '.join(missing)} from its DATA DIVISION. "
-            "build_cics_spec's source_prepass injects COPY DFHHANDLE. and "
-            "COPY DFHEIBLK. into the main compiled source only "
-            "(forge-43l) — a disk-resolved CALL callee that registers "
-            "handlers must bring both copybooks itself: COPY DFHHANDLE. "
-            "for DFH-HANDLER/DFH-RAISABLE, COPY DFHEIBLK. for EIBRESP."
+            "build_cics_spec's source_prepass injects COPY DFHHANDLE. "
+            "(DFH-HANDLER/DFH-RAISABLE) and COPY DFHEIBLK. (EIBRESP) into "
+            "every compiled program, so this module was lowered without it."
         )
 
     def lower(
