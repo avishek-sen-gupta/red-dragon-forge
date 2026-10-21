@@ -35,6 +35,11 @@ bound to the callee parameter at that position. On return only a `BY REFERENCE` 
 written back. An argument with no window is a dead end of its own, and the `CALL` is still
 entered.
 
+An entered call does not credit its windows to `%CALL:<program>`: the callee shares those
+bytes, so a byte it never writes comes back with the caller's own provenance. Each window
+gets a dep row at the callee's entry, from the caller's bytes to the callee's, with
+`source_program` the caller, so a forward query crosses into the callee.
+
 A callee the cache does not hold is an opaque block. The site is listed under dead ends with
 the alias reason (`callee-not-in-cache`), the commarea is credited to `%CALL:<program>`, and
 the path runs on past the call.

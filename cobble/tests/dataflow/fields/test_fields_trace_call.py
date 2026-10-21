@@ -1,9 +1,11 @@
 """cobble-fields-trace steps into a CALL, compiled by the real bridge.
 
-TCALLA hands WS-REF BY REFERENCE and WS-CON BY CONTENT. TCALLB reads LK-CON, then
-writes both parameters. The read must name the caller's MOVE as its definer; the
-write through LK-REF must come back to the caller, which shares those bytes; the
-write through LK-CON must not, because BY CONTENT handed over a copy.
+TCALLA hands WS-REF BY REFERENCE and WS-CON BY CONTENT. TCALLB reads both, then
+writes both parameters. Each read must name the caller's MOVE as its definer, BY
+REFERENCE included: the callee is entered, so the call site has not written those
+bytes. Each argument enters the callee as a row of its own. The write through LK-REF
+must come back to the caller, which shares those bytes; the write through LK-CON must
+not, because BY CONTENT handed over a copy.
 """
 
 from __future__ import annotations
@@ -41,12 +43,14 @@ CALLEE = """\
        DATA DIVISION.
        WORKING-STORAGE SECTION.
        01  WS-GOT               PIC X(4).
+       01  WS-GOT2              PIC X(4).
        LINKAGE SECTION.
        01  LK-REF               PIC X(4).
        01  LK-CON               PIC X(4).
        PROCEDURE DIVISION USING LK-REF LK-CON.
        MAIN-PARA.
            MOVE LK-CON TO WS-GOT.
+           MOVE LK-REF TO WS-GOT2.
            MOVE 'CCCC' TO LK-REF.
            MOVE 'DDDD' TO LK-CON.
            GOBACK.
@@ -86,17 +90,32 @@ def _definers(trace: Trace, program: str, field: str) -> set[str]:
     }
 
 
+def _entering(trace: Trace) -> set[tuple[str, str, tuple[str, ...]]]:
+    return {
+        (dep.source.field_name, dep.target.field_name, dep.definers)
+        for dep in trace.deps
+        if dep.program == "TCALLB" and dep.source_program == "TCALLA"
+    }
+
+
 def test_a_call_carries_its_arguments_in_and_only_by_reference_back(
     called: Trace,
 ) -> None:
     assert (
         _definers(called, "TCALLB", "WS-GOT"),
+        _definers(called, "TCALLB", "WS-GOT2"),
+        _entering(called),
         _definers(called, "TCALLA", "WS-SINK"),
         _definers(called, "TCALLA", "WS-SINK2"),
         {dead.reason for dead in called.dead_ends},
     ) == (
         {"TCALLA/MAIN-PARA/1"},
-        {"TCALLB/MAIN-PARA/1"},
+        {"TCALLA/MAIN-PARA/0"},
+        {
+            ("WS-REF", "LK-REF", ("TCALLA/MAIN-PARA/0",)),
+            ("WS-CON", "LK-CON", ("TCALLA/MAIN-PARA/1",)),
+        },
+        {"TCALLB/MAIN-PARA/2"},
         {"TCALLA/MAIN-PARA/1"},
         set(),
     )

@@ -69,7 +69,9 @@ from cobol_asg.cobol_statements import (
     InitializeStatement,
     MoveStatement,
     ReadStatement,
+    RewriteStatement,
     StringStatement,
+    WriteStatement,
 )
 from cobol_asg.ref_mod import (
     RefModBinOp,
@@ -311,6 +313,32 @@ def _copy_start(
         return (base,)
     offset = _constant(source.ref_mod_start, index)
     return (base + offset[0] - 1,) if offset else ()
+
+
+def _implied_move(statement: WriteStatement | RewriteStatement) -> MoveStatement:
+    """``WRITE rec FROM x`` and ``REWRITE rec FROM x`` move x into the record area
+    first; without FROM the record area already holds what goes out."""
+    targets = [RefModOperand(name=statement.record_name)]
+    return MoveStatement(source=statement.from_field, targets=targets)
+
+
+def _record_targets(
+    statement: WriteStatement | RewriteStatement,
+) -> tuple[RefModOperand, ...]:
+    if not statement.from_field.name:
+        return ()
+    return (RefModOperand(name=statement.record_name),)
+
+
+def _record_writes(
+    statement: WriteStatement | RewriteStatement,
+    node: str,
+    index: CellIndex,
+    state: State,
+) -> Iterator[Write]:
+    if not statement.from_field.name:
+        return iter(())
+    return _move_writes(_implied_move(statement), node, index, state)
 
 
 def _initialize_targets(statement: InitializeStatement) -> tuple[RefModOperand, ...]:
@@ -658,6 +686,8 @@ HANDLED: tuple[type, ...] = (
     ComputeStatement,
     StringStatement,
     ReadStatement,
+    WriteStatement,
+    RewriteStatement,
     CallStatement,
     ExecCicsStatement,
 )
@@ -670,6 +700,8 @@ _WRITES_BY_KIND: Mapping[str, Callable[..., Iterator[Write]]] = MappingProxyType
         "ComputeStatement": _compute_writes,
         "StringStatement": _string_writes,
         "ReadStatement": _read_writes,
+        "WriteStatement": _record_writes,
+        "RewriteStatement": _record_writes,
         "CallStatement": _call_writes,
         "ExecCicsStatement": _cics_writes,
         "UnmodelledWrite": _unmodelled_writes,
@@ -686,6 +718,8 @@ _TARGETS_BY_KIND: Mapping[str, Callable[..., tuple[RefModOperand, ...]]] = (
             "ComputeStatement": _compute_targets,
             "StringStatement": _string_targets,
             "ReadStatement": _read_targets,
+            "WriteStatement": _record_targets,
+            "RewriteStatement": _record_targets,
             "CallStatement": _call_targets,
             "ExecCicsStatement": _cics_targets,
             "UnmodelledWrite": _unmodelled_targets,

@@ -79,9 +79,10 @@ An exact write removes every entry it fully covers. An exact write into part of 
 splits it: the untouched bytes keep their writers and values. Nothing is split where either
 side is clamped; the entry keeps its writers and its values become `not-a-literal`.
 
-The transfer models `MOVE`, `INITIALIZE`, arithmetic, `COMPUTE`, `STRING`, `READ`, `CALL` and
-`EXEC CICS`. Any other statement that writes storage (`ACCEPT`, `UNSTRING`, `INSPECT`, `SET`,
-`SEARCH`, the `CORRESPONDING` forms, `WRITE`/`REWRITE ... FROM`, `XML GENERATE`) is a weak
+The transfer models `MOVE`, `INITIALIZE`, arithmetic, `COMPUTE`, `STRING`, `READ`, `CALL`,
+`EXEC CICS` and `WRITE`/`REWRITE ... FROM`, which moves the `FROM` operand into the record
+area. Any other statement that writes storage (`ACCEPT`, `UNSTRING`, `INSPECT`, `SET`,
+`SEARCH`, the `CORRESPONDING` forms, `XML GENERATE`) is a weak
 write of the names its CFG node lists: it adds a definer, removes nothing, and adds the reason
 `unmodelled`. `EXEC SQL ... INTO` and `FETCH ... INTO` are not modelled.
 
