@@ -2,7 +2,7 @@
 
 Runs the pipeline `hlasm_export <map>.bms --syslib <macros> | python -m bms_copybook_gen`
 once per .bms file, writing <out_dir>/<stem>.cpy.  hlasm_export is built from
-third-party/che-che4z-lsp-for-hlasm-fork; bms_copybook_gen is a first-class
+vendor/red-dragon/hlasm-bridge/che4z; bms_copybook_gen is a first-class
 package in this repo.  Callers gate on BMS_TOOLS_AVAILABLE from bms_tools_helpers.
 
 `hlasm_export` only recognises the BMS macros (DFHMSD/DFHMDI/DFHMDF) when their

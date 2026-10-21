@@ -50,4 +50,4 @@
 - `agent-guidelines-templates` — upstream source of every other file in `guidelines/`. Changes
   that are not specific to this repo belong there.
 - Vendored corpora, read-only: `vendor/carddemo`, `vendor/bank-of-z`,
-  `squall/testbed/db2-samples`, `cicada/third-party/che-che4z-lsp-for-hlasm-fork`.
+  `squall/testbed/db2-samples`, `vendor/red-dragon/hlasm-bridge/che4z`.

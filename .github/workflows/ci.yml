@@ -52,12 +52,12 @@ jobs:
       - name: Read the HLASM fork's pinned commit
         id: hlasm-pin
         working-directory: ${{ github.workspace }}
-        run: echo "sha=$(git rev-parse HEAD:cicada/third-party/che-che4z-lsp-for-hlasm-fork)" >> "$GITHUB_OUTPUT"
+        run: echo "sha=$(git -C vendor/red-dragon rev-parse HEAD:hlasm-bridge/che4z)" >> "$GITHUB_OUTPUT"
       - name: Restore hlasm_export
         id: hlasm-cache
         uses: actions/cache@v5
         with:
-          path: cicada/third-party/che-che4z-lsp-for-hlasm-fork/build/bin/hlasm_export
+          path: vendor/red-dragon/hlasm-bridge/che4z/build/bin/hlasm_export
           key: hlasm-export-${{ runner.os }}-${{ steps.hlasm-pin.outputs.sha }}
       - name: Build hlasm_export
         if: steps.hlasm-cache.outputs.cache-hit != 'true'
@@ -159,12 +159,12 @@ jobs:
       - name: Read the HLASM fork's pinned commit
         id: hlasm-pin
         working-directory: ${{ github.workspace }}
-        run: echo "sha=$(git rev-parse HEAD:cicada/third-party/che-che4z-lsp-for-hlasm-fork)" >> "$GITHUB_OUTPUT"
+        run: echo "sha=$(git -C vendor/red-dragon rev-parse HEAD:hlasm-bridge/che4z)" >> "$GITHUB_OUTPUT"
       - name: Restore hlasm_export
         id: hlasm-cache
         uses: actions/cache@v5
         with:
-          path: cicada/third-party/che-che4z-lsp-for-hlasm-fork/build/bin/hlasm_export
+          path: vendor/red-dragon/hlasm-bridge/che4z/build/bin/hlasm_export
           key: hlasm-export-${{ runner.os }}-${{ steps.hlasm-pin.outputs.sha }}
       - name: Build hlasm_export
         if: steps.hlasm-cache.outputs.cache-hit != 'true'
@@ -210,12 +210,12 @@ jobs:
       - name: Read the HLASM fork's pinned commit
         id: hlasm-pin
         working-directory: ${{ github.workspace }}
-        run: echo "sha=$(git rev-parse HEAD:cicada/third-party/che-che4z-lsp-for-hlasm-fork)" >> "$GITHUB_OUTPUT"
+        run: echo "sha=$(git -C vendor/red-dragon rev-parse HEAD:hlasm-bridge/che4z)" >> "$GITHUB_OUTPUT"
       - name: Restore hlasm_export
         id: hlasm-cache
         uses: actions/cache@v5
         with:
-          path: cicada/third-party/che-che4z-lsp-for-hlasm-fork/build/bin/hlasm_export
+          path: vendor/red-dragon/hlasm-bridge/che4z/build/bin/hlasm_export
           key: hlasm-export-${{ runner.os }}-${{ steps.hlasm-pin.outputs.sha }}
       - name: Build hlasm_export
         if: steps.hlasm-cache.outputs.cache-hit != 'true'

@@ -12,7 +12,7 @@ fi
 
 export PROLEAP_BRIDGE_JAR="$FORGE_ROOT/vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar"
 export JCL_BRIDGE_JAR="$FORGE_ROOT/jackal/jcl-bridge/target/jcl-bridge-0.1.0-shaded.jar"
-export HLASM_EXPORT="$FORGE_ROOT/cicada/third-party/che-che4z-lsp-for-hlasm-fork/build/bin/hlasm_export"
+export HLASM_EXPORT="$FORGE_ROOT/vendor/red-dragon/hlasm-bridge/che4z/build/bin/hlasm_export"
 
 for _built in "$PROLEAP_BRIDGE_JAR" "$JCL_BRIDGE_JAR" "$HLASM_EXPORT"; do
   [ -f "$_built" ] || echo "warning: $_built not built (run \`make setup\` at the forge root)" >&2

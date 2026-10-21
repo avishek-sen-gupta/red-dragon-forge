@@ -38,9 +38,10 @@ logger = logging.getLogger(__name__)
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _HLASM = (
     _REPO_ROOT.parent
-    / "cicada"
-    / "third-party"
-    / "che-che4z-lsp-for-hlasm-fork"
+    / "vendor"
+    / "red-dragon"
+    / "hlasm-bridge"
+    / "che4z"
     / "build"
     / "bin"
     / "hlasm_export"

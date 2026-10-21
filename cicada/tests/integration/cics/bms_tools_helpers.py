@@ -1,7 +1,7 @@
 """Gating + path constants for the bms-tools pipeline.
 
-hlasm_export is built from the HLASM fork submodule at
-third-party/che-che4z-lsp-for-hlasm-fork.  bms_copybook_gen is a first-class
+hlasm_export is built from red-dragon's HLASM fork checkout at
+vendor/red-dragon/hlasm-bridge/che4z.  bms_copybook_gen is a first-class
 package in this repo — no PYTHONPATH manipulation needed.
 """
 
@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).parents[3]
-_HLASM_FORK = _REPO_ROOT / "third-party" / "che-che4z-lsp-for-hlasm-fork"
+_HLASM_FORK = _REPO_ROOT.parent / "vendor" / "red-dragon" / "hlasm-bridge" / "che4z"
 
 HLASM_EXPORT_BIN: str | None = str(_HLASM_FORK / "build" / "bin" / "hlasm_export")
 

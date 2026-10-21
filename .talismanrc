@@ -392,7 +392,7 @@ fileignoreconfig:
 - filename: squall/tests/unit/test_runtime.py
   checksum: 91bb5edcd1c6957c0bd864d4fc4b390ed8776604f30112934fa6dc08251e9fdb
 - filename: bridge-env.sh
-  checksum: 1af52619fe23b0f64abb3795a0f2ce0b32dbce92b46ca062ebdf9e6cbc3dc1cf
+  checksum: 4849b249704973f3ac9d4067a3b2f9b4e8ba23ceb6304a3fe0605c756e538067
 - filename: red_dragon_forge/env_config.py
   checksum: dde6f60c871524c7dbba5fad1af8365c8aa484f714d4ba8233d982a7eb629a56
 - filename: red_dragon_forge/env_paths.py
