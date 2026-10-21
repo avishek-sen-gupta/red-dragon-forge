@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+from cobble.dataflow.fields.state import NOWHERE
 from cobble.dataflow.fields.trace import Coverage, DeadEnd, Dep, Trace
 from cobble.dataflow.fields.trace_report import (
     _dead_end_row,
@@ -91,6 +92,41 @@ def test_jsonl_origin_dep_has_null_source():
     parsed = json.loads(_dep_row(_ORIGIN_DEP))
     assert parsed["origin"] == "LITERAL"
     assert parsed["source"] is None
+
+
+def test_a_sink_dep_names_where_its_source_went_and_has_no_target():
+    dep = Dep(
+        program="PROG",
+        node="PARA/9",
+        target=NOWHERE,
+        origin="",
+        source=_EXTENT_B,
+        definers=("PROG/PARA/1",),
+        via="",
+        source_program="PROG",
+        sink="FILE:KSDS",
+    )
+    assert (json.loads(_dep_row(dep)), json.loads(_dep_row(_DEP))["sink"]) == (
+        {
+            "kind": "dep",
+            "program": "PROG",
+            "via": "",
+            "target": None,
+            "origin": "",
+            "sink": "FILE:KSDS",
+            "source": {
+                "field": "FIELD-B",
+                "region": "working_storage",
+                "start": 200,
+                "end": 208,
+                "clamped": False,
+            },
+            "source_program": "PROG",
+            "site": "PROG/PARA/9",
+            "definers": ["PROG/PARA/1"],
+        },
+        "",
+    )
 
 
 def test_jsonl_clamped_extent():

@@ -13,20 +13,22 @@ import logging
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from functools import reduce
+from functools import partial, reduce
 from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
 from cobble.dataflow.fields.extent_text import (
+    NO_RANGE,
     ByteRange,
     byte_range,
     byte_range_from_dict,
 )
+from pydantic import TypeAdapter
 
 logger = logging.getLogger(__name__)
 
 _RangeKey = tuple[str, str, int, int]
-_Step = Callable[[Sequence["DepRow"], "_State", int], "_State"]
+_DEFINERS = TypeAdapter(tuple[str, ...])
 
 
 @dataclass(frozen=True)
@@ -40,12 +42,14 @@ class DepRow:
     source: ByteRange
     site: str
     definers: tuple[str, ...]
+    sink: str
 
 
-def _extent_or_empty(
-    raw: str | int | bool | Mapping[str, str | int | bool],
-) -> Mapping[str, str | int | bool]:
-    return raw if isinstance(raw, Mapping) else {}
+def _range_of(
+    raw: str | int | bool | Mapping[str, str | int | bool], program: str
+) -> ByteRange:
+    """A null end -- an origin row's source, a sink row's target -- is no range."""
+    return byte_range_from_dict(raw, program) if isinstance(raw, Mapping) else NO_RANGE
 
 
 def _dep_of(
@@ -56,13 +60,12 @@ def _dep_of(
     return DepRow(
         program=program,
         via=str(row.get("via", "")),
-        target=byte_range_from_dict(_extent_or_empty(row.get("target", "")), program),
+        target=_range_of(row.get("target", ""), program),
         origin=str(row.get("origin", "")),
-        source=byte_range_from_dict(
-            _extent_or_empty(row.get("source", "")), source_program
-        ),
+        source=_range_of(row.get("source", ""), source_program),
         site=str(row.get("site", "")),
-        definers=tuple(str(d) for d in row.get("definers", ())),
+        definers=_DEFINERS.validate_python(row.get("definers", ())),
+        sink=str(row.get("sink", "")),
     )
 
 
@@ -181,11 +184,14 @@ class _State:
     seen: frozenset[_RangeKey]
 
 
+_Step = Callable[[Sequence[DepRow], _State, int], _State]
+
+
 def _hit_of(dep: DepRow, depth: int) -> _Hit:
     return _Hit(
         depth=depth,
         source_text=str(dep.source) if dep.source.known else dep.origin,
-        target_text=str(dep.target),
+        target_text=dep.sink or str(dep.target),
         site=dep.site,
         origin=dep.origin,
         definers=dep.definers,
@@ -280,11 +286,13 @@ def _bfs(
         seen=frozenset(_range_key(r) for r in roots),
     )
     final = reduce(
-        lambda state, depth: state if not state.frontier else step(deps, state, depth),
-        range(1, max_depth + 1),
-        initial,
+        partial(_deepened, deps=deps, step=step), range(1, max_depth + 1), initial
     )
     return final.hits
+
+
+def _deepened(state: _State, depth: int, deps: Sequence[DepRow], step: _Step) -> _State:
+    return state if not state.frontier else step(deps, state, depth)
 
 
 def _forward(

@@ -62,6 +62,18 @@ ends, coverage, limits) are written at the end. Dep rows can repeat across paths
 carries `source_program` beside `source`, because at a `LINK` return the caller is credited
 with bytes named in the callee's address space.
 
+A dep row with a `sink` records bytes leaving the program, and its `target` is null. Its
+`source` is what went out, and its definers are read after the statement's own writes:
+
+| Statement | `source` | `sink` |
+|---|---|---|
+| `WRITE`/`REWRITE` record | the record area | `FILE:<select name>` |
+| EXEC CICS `WRITE`/`REWRITE FROM` | `FROM` | `FILE:<file>` |
+| EXEC CICS `SEND MAP` | `FROM`, or the map's `<map>O` record; nothing under `MAPONLY` | `MAP:<map>` |
+| EXEC CICS `WRITEQ TS FROM` | `FROM` | `TSQ:<queue>` |
+| EXEC CICS `WRITEQ TD FROM` | `FROM` | `TDQ:<queue>` |
+| EXEC CICS `START FROM` | `FROM` | `TRANSID:<transid>` |
+
 Progress goes to stderr, one line per path: nodes run, cumulative branch coverage, queue
 sizes, programs entered and dead ends met, then the reason the run stopped.
 
@@ -82,4 +94,5 @@ cobble-trace-query {forward,backward} FIELD --trace TRACE [--depth N] [--extents
 Matches by byte-extent containment within a program and deduplicates on load. The backward
 walk narrows at each hop: when a dep's target is a group wider than the range being traced,
 the source is clipped to the overlapping sub-range. Output is an indented tree, one line per
-provenance edge, with origins (`FILE:`, `LITERAL`, `%CALL:`) at the leaves.
+provenance edge, with origins (`FILE:`, `LITERAL`, `%CALL:`) at the backward leaves and
+sinks at the forward ones.
