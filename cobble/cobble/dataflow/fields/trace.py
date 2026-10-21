@@ -33,10 +33,18 @@ from types import MappingProxyType
 
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.fields.aliases import NO_EXTENT, UNSIZEABLE, commarea_aliases
-from cobble.dataflow.fields.extent import CellIndex, cell_index
+from cobble.dataflow.fields.extent import CellIndex, cell_index, operand_extents
 from cobble.dataflow.fields.extent_text import byte_range
 from cobble.dataflow.fields.side_tables import CommareaAlias
-from cobble.dataflow.fields.state import EMPTY, Source, State, reaching, write
+from cobble.dataflow.fields.sinks import sinks_of
+from cobble.dataflow.fields.state import (
+    EMPTY,
+    NOWHERE,
+    Source,
+    State,
+    reaching,
+    write,
+)
 from cobble.dataflow.fields.transfer import Statement, Write, writes_of
 from cobble.dataflow.layout import UnsizeableFieldError, program_records
 from cobble.dataflow.srccfg.build import (
@@ -133,6 +141,7 @@ class Dep:
     definers: tuple[str, ...]
     via: str
     source_program: str
+    sink: str = ""
 
 
 @dataclass(frozen=True)
@@ -278,6 +287,7 @@ def _seeded(held: State, source: FieldExtent, target: FieldExtent) -> State:
 NO_CFG = Cfg(program="", nodes=(), edges=())
 NO_INDEX = cell_index(())
 NO_STATEMENTS: Mapping[str, Statement] = MappingProxyType({})
+NO_FILES: Mapping[str, str] = MappingProxyType({})
 NO_ALIASES: Mapping[str, tuple[CommareaAlias, ...]] = MappingProxyType({})
 NO_STORE: Mapping[str, State] = MappingProxyType({})
 
@@ -296,6 +306,7 @@ class Loaded:
     index: CellIndex = NO_INDEX
     entry: str = ""
     aliases: Mapping[str, tuple[CommareaAlias, ...]] = NO_ALIASES
+    files: Mapping[str, str] = NO_FILES
     reason: str = ""
 
 
@@ -589,7 +600,11 @@ def _definers(held: State, source: Source) -> tuple[str, ...]:
     """
     if source.origin:
         return ()
-    return tuple(sorted({one.node for one in reaching(held, source.extent)}))
+    return _reached(held, source.extent)
+
+
+def _reached(held: State, extent: FieldExtent) -> tuple[str, ...]:
+    return tuple(sorted({one.node for one in reaching(held, extent)}))
 
 
 def _witnessed(walk: _Walk, held: State, writes: Sequence[Write]) -> frozenset[Dep]:
@@ -616,6 +631,28 @@ def _witnessed(walk: _Walk, held: State, writes: Sequence[Write]) -> frozenset[D
     )
 
 
+def _sunk(walk: _Walk, held: State, loaded: Loaded) -> frozenset[Dep]:
+    """One dep per extent a statement sends out, read after its own writes, so
+    ``WRITE rec FROM x`` names its own move into the record area."""
+    if walk.node not in loaded.statements:
+        return frozenset()
+    return frozenset(
+        Dep(
+            program=walk.program,
+            node=walk.node,
+            target=NOWHERE,
+            origin="",
+            source=extent,
+            definers=_reached(held, extent),
+            via=walk.via,
+            source_program=walk.program,
+            sink=sink.name,
+        )
+        for sink in sinks_of(loaded.statements[walk.node], loaded.files)
+        for extent in operand_extents(sink.operand, loaded.index).extents
+    )
+
+
 def _applied(held: State, writes: Sequence[Write]) -> State:
     return reduce(
         lambda state, entry: write(state, entry.target, entry.sources), writes, held
@@ -636,11 +673,12 @@ def _ran(walk: _Walk, loaded: Loaded, bound: tuple[Window, ...] = ()) -> _Walk:
         for entry in _writes(walk, loaded)
         if not any(entry.target.may_alias(one.caller_extent) for one in bound)
     )
+    after = _applied(held, writes)
     return replace(
         walk,
         stack=_marked(walk.stack, walk.node),
-        store={**walk.store, walk.program: _applied(held, writes)},
-        deps=walk.deps | _witnessed(walk, held, writes),
+        store={**walk.store, walk.program: after},
+        deps=walk.deps | _witnessed(walk, held, writes) | _sunk(walk, after, loaded),
         entered=walk.entered | {walk.program},
         order=(*walk.order, walk.node),
     )
@@ -1084,11 +1122,7 @@ def _arriving(
             target=window.callee_extent,
             origin="",
             source=window.caller_extent,
-            definers=tuple(
-                sorted(
-                    {one.node for one in reaching(caller_state, window.caller_extent)}
-                )
-            ),
+            definers=_reached(caller_state, window.caller_extent),
             via=_via(stack),
             source_program=walk.program,
         )
@@ -1527,6 +1561,7 @@ def _built(asg_dir: Path, program: str, aliases_of: AliasesOf) -> Loaded:
         index=index,
         entry=_entry_node(asg),
         aliases=aliases_of(asg, index),
+        files=MappingProxyType(asg.file_record_to_select),
     )
 
 

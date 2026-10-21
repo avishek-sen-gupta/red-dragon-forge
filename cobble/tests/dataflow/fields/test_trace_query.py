@@ -127,6 +127,23 @@ def test_backward_reaches_terminal_origin(tmp_path: Path):
     assert "FILE:ACCTDAT" in texts
 
 
+def test_forward_ends_at_the_sink_a_field_was_written_to(tmp_path: Path):
+    sunk = {
+        **_dep("P", "", 0, 0, "WS-REC", 0, 8, site="P/MAIN/4"),
+        "target": None,
+        "sink": "FILE:KSDS",
+    }
+    trace = _jsonl(
+        [_dep("P", "WS-REC", 0, 8, "WS-IN", 100, 108, site="P/MAIN/3"), sunk],
+        tmp_path,
+    )
+    assert query(trace, FORWARD, "WS-IN") == (
+        "WS-IN@working_storage[100:108]",
+        "  -> WS-REC@working_storage[0:8]  at P/MAIN/3",
+        "    -> FILE:KSDS  at P/MAIN/4",
+    )
+
+
 def test_qualified_field_filters_by_program(tmp_path: Path):
     trace = _jsonl(
         [
@@ -254,6 +271,7 @@ def test_every_overlapping_frontier_range_yields_its_own_slice():
         source=source,
         site="CALLER/LINK/0",
         definers=(),
+        sink="",
     )
     frontier = (_range("CALLER", "WS-KEY", 0, 4), _range("CALLER", "WS-VAL", 4, 8))
 
