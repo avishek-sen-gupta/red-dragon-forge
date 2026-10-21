@@ -463,4 +463,6 @@ fileignoreconfig:
   checksum: f29b77f53bafd589d42b03f03d570206dded50068ce2390b295414e51ef3cf58
 - filename: cicada/cics/aid_handling.py
   checksum: ba44fc0466d1b89b3e0cae478741b7ea25c140489f097415839b815fd256c9bc
+- filename: docs/presentation/index.html
+  checksum: f393f594c48c11263cd7f0733862bc326f941e457d1d66b30e4a902663f24a66
 version: "1.0"
