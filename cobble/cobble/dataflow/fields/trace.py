@@ -622,10 +622,20 @@ def _applied(held: State, writes: Sequence[Write]) -> State:
     )
 
 
-def _ran(walk: _Walk, loaded: Loaded) -> _Walk:
-    """This node's statement against this program's slice, and what it witnessed."""
+def _ran(walk: _Walk, loaded: Loaded, bound: tuple[Window, ...] = ()) -> _Walk:
+    """This node's statement against this program's slice, and what it witnessed.
+
+    ``bound`` is the windows of a callee about to be entered. The statement's own
+    transfer credits them to ``%CALL:<callee>``, which is what a call nobody steps
+    into must say; one that is stepped into shares those bytes instead, so its
+    writes there are left to the callee.
+    """
     held = walk.store.get(walk.program, EMPTY)
-    writes = _writes(walk, loaded)
+    writes = tuple(
+        entry
+        for entry in _writes(walk, loaded)
+        if not any(entry.target.may_alias(one.caller_extent) for one in bound)
+    )
     return replace(
         walk,
         stack=_marked(walk.stack, walk.node),
@@ -1014,7 +1024,7 @@ def _entered(
     windows: tuple[Window, ...],
     callee: Loaded,
 ) -> _Walk:
-    """Step into the callee with its shared windows bound, and nothing else.
+    """Step into the callee with its shared windows bound.
 
     The callee's slice starts empty because CICS gives a LINKed program fresh
     WORKING-STORAGE, so a program entered twice on one path does not inherit its
@@ -1023,21 +1033,23 @@ def _entered(
     back to. A CALL always comes back, whatever its arguments' modes.
     """
     caller_state = walk.store.get(walk.program, EMPTY)
+    stack = (
+        *walk.stack,
+        Frame(
+            program=row.callee,
+            site=walk.node,
+            resume=_sequel(loaded.cfg, walk.node),
+            crossing=True,
+            returns=row.returns or row.transfer == CALL_TRANSFER,
+            caller=walk.program,
+            windows=windows,
+        ),
+    )
     return replace(
         walk,
         node=callee.entry,
-        stack=(
-            *walk.stack,
-            Frame(
-                program=row.callee,
-                site=walk.node,
-                resume=_sequel(loaded.cfg, walk.node),
-                crossing=True,
-                returns=row.returns or row.transfer == CALL_TRANSFER,
-                caller=walk.program,
-                windows=windows,
-            ),
-        ),
+        stack=stack,
+        deps=walk.deps | _arriving(walk, callee.entry, stack, caller_state),
         store={
             **walk.store,
             row.callee: State(
@@ -1052,6 +1064,35 @@ def _entered(
                 )
             ),
         },
+    )
+
+
+def _arriving(
+    walk: _Walk, entry: str, stack: tuple[Frame, ...], caller_state: State
+) -> frozenset[Dep]:
+    """One dep row per window, caller bytes to the callee bytes they become.
+
+    The binding itself moves nothing, but without a row naming both ends a caller
+    field whose only further use is to be passed looks like a dead end, and a
+    forward query stops at the call. The row is the callee's, at its entry, because
+    its target is named in the callee's address space.
+    """
+    return frozenset(
+        Dep(
+            program=stack[-1].program,
+            node=entry,
+            target=window.callee_extent,
+            origin="",
+            source=window.caller_extent,
+            definers=tuple(
+                sorted(
+                    {one.node for one in reaching(caller_state, window.caller_extent)}
+                )
+            ),
+            via=_via(stack),
+            source_program=walk.program,
+        )
+        for window in stack[-1].windows
     )
 
 
@@ -1119,8 +1160,14 @@ def _called(
     callee = loader(row.callee) if row.callee else Loaded(program="")
     refused = _refusal(walk, row, windows, callee)
     if refused:
-        return _followed(_dead_end(walk, row, refused), loaded)
-    return _entered(_argument_dead_ends(walk, rows), loaded, row, windows, callee)
+        return _followed(_dead_end(_ran(walk, loaded), row, refused), loaded)
+    return _entered(
+        _argument_dead_ends(_ran(walk, loaded, windows), rows),
+        loaded,
+        row,
+        windows,
+        callee,
+    )
 
 
 def _moved(walk: _Walk, loaded: Loaded, loader: Loader) -> _Walk:
@@ -1132,7 +1179,7 @@ def _moved(walk: _Walk, loaded: Loaded, loader: Loader) -> _Walk:
     """
     rows = loaded.aliases.get(walk.node, ())
     if not rows:
-        return _followed(walk, loaded)
+        return _followed(_ran(walk, loaded), loaded)
     return _called(walk, loaded, loader, tuple(rows))
 
 
@@ -1140,8 +1187,7 @@ def _stepped(walk: _Walk, loader: Loader) -> _Walk:
     """Run the node the walk stands on, then choose where it goes next."""
     if not walk.running:
         return walk
-    loaded = loader(walk.program)
-    return _moved(_ran(walk, loaded), loaded, loader)
+    return _moved(walk, loader(walk.program), loader)
 
 
 def _walked(start: _Walk, limit: int, loader: Loader) -> _Walk:
@@ -1275,7 +1321,7 @@ def _flipped(head: _Next, loader: Loader) -> _Walk:
     would apply that statement twice.
     """
     walk = _resumed(head.checkpoint, head.arm, 0)
-    return _moved(walk, loader(walk.program), loader)
+    return _followed(walk, loader(walk.program))
 
 
 def _step(run: _Run, program: str, loader: Loader, budget: Budget) -> _Stepped:

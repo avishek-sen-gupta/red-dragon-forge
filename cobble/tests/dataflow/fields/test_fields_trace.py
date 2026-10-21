@@ -1315,15 +1315,19 @@ def test_the_callees_writes_are_credited_to_the_call_site_they_were_reached_thro
 def test_the_callee_reads_bytes_the_caller_defined(crossed):
     """The inbound direction, and the whole point. SUB-REC is written from
     DFHCOMMAREA, whose bytes the caller's own MOVE put there -- so the definer is
-    a node in a different member, which no intra-program walk can name."""
-    (dep,) = [
+    a node in a different member, which no intra-program walk can name. Each arm of
+    the caller's IF is one such MOVE, and the LINK site itself is neither."""
+    reads = [
         one
         for one in crossed.deps
         if one.program == "TPROGB" and one.target.field_name == "SUB-REC"
     ]
 
-    assert str(dep.source).startswith("DFHCOMMAREA@linkage[0:8]")
-    assert [one for one in dep.definers if one.startswith("TPROGA/")]
+    assert {str(one.source) for one in reads} == {"DFHCOMMAREA@linkage[0:8]"}
+    assert {definer for one in reads for definer in one.definers} == {
+        "TPROGA/MAIN-PARA/1.then.0",
+        "TPROGA/MAIN-PARA/1.else.0",
+    }
 
 
 def test_a_narrow_write_in_the_callee_forgets_the_callers_bytes_it_overwrote(crossed):
@@ -1378,18 +1382,18 @@ def test_bridge_deps_are_emitted_at_the_link_site_for_callee_write_back(crossed)
 
 def test_a_bridge_row_names_the_program_its_source_was_read_in(crossed):
     """The callee never writes the first half of the window, so what comes back
-    there is what the LINK statement itself credited in the caller: ``%CALL:TPROGB``.
-    Labelling that source with the callee restates the caller's own row under another
-    program."""
+    there is what the caller put there before the LINK: WS-SEED on one arm, a literal
+    on the other. Both were read in the caller, and the callee, which was entered,
+    is never credited with them as ``%CALL:TPROGB``."""
     labels = {
-        one.source_program
+        (one.source_program, one.origin, one.source.field_name)
         for one in crossed.deps
         if one.program == "TPROGA"
         and one.node == "LINK-PARA/0"
-        and one.origin == "%CALL:TPROGB"
+        and one.target.start == 0
     }
 
-    assert labels == {"TPROGA"}
+    assert labels == {("TPROGA", "", "WS-SEED"), ("TPROGA", "LITERAL", "")}
 
 
 def test_a_passed_through_sources_definers_are_read_in_its_own_programs_storage():

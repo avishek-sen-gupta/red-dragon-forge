@@ -379,6 +379,28 @@ def test_read_into_marks_the_target_as_coming_from_the_file(
     assert names_reaching(state, index, "WS-REC") == {"FILE:CUSTFILE"}
 
 
+@pytest.mark.parametrize("verb", ["WRITE", "REWRITE"])
+def test_a_record_written_from_a_field_takes_that_fields_bytes(
+    program_of, field, after, names_reaching, verb
+):
+    asg = program_of(
+        [
+            {"type": verb, "record_name": "OUT-REC", "from_field": {"name": "WS-REC"}},
+            {"type": verb, "record_name": "OUT-REC2"},
+        ],
+        data_fields=[
+            field(1, "OUT-REC", "X(8)", offset=0),
+            field(1, "OUT-REC2", "X(8)", offset=0),
+            field(1, "WS-REC", "X(8)", offset=0),
+        ],
+    )
+    state, index = after(asg)
+    assert (
+        names_reaching(state, index, "OUT-REC"),
+        names_reaching(state, index, "OUT-REC2"),
+    ) == ({"WS-REC"}, set())
+
+
 def test_call_using_by_reference_marks_the_argument_as_written_by_the_callee(
     program_of, field, after, names_reaching
 ):
