@@ -1,7 +1,7 @@
 # red-dragon-forge local development tasks.
 PROLEAP_BRIDGE_JAR ?= $(CURDIR)/vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar
 JCL_BRIDGE_JAR     ?= $(CURDIR)/jackal/jcl-bridge/target/jcl-bridge-0.1.0-shaded.jar
-HLASM_FORK         := $(CURDIR)/cicada/third-party/che-che4z-lsp-for-hlasm-fork
+HLASM_FORK         := $(CURDIR)/vendor/red-dragon/hlasm-bridge/che4z
 HLASM_EXPORT       := $(HLASM_FORK)/build/bin/hlasm_export
 
 PYTEST = uv run --no-sync python -m pytest

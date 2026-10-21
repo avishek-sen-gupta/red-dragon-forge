@@ -160,7 +160,7 @@ def test_html_escapes_markup_in_values() -> None:
 
 HLASM = (
     Path(__file__).resolve().parents[3]
-    / "cicada/third-party/che-che4z-lsp-for-hlasm-fork/build/bin/hlasm_export"
+    / "vendor/red-dragon/hlasm-bridge/che4z/build/bin/hlasm_export"
 )
 CARDDEMO_BMS = Path(__file__).resolve().parents[3] / "vendor/carddemo/app/bms"
 

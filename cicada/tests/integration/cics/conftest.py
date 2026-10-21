@@ -48,10 +48,10 @@ _TOOLCHAIN_OK = bool(_CARDDEMO_HOME) and BMS_TOOLS_AVAILABLE
 
 _SETUP_MSG = (
     "CardDemo e2e toolchain not available. Ensure:\n"
-    "  • git submodule update --init vendor/carddemo third-party/bms-tools\n"
+    "  • git submodule update --init --recursive vendor/carddemo vendor/red-dragon\n"
     "  • ProLeap JAR built: cd proleap-bridge && mvn -DskipTests package\n"
-    "  • hlasm_export built or downloaded into "
-    "third-party/bms-tools/che-che4z-lsp-for-hlasm-fork/build/bin/"
+    "  • hlasm_export built (make hlasm) into "
+    "vendor/red-dragon/hlasm-bridge/che4z/build/bin/"
 )
 
 

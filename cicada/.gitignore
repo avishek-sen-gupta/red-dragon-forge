@@ -37,9 +37,6 @@ htmlcov/
 # macOS
 .DS_Store
 
-# C++ build artefacts (HLASM fork)
-third-party/che-che4z-lsp-for-hlasm-fork/build/
-
 # session / tooling state
 .remember/
 

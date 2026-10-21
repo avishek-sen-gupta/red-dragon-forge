@@ -54,7 +54,7 @@ full flag list with `--help`.
 |---|---|---|
 | `cobble-parse-corpus`, `cobble-expand-corpus`, `diagnose-cobol` | `PROLEAP_BRIDGE_JAR` | `. ./bridge-env.sh` |
 | `cobble-build`, `diagnose-jcl` | `JCL_BRIDGE_JAR` | `. ./bridge-env.sh` |
-| `cobble-sym`, `cobble-bms-metadata`, `cobble-bms-render` | `hlasm_export` at `cicada/third-party/che-che4z-lsp-for-hlasm-fork/build/bin/` | `make setup` or `make hlasm` |
+| `cobble-sym`, `cobble-bms-metadata`, `cobble-bms-render` | `hlasm_export` at `vendor/red-dragon/hlasm-bridge/che4z/build/bin/` | `make setup` or `make hlasm` |
 | `cobble-render-webgl`, `cobble-srccfg-webgl`, `cobble-depgraph-render` | Graphviz `sfdp` | system package |
 | `cobble-srccfg-subgraph` | Graphviz `dot`, and `unflatten` with `--balance` | system package |
 

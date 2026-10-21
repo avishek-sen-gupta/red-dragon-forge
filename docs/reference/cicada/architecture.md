@@ -82,7 +82,6 @@ All paths are under `cicada/`.
 | `cics/bms/` | `generate` (symbolic copybooks), `catalog` (parsed mapsets), `attributes`, `macros/` |
 | `cics/tn3270/` | the TN3270 server: `region`, `session`, `negotiation`, `encoder`, `decoder`, `codes`, `wire` |
 | `bms_copybook_gen/` | BMS macro invocations → COBOL symbolic copybook |
-| `third-party/che-che4z-lsp-for-hlasm-fork/` | source of the `hlasm_export` binary |
 | `tests/unit/`, `tests/integration/` | unit and integration suites |
 
 The CICS transaction-flow graph code (`flow_map`, `flow_graph_core`, `flow_observer`,
@@ -234,7 +233,7 @@ running at the same time, and CICS file open and close state is not modelled
 
 ## BMS
 
-`hlasm_export` is built by `make hlasm` from `third-party/che-che4z-lsp-for-hlasm-fork`.
+`hlasm_export` is built by `make hlasm` from red-dragon's che4z checkout, `vendor/red-dragon/hlasm-bridge/che4z`.
 `generate_symbolic_copybooks` (`cics/bms/generate.py`) runs `hlasm_export` on each `.bms` file
 with `cics/bms/macros/` on SYSLIB, then `bms_copybook_gen`, and writes one `.cpy` per mapset.
 `cics/bms/catalog.py` parses the same sources into the map catalog the TN3270 server paints

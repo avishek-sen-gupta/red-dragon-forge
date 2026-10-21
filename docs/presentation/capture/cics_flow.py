@@ -56,9 +56,10 @@ EBCDIC = APP / "data" / "EBCDIC"
 OUT = REPO / "docs" / "presentation" / "artifacts" / "cics"
 HLASM_EXPORT = (
     REPO
-    / "cicada"
-    / "third-party"
-    / "che-che4z-lsp-for-hlasm-fork"
+    / "vendor"
+    / "red-dragon"
+    / "hlasm-bridge"
+    / "che4z"
     / "build"
     / "bin"
     / "hlasm_export"
