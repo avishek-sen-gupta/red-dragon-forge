@@ -6,7 +6,7 @@ from interpreter.cobol.field_position import FieldPosition
 from tests.layout_build import declarations
 from cics.types import CicsContext
 from cics.builtins.system import make_init_eib_builtin
-from interpreter.cobol.ebcdic_table import EbcdicTable
+from interpreter.encoding.ebcdic_table import EbcdicTable
 from interpreter.vm.vm_types import VMState, StackFrame, BuiltinResult
 from interpreter.func_name import FuncName
 from interpreter.var_name import VarName

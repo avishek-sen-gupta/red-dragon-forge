@@ -332,7 +332,7 @@ fileignoreconfig:
 - filename: tests/integration/test_carddemo_data_install.py
   checksum: d6e023498d56fc9dcbbff2c33f61b5469af57efaef8b09c6ab66b7d8114e6a51
 - filename: cicada/cics/vsam/dump.py
-  checksum: 346a62a707a8b52466ef7ffdbbf364ccdf792b9f5879686e4d12a6a65b058e48
+  checksum: faed63705fed0c1e6aa3ea482c3323510a86f4127f9b10b5f91f91765efc4b97
 - filename: cicada/tests/integration/cics/test_carddemo_user_list.py
   checksum: e9da1e433e65aa8f210e0cc263f93fdbff1f874c23c88029afe941b47c15a7dc
 - filename: cicada/cics/vsam/engine.py
@@ -374,7 +374,7 @@ fileignoreconfig:
 - filename: jackal/jackal/record_format.py
   checksum: ce636f136b3f1922f062128ef0aa2a1bf94e0683310500aff41f703c5998ea9a
 - filename: cicada/tests/unit/cics/test_vsam_dump.py
-  checksum: 3a0c62ae4f55e4c8ff9bfb5e73d4e4827f1ea73b160022601b1948f3948ac452
+  checksum: c60f7dafb89074b0d67987945e7000264e94111a69cfef475a43d58a6f3ac93f
 - filename: docs/superpowers/specs/2026-10-15-file-definitions-as-ir-data-design.md
   checksum: 4553838ea11b000e48f964db3e7cbe633aee19f43f856506258631cd0f078151
 - filename: docs/superpowers/plans/2026-10-15-file-definitions-as-ir-data.md

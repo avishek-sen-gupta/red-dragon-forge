@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TypeAlias
 
 from catnip.dataset import Dataset
-from interpreter.cobol.ebcdic_table import EbcdicTable
+from interpreter.encoding.ebcdic_table import EbcdicTable
 from jackal.catalog import Allocated, DatasetCatalog, Unallocated
 from jackal.missing_data import MissingDataStrategy
 from jackal.model import (

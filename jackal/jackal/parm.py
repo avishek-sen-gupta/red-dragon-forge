@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import struct
 
-from interpreter.cobol.ebcdic_table import EbcdicTable
+from interpreter.encoding.ebcdic_table import EbcdicTable
 
 
 def build_parm_region(parm: str) -> bytes:

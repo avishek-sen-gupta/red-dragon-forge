@@ -9,7 +9,7 @@ import pytest
 from catnip.labels import KsdsLabel
 from catnip.system_catalog import SystemCatalog
 from cics.vsam.dump import run
-from interpreter.cobol.ebcdic_table import EbcdicTable
+from interpreter.encoding.ebcdic_table import EbcdicTable
 from tests.covers import NotLanguageFeature, covers
 from tests.integration.cobol_helpers import bridge_jar  # noqa: F401
 
