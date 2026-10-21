@@ -31,7 +31,7 @@ from itertools import accumulate
 from pathlib import Path
 from types import CodeType, FrameType
 
-from interpreter.cobol.ebcdic_table import EbcdicTable
+from interpreter.encoding.ebcdic_table import EbcdicTable
 from interpreter.vm.builtins import core_builtins
 from jackal.catalog import DatasetCatalog
 from jackal.dsn import dsn_key

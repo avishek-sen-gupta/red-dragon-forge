@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 
 import pytest
-from interpreter.cobol.ebcdic_table import EbcdicTable
+from interpreter.encoding.ebcdic_table import EbcdicTable
 from interpreter.project.ir_codec import IrCodec
 from interpreter.project.linked_codec import LinkedCodec
 from interpreter.vm.builtins import core_builtins

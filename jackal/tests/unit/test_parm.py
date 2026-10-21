@@ -18,7 +18,7 @@ def test_build_parm_region_empty():
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_build_parm_region_text():
-    from interpreter.cobol.ebcdic_table import EbcdicTable
+    from interpreter.encoding.ebcdic_table import EbcdicTable
 
     from jackal.parm import build_parm_region
 
@@ -28,7 +28,7 @@ def test_build_parm_region_text():
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_build_parm_region_single_char():
-    from interpreter.cobol.ebcdic_table import EbcdicTable
+    from interpreter.encoding.ebcdic_table import EbcdicTable
 
     from jackal.parm import build_parm_region
 

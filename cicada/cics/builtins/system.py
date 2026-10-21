@@ -14,8 +14,8 @@ from cics.conditions import UNHANDLED_ABCODE, UNSUPPORTED_VERB_ABCODE
 from cics.dat_form import DatForm
 from cics.types import CicsContext, DispatchKind, DispatchResult
 from interpreter.address import NO_ADDRESS, Address
-from interpreter.cobol.ebcdic_table import EbcdicTable
 from interpreter.cobol.layout_data import field_positions
+from interpreter.encoding.ebcdic_table import EbcdicTable
 from interpreter.project.types import LinkedProgram
 from interpreter.types.typed_value import TypedValue
 from interpreter.var_name import VarName

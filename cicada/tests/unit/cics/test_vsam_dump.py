@@ -14,7 +14,7 @@ from cics.vsam.dump import (
 from cobol_asg.cobol_types import CobolDataCategory, CobolTypeDescriptor
 from cobol_asg.ref_mod import RefModOperand
 from interpreter.cobol.data_layout import DataLayout, FieldLayout
-from interpreter.cobol.ebcdic_table import EbcdicTable
+from interpreter.encoding.ebcdic_table import EbcdicTable
 from interpreter.cobol.comp3 import encode_comp3
 from interpreter.cobol.binary import encode_binary
 from tests.covers import covers, NotLanguageFeature

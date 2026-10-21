@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 from catnip.labels import RecordFormat, SequentialLabel
-from interpreter.cobol.ebcdic_table import EbcdicTable
+from interpreter.encoding.ebcdic_table import EbcdicTable
 from interpreter.vm.builtins import core_builtins
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.parser import parse_jcl

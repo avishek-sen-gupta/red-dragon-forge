@@ -37,8 +37,8 @@ from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.binary import decode_binary
 from interpreter.cobol.comp3 import decode_comp3
 from interpreter.cobol.data_layout import DataLayout, FieldLayout, build_data_layout
-from interpreter.cobol.ebcdic_table import EbcdicTable
 from interpreter.cobol.zoned_decimal import decode_zoned
+from interpreter.encoding.ebcdic_table import EbcdicTable
 
 
 def _text(field: FieldLayout, data: bytes) -> Leaf:

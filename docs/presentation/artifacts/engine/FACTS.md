@@ -62,7 +62,7 @@ certificate of full coverage. The gaps below still apply.
   alphanumeric-edited (B / 0 / `/` insertion); external floating-point PIC
 - USAGE DISPLAY (zoned decimal), COMP/COMP-4/COMP-5 (binary), **COMP-3 (packed decimal)**,
   COMP-1/COMP-2 (float), INDEX
-- **EBCDIC**: `interpreter/cobol/ebcdic_table.py`. The captured run decodes region bytes
+- **EBCDIC**: `interpreter/encoding/ebcdic_table.py`. The captured run decodes region bytes
   through `__bytes_to_string ... ebcdic` (see `pipeline.txt`).
 - **REDEFINES** as overlays on byte-addressed regions; **OCCURS n TIMES** and
   **OCCURS DEPENDING ON**; multi-dimensional subscripts; reference modification
