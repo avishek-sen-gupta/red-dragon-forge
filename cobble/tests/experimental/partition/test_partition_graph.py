@@ -1,0 +1,150 @@
+"""The field graph built from extents, trace dep rows and combine links."""
+
+from __future__ import annotations
+
+from cobble.dataflow.fields.extent_text import NO_RANGE, ByteRange
+from cobble.dataflow.fields.trace_query import DepRow
+from cobble.experimental.partition.extent_row import ExtentRow
+from cobble.experimental.partition.fanout_barrier import FanoutBarrier
+from cobble.experimental.partition.field_graph import FieldGraph
+from cobble.experimental.partition.graph_build import field_graph
+from cobble.experimental.partition.leaf_index import leaf_index
+from cobble.experimental.partition.link_row import LinkRow
+from cobble.experimental.partition.no_barrier import NoBarrier
+from cobble.experimental.partition.node_kind import NodeKind
+
+
+def _row(program: str, path: tuple[str, ...], *spans: tuple[int, int]) -> ExtentRow:
+    region = "linkage" if program == "Q" else "working_storage"
+    return ExtentRow(
+        program=program,
+        extents=tuple(f"{path[-1]}@{region}[{s}:{e}]" for s, e in spans),
+        records=tuple(path[0] for _ in spans),
+        paths=tuple(path for _ in spans),
+        pics=tuple("X" for _ in spans),
+    )
+
+
+EXTENTS = (
+    _row("P", ("REC",), (0, 10)),
+    _row("P", ("REC", "A"), (0, 4)),
+    _row("P", ("REC", "B"), (4, 10)),
+    _row("P", ("OUT",), (10, 20)),
+    _row("P", ("AREA",), (20, 30)),
+    _row("P", ("AREA", "V1"), (20, 30)),
+    _row("P", ("AREA", "V1", "X"), (20, 25)),
+    _row("P", ("AREA", "V1", "Y"), (25, 30)),
+    _row("P", ("AREA", "V2"), (20, 30)),
+    _row("P", ("AREA", "V2", "Z"), (20, 30)),
+    _row("P", ("TAB",), (30, 36)),
+    _row("P", ("TAB", "T"), (30, 32), (32, 34), (34, 36)),
+    _row("P", ("COPY",), (40, 50)),
+    _row("P", ("COPY", "C"), (40, 44)),
+    _row("P", ("COPY", "D"), (44, 50)),
+    _row("Q", ("LK",), (0, 10)),
+    _row("Q", ("LK", "LA"), (0, 4)),
+    _row("Q", ("LK", "LB"), (4, 10)),
+)
+
+
+def _at(name: str, start: int, end: int) -> ByteRange:
+    return ByteRange(
+        program="P",
+        region="working_storage",
+        start=start,
+        end=end,
+        name=name,
+        known=True,
+    )
+
+
+def _dep(
+    target: ByteRange, source: ByteRange, site: str, *, origin: str = "", sink: str = ""
+) -> DepRow:
+    return DepRow(
+        program="P",
+        via="",
+        target=target,
+        origin=origin,
+        source=source,
+        site=site,
+        definers=(),
+        sink=sink,
+    )
+
+
+DEPS = (
+    _dep(_at("OUT", 10, 20), _at("REC", 0, 10), "s1"),
+    _dep(_at("COPY", 40, 50), _at("REC", 0, 10), "s2"),
+    _dep(_at("X", 20, 25), _at("A", 0, 4), "s3"),
+    _dep(_at("A", 0, 4), NO_RANGE, "s4", origin="LITERAL"),
+    _dep(NO_RANGE, _at("REC", 0, 10), "s5", sink="FILE:F"),
+    _dep(_at("T", 32, 34), _at("A", 0, 4), "s6"),
+    _dep(_at("OUT", 10, 20), _at("REC", 0, 10), "s7"),
+)
+
+LINKS = (
+    LinkRow(
+        caller="P",
+        node="n1",
+        callee="Q",
+        caller_extent="REC@working_storage[0:10]",
+        callee_extent="LK@linkage[0:10]",
+        returns=True,
+    ),
+)
+
+
+def _edges(graph: FieldGraph) -> set[tuple[str, str, int, bool]]:
+    return {(e.source, e.target, e.sites, e.clustered) for e in graph.edges}
+
+
+def test_moves_become_field_edges_by_the_declared_layout() -> None:
+    graph = field_graph(leaf_index(EXTENTS), DEPS, LINKS, NoBarrier())
+
+    assert {(n.id, n.kind, n.program, n.record) for n in graph.nodes} == {
+        ("P:REC.A", NodeKind.FIELD, "P", "REC"),
+        ("P:REC.B", NodeKind.FIELD, "P", "REC"),
+        ("P:OUT.OUT", NodeKind.FIELD, "P", "OUT"),
+        ("P:COPY.C", NodeKind.FIELD, "P", "COPY"),
+        ("P:COPY.D", NodeKind.FIELD, "P", "COPY"),
+        ("P:AREA.X", NodeKind.FIELD, "P", "AREA"),
+        ("P:TAB.T", NodeKind.FIELD, "P", "TAB"),
+        ("Q:LK.LA", NodeKind.FIELD, "Q", "LK"),
+        ("Q:LK.LB", NodeKind.FIELD, "Q", "LK"),
+        ("P|origin|LITERAL", NodeKind.ORIGIN, "P", ""),
+        ("P|sink|FILE:F", NodeKind.SINK, "P", ""),
+    }
+    assert _edges(graph) == {
+        ("P:REC.A", "P:OUT.OUT", 2, True),
+        ("P:REC.B", "P:OUT.OUT", 2, True),
+        ("P:REC.A", "P:COPY.C", 1, True),
+        ("P:REC.B", "P:COPY.D", 1, True),
+        ("P:REC.A", "P:AREA.X", 1, True),
+        ("P|origin|LITERAL", "P:REC.A", 1, True),
+        ("P:REC.A", "P|sink|FILE:F", 1, True),
+        ("P:REC.B", "P|sink|FILE:F", 1, True),
+        ("P:REC.A", "P:TAB.T", 1, True),
+        ("P:REC.A", "Q:LK.LA", 1, True),
+        ("P:REC.B", "Q:LK.LB", 1, True),
+        ("Q:LK.LA", "P:REC.A", 1, True),
+        ("Q:LK.LB", "P:REC.B", 1, True),
+    }
+    assert {(e.source, e.target) for e in graph.edges if e.cross_program} == {
+        ("P:REC.A", "Q:LK.LA"),
+        ("P:REC.B", "Q:LK.LB"),
+        ("Q:LK.LA", "P:REC.A"),
+        ("Q:LK.LB", "P:REC.B"),
+    }
+    assert graph.barrier == "none"
+
+
+def test_a_fanout_barrier_keeps_wide_crossings_out_of_clustering() -> None:
+    graph = field_graph(leaf_index(EXTENTS), DEPS, LINKS, FanoutBarrier(limit=1))
+
+    assert {(s, t) for s, t, _, clustered in _edges(graph) if not clustered} == {
+        ("P:REC.A", "P:OUT.OUT"),
+        ("P:REC.B", "P:OUT.OUT"),
+    }
+    assert len(graph.edges) == 13
+    assert graph.barrier == "fanout-1"

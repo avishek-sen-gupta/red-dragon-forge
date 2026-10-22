@@ -1,0 +1,133 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Field Partitions</title>
+<style>
+:root { --bg:#fafafa; --fg:#222; --panel:#fff; --line:#ddd; --muted:#777; --dim:#e4e4e4; }
+@media (prefers-color-scheme: dark) { :root { --bg:#16181c; --fg:#ddd; --panel:#1f2227; --line:#333; --muted:#999; --dim:#2a2d33; } }
+html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:13px system-ui, sans-serif; }
+#wrap { display:flex; height:100%; }
+#side { width:360px; overflow:auto; border-right:1px solid var(--line); background:var(--panel); padding:10px; box-sizing:border-box; }
+#graph { flex:1; position:relative; }
+input[type=text] { width:100%; box-sizing:border-box; padding:5px; margin:4px 0 8px; }
+.c { padding:4px 6px; border-radius:4px; cursor:pointer; margin:1px 0; display:flex; gap:6px; align-items:center; }
+.c:hover, .c.sel { background:rgba(127,127,127,.18); }
+.sw { width:10px; height:10px; border-radius:2px; flex:none; }
+.muted { color:var(--muted); }
+#detail { white-space:pre-wrap; font:11px ui-monospace, monospace; margin-top:8px; border-top:1px solid var(--line); padding-top:8px; }
+label { margin-right:10px; }
+</style></head>
+<body><div id="wrap"><div id="side">
+<b id="title"></b><div id="stats" class="muted"></div>
+<div style="margin-top:8px">
+<label><input type="radio" name="group" value="cluster" checked> clusters</label>
+<label><input type="radio" name="group" value="component"> components</label><br>
+<label><input type="checkbox" id="terminals" checked> origins and sinks</label>
+<label><input type="checkbox" id="blocked" checked> blocked edges</label>
+<div class="muted">grey: clustered · orange: cross-program · red: blocked by the barrier</div>
+</div>
+<input type="text" id="search" placeholder="search a field or program">
+<div id="list"></div><div id="detail"></div>
+</div><div id="graph"></div></div>
+/*SCRIPTS*/
+<script>
+const DATA = /*DATA*/;
+const colour = k => k < 0 ? "#999" : `hsl(${Math.round(((k * 0.618033988749895) % 1) * 360)},65%,${45 + (k % 3) * 7}%)`;
+const dim = getComputedStyle(document.documentElement).getPropertyValue("--dim").trim();
+const graph = new graphology.DirectedGraph();
+DATA.nodes.forEach(n => graph.addNode(n.id, { ...n, y: -n.y,
+  size: n.kind === "field" ? 2 + Math.min(6, Math.sqrt(n.degree)) : 4,
+  color: n.kind === "sink" ? "#c0392b" : n.kind === "origin" ? "#2c3e50" : colour(n.cluster) }));
+DATA.edges.forEach(e => graph.addEdge(e.source, e.target, { ...e,
+  size: Math.min(3, 0.5 + Math.log2(e.sites)),
+  color: !e.clustered ? "#c0392b" : e.cross_program ? "#e67e22" : "#bbb" }));
+let grouping = "cluster", showTerminals = true, showBlocked = true, focus = null, focusTerminals = null, hover = null, matching = null;
+const groupOf = d => grouping === "cluster" ? d.cluster : d.component;
+const isField = id => graph.getNodeAttribute(id, "kind") === "field";
+const inFocus = id => isField(id) && groupOf(graph.getNodeAttributes(id)) === focus;
+const Arrow = Sigma.rendering.createEdgeArrowProgram({ lengthToThicknessRatio: 6, widenessToThicknessRatio: 4 });
+const renderer = new Sigma(graph, document.getElementById("graph"), {
+  edgeProgramClasses: { arrow: Arrow }, defaultEdgeType: "arrow", hideEdgesOnMove: true,
+  labelRenderedSizeThreshold: 7,
+  nodeReducer: (id, d) => {
+    if (d.kind !== "field" && !showTerminals) return { ...d, hidden: true };
+    const shown = { ...d, color: d.kind === "field" ? colour(groupOf(d)) : d.color };
+    const faded = { ...shown, color: dim, label: null };
+    if (hover) return hover.has(id) ? { ...shown, forceLabel: true } : faded;
+    if (matching && !matching.has(id)) return faded;
+    if (focus === null) return shown;
+    return inFocus(id) || focusTerminals.has(id) ? { ...shown, forceLabel: true } : faded;
+  },
+  edgeReducer: (id, d) => {
+    const [s, t] = graph.extremities(id);
+    if (!d.clustered && !showBlocked) return { ...d, hidden: true };
+    if (!showTerminals && (!isField(s) || !isField(t))) return { ...d, hidden: true };
+    if (hover) return hover.has(s) && hover.has(t) ? { ...d, color: "#444" } : { ...d, hidden: true };
+    if (focus === null) return d;
+    return inFocus(s) || inFocus(t) ? d : { ...d, hidden: true };
+  },
+});
+const refresh = () => renderer.refresh({ skipIndexation: true });
+renderer.on("enterNode", ({ node }) => { hover = new Set([node, ...graph.neighbors(node)]); refresh(); });
+renderer.on("leaveNode", () => { hover = null; refresh(); });
+renderer.on("clickNode", ({ node }) => isField(node) && select(groupOf(graph.getNodeAttributes(node)), node));
+renderer.on("clickStage", () => select(null));
+function groups() {
+  const found = new Map();
+  graph.forEachNode((id, d) => {
+    if (d.kind !== "field" || groupOf(d) < 0) return;
+    found.set(groupOf(d), [...(found.get(groupOf(d)) || []), id]);
+  });
+  return [...found.entries()].sort((a, b) => b[1].length - a[1].length || a[0] - b[0]);
+}
+function summary(ids) {
+  const records = {};
+  ids.forEach(i => { const r = graph.getNodeAttribute(i, "record"); records[r] = (records[r] || 0) + 1; });
+  return { program: graph.getNodeAttribute(ids[0], "program"), records: Object.entries(records).sort((a, b) => b[1] - a[1]) };
+}
+function render() {
+  const list = document.getElementById("list");
+  list.innerHTML = "";
+  const found = groups();
+  const isolated = DATA.nodes.filter(n => n.kind === "field" && n.cluster < 0).length;
+  document.getElementById("stats").textContent = `${found.length} ${grouping}s · ${isolated} isolated fields · barrier ${DATA.barrier}`;
+  found.slice(0, 500).forEach(([k, ids]) => {
+    const s = summary(ids);
+    const row = document.createElement("div");
+    row.className = "c" + (focus === k ? " sel" : "");
+    const swatch = document.createElement("span");
+    swatch.className = "sw"; swatch.style.background = colour(k);
+    const text = document.createElement("span");
+    text.textContent = `${ids.length} · ${s.program} · ${s.records.slice(0, 3).map(r => r[0]).join(", ")}`;
+    row.append(swatch, text);
+    row.onclick = () => select(k);
+    list.appendChild(row);
+  });
+}
+function select(k, node) {
+  focus = k;
+  const detail = document.getElementById("detail");
+  if (k === null) { focusTerminals = null; detail.textContent = ""; render(); refresh(); return; }
+  const ids = groups().find(g => g[0] === k)[1];
+  const s = summary(ids);
+  focusTerminals = new Set(ids.flatMap(i => graph.neighbors(i).filter(m => !isField(m))));
+  const picked = node ? `${graph.getNodeAttribute(node, "label")} [${graph.getNodeAttribute(node, "record")}] ${graph.getNodeAttribute(node, "pic")}\n\n` : "";
+  detail.textContent = `${picked}${ids.length} fields in ${s.program}\nrecords: ${s.records.map(r => r[0] + "×" + r[1]).join(", ")}\n`
+    + `terminals: ${[...focusTerminals].map(t => graph.getNodeAttribute(t, "label")).join("; ")}\n\n`
+    + ids.map(i => graph.getNodeAttribute(i, "label")).sort().join("\n");
+  const shown = ids.map(i => renderer.getNodeDisplayData(i));
+  const cx = shown.reduce((a, d) => a + d.x, 0) / shown.length;
+  const cy = shown.reduce((a, d) => a + d.y, 0) / shown.length;
+  const span = Math.max(...shown.map(d => Math.max(Math.abs(d.x - cx), Math.abs(d.y - cy)))) * 2.6 + 0.01;
+  renderer.getCamera().animate({ x: cx, y: cy, ratio: Math.min(1, span) }, { duration: 400 });
+  render(); refresh();
+}
+document.querySelectorAll("input[name=group]").forEach(el => el.onchange = () => { grouping = el.value; select(null); });
+document.getElementById("terminals").onchange = e => { showTerminals = e.target.checked; refresh(); };
+document.getElementById("blocked").onchange = e => { showBlocked = e.target.checked; refresh(); };
+document.getElementById("search").oninput = e => {
+  const q = e.target.value.trim().toLowerCase();
+  matching = q ? new Set(graph.filterNodes((id, d) => d.label.toLowerCase().includes(q) || d.program.toLowerCase() === q)) : null;
+  refresh();
+};
+document.getElementById("title").textContent = "Field partitions";
+render();
+</script></body></html>

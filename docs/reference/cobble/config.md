@@ -47,6 +47,9 @@ full flag list with `--help`.
 | `cobble-viz-pathwalk` | CFG file, path records | [viz](viz.md) |
 | `cobble-bms-metadata` | corpus config `[bms]` | [viz](viz.md) |
 | `cobble-bms-render` | corpus config `[bms]` | [viz](viz.md) |
+| `cobble-experimental-partition-graph` | extents, traces, combine links | [partition](partition.md) (experimental) |
+| `cobble-experimental-partition-clusters` | partition graph | [partition](partition.md) (experimental) |
+| `cobble-experimental-partition-render` | partition graph and clusters | [partition](partition.md) (experimental) |
 
 ## Environment and tools
 

@@ -11,7 +11,7 @@ BLACK_PATHS = cicada/cics cicada/bms_copybook_gen cicada/tests squall/squall squ
   catnip/catnip catnip/tests litter/litter litter/tests jackal/jackal jackal/tests red_dragon_forge cobble/cobble cobble/tests tools tests
 DB2_COMPOSE = docker compose -f squall/docker-compose.yml
 
-.PHONY: help setup hlasm jar jar-force python test test-all fmt db2-up db2-seed db2-status db2-restart db2-stop db2-clean
+.PHONY: help setup hlasm jar jar-force python test test-all fmt partition-traces partition-graph partition-clusters partition-render db2-up db2-seed db2-status db2-restart db2-stop db2-clean
 
 help:
 	@echo "make setup     - init submodules + build hlasm_export + rebuild bridge JARs + uv sync"
@@ -22,6 +22,10 @@ help:
 	@echo "make test      - root composition-layer suite (needs jar, Db2 DSN)"
 	@echo "make test-all  - jar once, then run every package's full suite (cicada, squall, catnip, litter, jackal, cobble, forge)"
 	@echo "make fmt       - black-format the codebase"
+	@echo "make partition-traces   - experimental: parse, extents, call targets and one path trace per member (PARTITION_CONFIG, PARTITION_ASG)"
+	@echo "make partition-graph    - experimental: the field graph of those traces (PARTITION_BARRIER, PARTITION_FANOUT)"
+	@echo "make partition-clusters - experimental: clusters of fields inside each program, and their report"
+	@echo "make partition-render   - experimental: the WebGL page of the graph and its clusters"
 	@echo "make db2-up    - start squall's Db2 container and wait until healthy (idempotent)"
 	@echo "make db2-seed  - create and seed CardDemo's Db2 schema (the only DROP TABLE)"
 	@echo "make db2-status - does Db2 actually answer? (container up != instance alive)"
@@ -75,6 +79,38 @@ test-all: jar hlasm
 
 fmt:
 	uv run --no-sync python -m black $(BLACK_PATHS)
+
+# Experimental field partitions (docs/reference/cobble/partition.md). Paths are
+# relative to cobble/, where every recipe runs. PARTITION_ASG must be the
+# asg_dir PARTITION_CONFIG names: the parse writes it and every later stage reads it.
+PARTITION_CONFIG  ?= config/carddemo-partition.toml
+PARTITION_ASG     ?= out-partition/asg
+PARTITION_DIR     ?= out-partition
+PARTITION_PATHS   ?= 3000
+PARTITION_BARRIER ?= fanout
+PARTITION_FANOUT  ?= 8
+COBBLE = cd cobble && uv run --no-sync
+
+partition-traces: jar
+	$(BRIDGE_ENV) && $(COBBLE) cobble-parse-corpus --config $(PARTITION_CONFIG)
+	$(COBBLE) cobble-extents --asg-dir $(PARTITION_ASG) --out $(PARTITION_DIR)/extents.jsonl
+	$(COBBLE) cobble-dataflow-area-need --asg-dir $(PARTITION_ASG) --extents $(PARTITION_DIR)/extents.jsonl --config $(PARTITION_CONFIG) --out $(PARTITION_DIR)/area-need.jsonl
+	$(COBBLE) cobble-dataflow-fixpoint --asg-dir $(PARTITION_ASG) --extents $(PARTITION_DIR)/extents.jsonl --out-dir $(PARTITION_DIR)/fixpoint --call-targets-only --narrow-areas $(PARTITION_DIR)/area-need.jsonl --all
+	$(COBBLE) cobble-dataflow-combine --config $(PARTITION_CONFIG) --fixpoint-dir $(PARTITION_DIR)/fixpoint --out-dir $(PARTITION_DIR)/combine --all --max-hops 5
+	mkdir -p cobble/$(PARTITION_DIR)/traces
+	cd cobble && for member in $(PARTITION_ASG)/*.json; do \
+	  name=$$(basename $$member .json); \
+	  uv run --no-sync cobble-fields-trace $$name --asg-dir $(PARTITION_ASG) --out $(PARTITION_DIR)/traces/$$name.jsonl --paths $(PARTITION_PATHS) || exit 1; \
+	done
+
+partition-graph: partition-traces
+	$(COBBLE) cobble-experimental-partition-graph --extents $(PARTITION_DIR)/extents.jsonl --traces $(PARTITION_DIR)/traces --links $(PARTITION_DIR)/combine/links.jsonl --barrier $(PARTITION_BARRIER) --fanout-limit $(PARTITION_FANOUT) --out $(PARTITION_DIR)/graph.json
+
+partition-clusters: partition-graph
+	$(COBBLE) cobble-experimental-partition-clusters --graph $(PARTITION_DIR)/graph.json --out $(PARTITION_DIR)/clusters.json --report $(PARTITION_DIR)/clusters.md
+
+partition-render: partition-clusters
+	$(COBBLE) cobble-experimental-partition-render --graph $(PARTITION_DIR)/graph.json --clusters $(PARTITION_DIR)/clusters.json --out $(PARTITION_DIR)/partition.html
 
 # squall's Db2 test database (official icr.io image). The compose project stays
 # squall/, so the squall-db2 container and its named volume are the same ones.

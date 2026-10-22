@@ -1,0 +1,21 @@
+[corpus]
+cobol_dir = "../vendor/carddemo/app/cbl"
+cobol_globs = ["*.cbl", "*.CBL"]
+jcl_dir = "../vendor/carddemo/app/jcl"
+jcl_globs = ["*.jcl", "*.JCL"]
+proclib_dirs = ["../vendor/carddemo/app/proc"]
+csd_files = ["../vendor/carddemo/app/csd/CARDDEMO.CSD"]
+copybook_dirs = [
+  "sym",
+  "../vendor/carddemo/app/cpy",
+  "../vendor/carddemo/app/cpy-bms",
+  "cics-copybooks",
+]
+# The experimental partition targets parse into their own cache (make partition-traces).
+# Nothing else reads it, so an older cache elsewhere is never reused.
+asg_dir = "out-partition/asg"
+
+[bms]
+bms_dir = "../vendor/carddemo/app/bms"
+macros_dir = "bms-macros"
+sym_dir = "sym"
