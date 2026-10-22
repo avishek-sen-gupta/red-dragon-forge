@@ -1386,14 +1386,17 @@ def test_a_bridge_row_names_the_program_its_source_was_read_in(crossed):
     on the other. Both were read in the caller, and the callee, which was entered,
     is never credited with them as ``%CALL:TPROGB``."""
     labels = {
-        (one.source_program, one.origin, one.source.field_name)
+        (one.source_program, one.origin, one.literal, one.source.field_name)
         for one in crossed.deps
         if one.program == "TPROGA"
         and one.node == "LINK-PARA/0"
         and one.target.start == 0
     }
 
-    assert labels == {("TPROGA", "", "WS-SEED"), ("TPROGA", "LITERAL", "")}
+    assert labels == {
+        ("TPROGA", "", "", "WS-SEED"),
+        ("TPROGA", "LITERAL", "'ZZZZ'", ""),
+    }
 
 
 def test_a_passed_through_sources_definers_are_read_in_its_own_programs_storage():

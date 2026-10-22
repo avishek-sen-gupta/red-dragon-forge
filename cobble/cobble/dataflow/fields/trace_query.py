@@ -43,6 +43,7 @@ class DepRow:
     site: str
     definers: tuple[str, ...]
     sink: str
+    literal: str = ""
 
 
 def _range_of(
@@ -66,6 +67,7 @@ def _dep_of(
         site=str(row.get("site", "")),
         definers=_DEFINERS.validate_python(row.get("definers", ())),
         sink=str(row.get("sink", "")),
+        literal=str(row.get("literal", "")),
     )
 
 

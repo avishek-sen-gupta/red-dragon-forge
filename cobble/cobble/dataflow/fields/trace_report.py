@@ -130,6 +130,7 @@ def _dep_row(dep: Dep) -> str:
             "via": dep.via,
             "target": None if dep.sink else _extent_dict(dep.target),
             "origin": dep.origin,
+            "literal": dep.literal,
             "sink": dep.sink,
             "source": source,
             **({} if dep.origin else {"source_program": dep.source_program}),

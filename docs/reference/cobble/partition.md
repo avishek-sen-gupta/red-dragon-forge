@@ -51,7 +51,10 @@ cobble-experimental-partition-graph --extents EXTENTS --traces DIR --out OUT
 A node is an elementary field: one with nothing declared under it, so every variant of a
 `REDEFINES` has its own fields. Every occurrence of an `OCCURS` table is one node, named
 `<program>:<record>.<field>`. Each program's origins (`LITERAL`, `FILE:`, `%CICS-STATE`,
-`%CALL:`) and sinks (`FILE:`, `MAP:`, `TSQ:`, `TDQ:`, `TRANSID:`) are nodes of their own.
+`%CALL:`) and sinks (`FILE:`, `MAP:`, `TSQ:`, `TDQ:`, `TRANSID:`) are nodes of their own. A literal
+origin is one node per literal as written, `P|origin|LITERAL 'Y'` apart from
+`P|origin|LITERAL SPACES`, so a program's literals do not meet in one hub. `SPACE` and `SPACES`
+stay two nodes.
 
 A dep row's range resolves to the elementary fields declared under the field it names that
 overlap its bytes. A source range also takes the fields its definers wrote, when a definer's

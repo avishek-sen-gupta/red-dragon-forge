@@ -153,12 +153,16 @@ def _fanned(
     )
 
 
+def _origin_name(dep: DepRow) -> str:
+    return f"{dep.origin} {dep.literal}" if dep.literal else dep.origin
+
+
 def _moved(index: LeafIndex, rows: _Rows, barrier: Barrier, dep: DepRow) -> _Moved:
     if dep.sink:
         sink = _terminal(NodeKind.SINK, dep.source.program, dep.sink)
         return _fanned(sink, _read(index, rows, dep).fields, dep.site, inward=False)
     if not dep.source.known:
-        origin = _terminal(NodeKind.ORIGIN, dep.target.program, dep.origin)
+        origin = _terminal(NodeKind.ORIGIN, dep.target.program, _origin_name(dep))
         return _fanned(origin, index.fields_in(dep.target), dep.site, inward=True)
     return _copied(barrier, _span(index, dep.target), _read(index, rows, dep), dep.site)
 

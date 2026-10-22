@@ -56,6 +56,7 @@ _ORIGIN_DEP = Dep(
     node="PARA/5",
     target=_EXTENT_A,
     origin="LITERAL",
+    literal="'Y'",
     source=FieldExtent(
         field_name="", region=WS, start=0, length=0, precision=Precision.EXACT
     ),
@@ -91,6 +92,7 @@ def test_jsonl_round_trips_a_dep():
 def test_jsonl_origin_dep_has_null_source():
     parsed = json.loads(_dep_row(_ORIGIN_DEP))
     assert parsed["origin"] == "LITERAL"
+    assert parsed["literal"] == "'Y'"
     assert parsed["source"] is None
 
 
@@ -113,6 +115,7 @@ def test_a_sink_dep_names_where_its_source_went_and_has_no_target():
             "via": "",
             "target": None,
             "origin": "",
+            "literal": "",
             "sink": "FILE:KSDS",
             "source": {
                 "field": "FIELD-B",
