@@ -16,7 +16,7 @@ TEMPLATE = Path(__file__).with_name("partition_page.html")
 
 
 def _data(graph: FieldGraph, clusters: ClusterSet) -> PageData:
-    points = layout(graph, clusters)
+    points = layout(graph)
     placed = {
         member: (cluster.component, cluster.id)
         for cluster in clusters.clusters

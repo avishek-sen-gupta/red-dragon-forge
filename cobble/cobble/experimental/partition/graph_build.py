@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import replace
 from itertools import groupby, product
+from operator import itemgetter
 
 from cobble.dataflow.fields.extent_text import ByteRange, byte_range
 from cobble.dataflow.fields.trace_query import DepRow
@@ -16,9 +18,11 @@ from cobble.experimental.partition.graph_node import GraphNode
 from cobble.experimental.partition.leaf_index import LeafIndex
 from cobble.experimental.partition.link_row import LinkRow
 from cobble.experimental.partition.node_kind import NodeKind
+from cobble.experimental.partition.span import Span
 
 _Moved = tuple[tuple[GraphNode, ...], tuple[Flow, ...]]
 _Pair = tuple[FieldLeaf, FieldLeaf]
+_Rows = Mapping[str, tuple[DepRow, ...]]
 
 
 def _field(leaf: FieldLeaf) -> GraphNode:
@@ -46,27 +50,86 @@ def _aligned(target: ByteRange, source: ByteRange, leaf: FieldLeaf) -> tuple[int
     return max(leaf.start, target.start) + shift, min(leaf.end, target.end) + shift
 
 
-def _pairs(
-    targets: tuple[FieldLeaf, ...],
-    sources: tuple[FieldLeaf, ...],
-    target: ByteRange,
-    source: ByteRange,
-) -> tuple[_Pair, ...]:
-    if len(targets) == 1 or len(sources) == 1:
-        return tuple((s, t) for s, t in product(sources, targets))
+def _pairs(target: Span, source: Span) -> tuple[_Pair, ...]:
+    if len(target.fields) == 1 or len(source.fields) == 1:
+        return tuple((s, t) for s, t in product(source.fields, target.fields))
     return tuple(
         (s, t)
-        for t in targets
-        for start, end in (_aligned(target, source, t),)
-        for s in sources
+        for t in target.fields
+        for start, end in (_aligned(target.range, source.range, t),)
+        for s in source.fields
         if s.overlaps(start, end)
     )
 
 
-def _copied(
-    index: LeafIndex, barrier: Barrier, target: ByteRange, source: ByteRange, site: str
-) -> _Moved:
-    pairs = _pairs(index.fields_in(target), index.fields_in(source), target, source)
+def _span(index: LeafIndex, extent: ByteRange) -> Span:
+    return Span(extent, index.fields_in(extent))
+
+
+def _within(extent: ByteRange, start: int, end: int) -> ByteRange:
+    return replace(extent, start=start, end=end)
+
+
+def _covered(leaf: FieldLeaf, pieces: Sequence[FieldLeaf]) -> bool:
+    return all(
+        any(piece.start <= byte < piece.end for piece in pieces)
+        for byte in range(leaf.start, leaf.end)
+    )
+
+
+def _distinct(leaves: Iterable[FieldLeaf]) -> tuple[FieldLeaf, ...]:
+    return tuple({leaf: None for leaf in leaves})
+
+
+def _traced(
+    index: LeafIndex, rows: _Rows, extent: ByteRange, definers: Iterable[str]
+) -> tuple[FieldLeaf, ...]:
+    pieces = _distinct(
+        piece
+        for definer in definers
+        for row in rows.get(definer, ())
+        if (row.target.program, row.target.region) == (extent.program, extent.region)
+        and extent.start <= row.target.start
+        and row.target.end <= extent.end
+        for piece in _through(index, rows, row)
+    )
+    kept = tuple(leaf for leaf in index.fields_in(extent) if not _covered(leaf, pieces))
+    return _distinct((*kept, *pieces))
+
+
+def _finer(
+    index: LeafIndex, rows: _Rows, row: DepRow, leaf: FieldLeaf
+) -> tuple[FieldLeaf, ...]:
+    shift = row.source.start - row.target.start
+    inner = _traced(
+        index,
+        {site: found for site, found in rows.items() if site != row.site},
+        _within(row.source, leaf.start + shift, leaf.end + shift),
+        row.definers,
+    )
+    if len(inner) < 2:
+        return (leaf,)
+    return tuple(
+        replace(
+            piece, region=leaf.region, start=piece.start - shift, end=piece.end - shift
+        )
+        for piece in inner
+    )
+
+
+def _through(index: LeafIndex, rows: _Rows, row: DepRow) -> tuple[FieldLeaf, ...]:
+    written = index.fields_in(row.target)
+    if not row.source.known:
+        return written
+    return tuple(piece for leaf in written for piece in _finer(index, rows, row, leaf))
+
+
+def _read(index: LeafIndex, rows: _Rows, dep: DepRow) -> Span:
+    return Span(dep.source, _traced(index, rows, dep.source, dep.definers))
+
+
+def _copied(barrier: Barrier, target: Span, source: Span, site: str) -> _Moved:
+    pairs = _pairs(target, source)
     clustered = not barrier.blocks({(s.node, t.node) for s, t in pairs})
     return (
         tuple(_field(leaf) for pair in pairs for leaf in pair),
@@ -90,24 +153,25 @@ def _fanned(
     )
 
 
-def _moved(index: LeafIndex, barrier: Barrier, dep: DepRow) -> _Moved:
+def _moved(index: LeafIndex, rows: _Rows, barrier: Barrier, dep: DepRow) -> _Moved:
     if dep.sink:
         sink = _terminal(NodeKind.SINK, dep.source.program, dep.sink)
-        return _fanned(sink, index.fields_in(dep.source), dep.site, inward=False)
+        return _fanned(sink, _read(index, rows, dep).fields, dep.site, inward=False)
     if not dep.source.known:
         origin = _terminal(NodeKind.ORIGIN, dep.target.program, dep.origin)
         return _fanned(origin, index.fields_in(dep.target), dep.site, inward=True)
-    return _copied(index, barrier, dep.target, dep.source, dep.site)
+    return _copied(barrier, _span(index, dep.target), _read(index, rows, dep), dep.site)
 
 
 def _linked(index: LeafIndex, barrier: Barrier, link: LinkRow) -> tuple[_Moved, ...]:
     caller = byte_range(link.caller_extent, link.caller)
     callee = byte_range(link.callee_extent, link.callee)
     site = f"{link.caller}/{link.node}"
-    entered = _copied(index, barrier, callee, caller, site)
+    caller_span, callee_span = _span(index, caller), _span(index, callee)
+    entered = _copied(barrier, callee_span, caller_span, site)
     if not link.returns:
         return (entered,)
-    return (entered, _copied(index, barrier, caller, callee, site))
+    return (entered, _copied(barrier, caller_span, callee_span, site))
 
 
 def _edge(
@@ -128,14 +192,29 @@ def _ends(flow: Flow) -> tuple[str, str]:
     return (flow.source, flow.target)
 
 
+def _rows(deps: Sequence[DepRow]) -> _Rows:
+    written = sorted(
+        (dep.site, i) for i, dep in enumerate(deps) if dep.target.known and not dep.sink
+    )
+    return {
+        site: tuple(deps[i] for _, i in group)
+        for site, group in groupby(written, itemgetter(0))
+    }
+
+
 def field_graph(
     index: LeafIndex,
     deps: Sequence[DepRow],
     links: Sequence[LinkRow],
     barrier: Barrier,
 ) -> FieldGraph:
+    rows = _rows(deps)
     moved = (
-        *(_moved(index, barrier, dep) for dep in deps if dep.sink or dep.target.known),
+        *(
+            _moved(index, rows, barrier, dep)
+            for dep in deps
+            if dep.sink or dep.target.known
+        ),
         *(step for link in links for step in _linked(index, barrier, link)),
     )
     nodes = {node.id: node for found, _ in moved for node in found}
