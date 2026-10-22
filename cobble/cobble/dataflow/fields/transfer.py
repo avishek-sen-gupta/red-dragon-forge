@@ -601,7 +601,7 @@ def _receiver_options(statement: ExecCicsStatement) -> tuple[str, ...]:
 
 def _cics_origin(statement: ExecCicsStatement) -> str:
     if statement.verb.upper() in _CICS_FILE_VERBS:
-        return f"FILE:{_option(statement, 'FILE')}"
+        return f"FILE:{_option(statement, 'FILE') or _option(statement, 'DATASET')}"
     return CICS_STATE
 
 
