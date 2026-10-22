@@ -104,13 +104,13 @@ partition-traces: jar
 	done
 
 partition-graph: partition-traces
-	$(COBBLE) cobble-experimental-partition-graph --extents $(PARTITION_DIR)/extents.jsonl --traces $(PARTITION_DIR)/traces --links $(PARTITION_DIR)/combine/links.jsonl --barrier $(PARTITION_BARRIER) --fanout-limit $(PARTITION_FANOUT) --out $(PARTITION_DIR)/graph.json
+	$(COBBLE) cobble-experimental-partition-graph --extents $(PARTITION_DIR)/extents.jsonl --traces $(PARTITION_DIR)/traces --links $(PARTITION_DIR)/combine/links.jsonl --barrier $(PARTITION_BARRIER) --fanout-limit $(PARTITION_FANOUT) --out $(PARTITION_DIR)/graph.jsonl
 
 partition-clusters: partition-graph
-	$(COBBLE) cobble-experimental-partition-clusters --graph $(PARTITION_DIR)/graph.json --out $(PARTITION_DIR)/clusters.json --report $(PARTITION_DIR)/clusters.md
+	$(COBBLE) cobble-experimental-partition-clusters --graph $(PARTITION_DIR)/graph.jsonl --out $(PARTITION_DIR)/clusters.jsonl --report $(PARTITION_DIR)/clusters.md
 
 partition-render: partition-clusters
-	$(COBBLE) cobble-experimental-partition-render --graph $(PARTITION_DIR)/graph.json --clusters $(PARTITION_DIR)/clusters.json --out $(PARTITION_DIR)/partition.html
+	$(COBBLE) cobble-experimental-partition-render --graph $(PARTITION_DIR)/graph.jsonl --clusters $(PARTITION_DIR)/clusters.jsonl --out $(PARTITION_DIR)/partition.html
 
 # squall's Db2 test database (official icr.io image). The compose project stays
 # squall/, so the squall-db2 container and its named volume are the same ones.

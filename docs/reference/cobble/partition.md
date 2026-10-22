@@ -31,7 +31,7 @@ From the forge root. Each target runs the one before it.
 
 The CardDemo config parses into its own cache, so a cache written before a bridge change is
 never read. `PARTITION_DIR` then holds `extents.jsonl`, `area-need.jsonl`, `fixpoint/`,
-`combine/`, `traces/`, `graph.json`, `clusters.json`, `clusters.md` and `partition.html`.
+`combine/`, `traces/`, `graph.jsonl`, `clusters.jsonl`, `clusters.md` and `partition.html`.
 
 ## cobble-experimental-partition-graph
 
@@ -46,7 +46,7 @@ cobble-experimental-partition-graph --extents EXTENTS --traces DIR --out OUT
 | `--traces` | a directory of `cobble-fields-trace` outputs; every `*.jsonl` in it is read |
 | `--links` | `links.jsonl` from `cobble-dataflow-combine`. Without it, programs join only where a trace entered a callee |
 | `--barrier`, `--fanout-limit` | which crossings clustering does not cross (default `fanout`, 8) |
-| `--out` | the graph JSON |
+| `--out` | the graph JSONL |
 
 A node is an elementary field: one with nothing declared under it, so every variant of a
 `REDEFINES` has its own fields. Every occurrence of an `OCCURS` table is one node, named
@@ -69,7 +69,10 @@ never picks up another's fields. Edges then run from source fields to target fie
 
 A combine link binds the caller's window to the callee's the same way, and binds them back when
 the link returns. An edge records how many sites move bytes along it, whether clustering crosses
-it, and whether it joins two programs.
+it, the barrier that decided that, and whether it joins two programs.
+
+The graph file is a flat list, one object per line: every node as `{"node": {...}}`, then every
+edge as `{"edge": {...}}`.
 
 ### Barriers
 
@@ -94,7 +97,8 @@ cobble-experimental-partition-clusters --graph GRAPH --out OUT --report REPORT [
 Connected components over the field edges that clustering crosses and that stay inside one
 program. A component of at least `--split-at` fields (default 30) is split into Louvain
 communities, seeded, so a run is repeatable. A field in no component of two or more is
-isolated: only origins and sinks touch it, or only blocked edges. `--out` is the JSON;
+isolated: only origins and sinks touch it, or only blocked edges. `--out` is JSONL: one
+`{"cluster": {...}}` line per cluster, then one `{"isolated": "<field>"}` line per isolated field;
 `--report` is markdown, one section per component with the terminals it touches and each
 cluster's records and fields.
 

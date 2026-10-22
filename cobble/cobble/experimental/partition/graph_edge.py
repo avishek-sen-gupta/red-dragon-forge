@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class GraphEdge(BaseModel):
-    """Bytes moving from source to target, at how many sites, and whether clustering crosses it."""
+    """Bytes moving from source to target, at how many sites, and whether the named barrier lets clustering cross it."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -15,3 +15,4 @@ class GraphEdge(BaseModel):
     sites: int
     clustered: bool
     cross_program: bool
+    barrier: str
