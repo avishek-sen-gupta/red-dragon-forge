@@ -2,7 +2,6 @@
 <html><head><meta charset="utf-8"><title>Field Partitions</title>
 <style>
 :root { --bg:#fafafa; --fg:#222; --panel:#fff; --line:#ddd; --muted:#777; --dim:#e4e4e4; }
-@media (prefers-color-scheme: dark) { :root { --bg:#16181c; --fg:#ddd; --panel:#1f2227; --line:#333; --muted:#999; --dim:#2a2d33; } }
 html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:13px system-ui, sans-serif; }
 #wrap { display:flex; height:100%; }
 #side { width:360px; overflow:auto; border-right:1px solid var(--line); background:var(--panel); padding:10px; box-sizing:border-box; }
@@ -30,14 +29,19 @@ label { margin-right:10px; }
 /*SCRIPTS*/
 <script>
 const DATA = /*DATA*/;
-const colour = k => k < 0 ? "#999" : `hsl(${Math.round(((k * 0.618033988749895) % 1) * 360)},65%,${45 + (k % 3) * 7}%)`;
+const hex = (h, s, l) => {
+  const f = n => { const k = (n + h / 30) % 12; const c = l - s * Math.min(l, 1 - l) * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+    return Math.round(255 * c).toString(16).padStart(2, "0"); };
+  return `#${f(0)}${f(8)}${f(4)}`;
+};
+const colour = k => k < 0 ? "#999" : hex(((k * 0.618033988749895) % 1) * 360, 0.65, 0.45 + (k % 3) * 0.07);
 const dim = getComputedStyle(document.documentElement).getPropertyValue("--dim").trim();
 const graph = new graphology.DirectedGraph();
 DATA.nodes.forEach(n => graph.addNode(n.id, { ...n, y: -n.y,
-  size: n.kind === "field" ? 2 + Math.min(6, Math.sqrt(n.degree)) : 4,
+  size: n.kind === "field" ? 0.6 + 0.1 * Math.min(6, Math.sqrt(n.degree)) : 1,
   color: n.kind === "sink" ? "#c0392b" : n.kind === "origin" ? "#2c3e50" : colour(n.cluster) }));
 DATA.edges.forEach(e => graph.addEdge(e.source, e.target, { ...e,
-  size: Math.min(3, 0.5 + Math.log2(e.sites)),
+  size: Math.min(0.5, 0.1 + 0.1 * Math.log2(e.sites)),
   color: !e.clustered ? "#c0392b" : e.cross_program ? "#e67e22" : "#bbb" }));
 let grouping = "cluster", showTerminals = true, showBlocked = true, focus = null, focusTerminals = null, hover = null, matching = null;
 const groupOf = d => grouping === "cluster" ? d.cluster : d.component;
@@ -46,15 +50,17 @@ const inFocus = id => isField(id) && groupOf(graph.getNodeAttributes(id)) === fo
 const Arrow = Sigma.rendering.createEdgeArrowProgram({ lengthToThicknessRatio: 6, widenessToThicknessRatio: 4 });
 const renderer = new Sigma(graph, document.getElementById("graph"), {
   edgeProgramClasses: { arrow: Arrow }, defaultEdgeType: "arrow", hideEdgesOnMove: true,
+  itemSizesReference: "positions", zoomToSizeRatioFunction: x => x,
   labelRenderedSizeThreshold: 7,
   nodeReducer: (id, d) => {
     if (d.kind !== "field" && !showTerminals) return { ...d, hidden: true };
-    const shown = { ...d, color: d.kind === "field" ? colour(groupOf(d)) : d.color };
-    const faded = { ...shown, color: dim, label: null };
-    if (hover) return hover.has(id) ? { ...shown, forceLabel: true } : faded;
+    const shown = { ...d, label: null, color: d.kind === "field" ? colour(groupOf(d)) : d.color };
+    const labelled = { ...shown, label: d.label, forceLabel: true };
+    const faded = { ...shown, color: dim };
+    if (hover) return hover.has(id) ? labelled : faded;
     if (matching && !matching.has(id)) return faded;
     if (focus === null) return shown;
-    return inFocus(id) || focusTerminals.has(id) ? { ...shown, forceLabel: true } : faded;
+    return inFocus(id) || focusTerminals.has(id) ? labelled : faded;
   },
   edgeReducer: (id, d) => {
     const [s, t] = graph.extremities(id);
@@ -68,7 +74,19 @@ const renderer = new Sigma(graph, document.getElementById("graph"), {
 const refresh = () => renderer.refresh({ skipIndexation: true });
 renderer.on("enterNode", ({ node }) => { hover = new Set([node, ...graph.neighbors(node)]); refresh(); });
 renderer.on("leaveNode", () => { hover = null; refresh(); });
-renderer.on("clickNode", ({ node }) => isField(node) && select(groupOf(graph.getNodeAttributes(node)), node));
+let dragged = null, dragMoved = false;
+renderer.on("downNode", ({ node }) => {
+  dragged = node; dragMoved = false;
+  if (!renderer.getCustomBBox()) renderer.setCustomBBox(renderer.getBBox());
+});
+renderer.getMouseCaptor().on("mousemovebody", e => {
+  if (!dragged) return;
+  graph.mergeNodeAttributes(dragged, renderer.viewportToGraph(e));
+  dragMoved = true;
+  e.preventSigmaDefault(); e.original.preventDefault(); e.original.stopPropagation();
+});
+renderer.getMouseCaptor().on("mouseup", () => { dragged = null; });
+renderer.on("clickNode", ({ node }) => !dragMoved && isField(node) && select(groupOf(graph.getNodeAttributes(node)), node));
 renderer.on("clickStage", () => select(null));
 function groups() {
   const found = new Map();

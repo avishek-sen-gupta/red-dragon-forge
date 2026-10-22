@@ -1,4 +1,4 @@
-"""The page: each cluster drawn as a ring, packed in rows, with its data embedded for the viewer."""
+"""The page: linked fields drawn together, everything else around them, with its data embedded for the viewer."""
 
 from __future__ import annotations
 
@@ -6,11 +6,12 @@ import json
 import math
 
 import pytest
+
 from cobble.experimental.partition.clustering import cluster_set
 from cobble.experimental.partition.field_graph import FieldGraph
 from cobble.experimental.partition.graph_edge import GraphEdge
 from cobble.experimental.partition.graph_node import GraphNode
-from cobble.experimental.partition.layout import GAP, layout
+from cobble.experimental.partition.layout import GAP, SPREAD, layout
 from cobble.experimental.partition.node_kind import NodeKind
 from cobble.experimental.partition.page import page
 
@@ -51,36 +52,24 @@ GRAPH = FieldGraph(
 )
 
 
-def test_clusters_are_rings_packed_in_rows_and_terminals_sit_by_their_fields() -> None:
-    clusters = cluster_set(GRAPH, split_at=30)
-    radius = 3 / (2 * math.pi)
-    ring = 2 * radius + GAP
-    row = math.sqrt(ring**2 + 2 * GAP**2)
-    centre = ring / 2
-    d = (GAP / 2, ring + GAP / 2)
-    e = (GAP + GAP / 2, ring + GAP / 2)
-    a = (centre + radius * math.cos(0), centre + radius * math.sin(0))
+def test_linked_fields_share_a_disc_and_everything_else_rings_it() -> None:
+    points = layout(GRAPH)
+    disc = SPREAD * math.sqrt(3) + 1.0
+    band = disc + 4 * GAP
 
-    assert row < ring + GAP
-    assert layout(GRAPH, clusters) == {
-        "P:REC.A": pytest.approx(a),
-        "P:REC.B": pytest.approx(
-            (
-                centre + radius * math.cos(2 * math.pi / 3),
-                centre + radius * math.sin(2 * math.pi / 3),
-            )
-        ),
-        "P:REC.C": pytest.approx(
-            (
-                centre + radius * math.cos(4 * math.pi / 3),
-                centre + radius * math.sin(4 * math.pi / 3),
-            )
-        ),
-        "P:REC.D": pytest.approx(d),
-        "P:REC.E": pytest.approx(e),
-        "P|sink|MAP:M": pytest.approx(
-            ((a[0] + d[0]) / 2 + GAP / 4, (a[1] + d[1]) / 2 + GAP / 4)
-        ),
+    assert set(points) == {node.id for node in GRAPH.nodes}
+    assert layout(GRAPH) == points
+    assert {
+        node: math.hypot(*points[node]) <= disc + 1e-9
+        for node in ("P:REC.A", "P:REC.B", "P:REC.C")
+    } == {"P:REC.A": True, "P:REC.B": True, "P:REC.C": True}
+    assert {
+        node: math.hypot(*points[node])
+        for node in ("P:REC.D", "P:REC.E", "P|sink|MAP:M")
+    } == {
+        "P:REC.D": pytest.approx(band),
+        "P:REC.E": pytest.approx(band),
+        "P|sink|MAP:M": pytest.approx(band),
     }
 
 
@@ -113,3 +102,30 @@ def test_the_page_embeds_the_graph_with_each_field_s_component_and_cluster() -> 
         }
         for e in GRAPH.edges
     ]
+
+
+def test_linked_groups_are_packed_without_overlapping() -> None:
+    chains = (("A", "B", "C", "D", "E", "F"), ("G", "H"), ("I", "J"))
+    graph = FieldGraph(
+        barrier="fanout-8",
+        nodes=tuple(_field(name) for chain in chains for name in chain),
+        edges=tuple(
+            _edge(f"P:REC.{a}", f"P:REC.{b}")
+            for chain in chains
+            for a, b in zip(chain, chain[1:])
+        ),
+    )
+    points = layout(graph)
+    centres = tuple(
+        (
+            sum(points[f"P:REC.{name}"][0] for name in chain) / len(chain),
+            sum(points[f"P:REC.{name}"][1] for name in chain) / len(chain),
+        )
+        for chain in chains
+    )
+    radii = tuple(SPREAD * math.sqrt(len(chain)) + 1.0 for chain in chains)
+
+    assert {
+        (i, j): math.dist(centres[i], centres[j]) >= radii[i] + radii[j] + GAP - 1e-2
+        for i, j in ((0, 1), (0, 2), (1, 2))
+    } == {(0, 1): True, (0, 2): True, (1, 2): True}

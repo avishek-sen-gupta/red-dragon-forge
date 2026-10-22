@@ -54,7 +54,13 @@ A node is an elementary field: one with nothing declared under it, so every vari
 `%CALL:`) and sinks (`FILE:`, `MAP:`, `TSQ:`, `TDQ:`, `TRANSID:`) are nodes of their own.
 
 A dep row's range resolves to the elementary fields declared under the field it names that
-overlap its bytes. Edges then run from source fields to target fields:
+overlap its bytes. A source range also takes the fields its definers wrote, when a definer's
+write lies inside the range: `SEND MAP FROM(COTRN0AO)` reads `TDATE03I`, which shares its bytes,
+when a `MOVE` to `TDATE03I` reached it. A definer that copied into one undivided field, such as a
+`PIC X(500)` record, is followed back through its own source and definers, so the read takes the
+fields that filled those bytes. A named field whose bytes such fields cover drops out. A write to
+a whole record contributes nothing to a read of part of it, so one record type of a `REDEFINES`
+never picks up another's fields. Edges then run from source fields to target fields:
 
 | Fields on each side | Edges |
 |---|---|
@@ -98,8 +104,14 @@ cluster's records and fields.
 cobble-experimental-partition-render --graph GRAPH --clusters CLUSTERS --out OUT
 ```
 
-One self-contained WebGL page, using the sigma.js and graphology builds cobble vendors. Each
-cluster is a ring, packed in rows, and terminals sit beside their fields. The side panel lists
+One self-contained WebGL page, using the sigma.js and graphology builds cobble vendors, dark on
+light. Only clustered edges between two fields place nodes, cross-program ones included. Each
+connected group of fields they link is a disc, laid out by a seeded networkx `spring_layout`
+over its own edges. Discs are packed in a spiral, largest first, and pushed apart until none
+overlap; where two discs sit says nothing. Unclustered fields, then origins and sinks, fill
+rings around them. Dot sizes are in layout units, so they keep their spacing when zoomed out.
+Labels show only for a hovered node and its neighbours, or the selected cluster. Colour shows the
+cluster. The side panel lists
 clusters or components. Clicking one zooms to it and lists its fields and terminals. Hovering a
 node shows its edges. Edges are grey when clustered, orange when they cross programs, and red
 when a barrier blocked them.

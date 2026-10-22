@@ -1,103 +1,141 @@
-"""Places every node: each cluster a ring, rings packed in rows, terminals beside their fields."""
+"""Places every node: fields linked by clustered field edges share a disc, discs pack apart, the rest ring them."""
 
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Sequence
 from functools import reduce
+from itertools import accumulate, count
 
-from cobble.experimental.partition.cluster_set import ClusterSet
+import networkx as nx
+import numpy as np
 from cobble.experimental.partition.field_graph import FieldGraph
 from cobble.experimental.partition.node_kind import NodeKind
+from numpy.typing import NDArray
 
-GAP = 2.0
+LAYOUT_SEED = 7
+SPREAD = 1.6
+GAP = 4.0
+DOT = 2.6
+SETTLE_STEPS = 3000
 
 _Point = tuple[float, float]
+_Points = NDArray[np.float64]
+_GOLDEN = math.pi * (3 - math.sqrt(5))
 
 
-@dataclass(frozen=True)
-class _Cursor:
-    """Where the next ring goes, and the centres placed so far."""
+def _links(graph: FieldGraph) -> nx.Graph[str]:
+    fields = {node.id for node in graph.nodes if node.kind is NodeKind.FIELD}
+    links: nx.Graph[str] = nx.Graph()
+    links.add_edges_from(
+        (edge.source, edge.target)
+        for edge in graph.edges
+        if edge.clustered and edge.source in fields and edge.target in fields
+    )
+    return links
 
-    x: float = 0.0
-    y: float = 0.0
-    row_height: float = 0.0
-    centres: tuple[_Point, ...] = ()
+
+def _groups(links: nx.Graph[str]) -> tuple[tuple[str, ...], ...]:
+    ranked = sorted(
+        (-len(group), tuple(sorted(group))) for group in nx.connected_components(links)
+    )
+    return tuple(group for _, group in ranked)
 
 
 def _radius(size: int) -> float:
-    return size / (2 * math.pi) if size > 1 else 0.0
+    return SPREAD * math.sqrt(size) + 1.0
 
 
-def _placed(row_width: float, cursor: _Cursor, width: float) -> _Cursor:
-    wraps = cursor.x > 0 and cursor.x + width > row_width
-    x, y, height = (
-        (0.0, cursor.y + cursor.row_height, 0.0)
-        if wraps
-        else (
-            cursor.x,
-            cursor.y,
-            cursor.row_height,
-        )
+def _spiral(radii: _Points) -> _Points:
+    step = 2 * float(radii.sum()) / max(len(radii), 1) + GAP
+    turns = tuple(
+        (math.sqrt(i) * math.cos(i * _GOLDEN), math.sqrt(i) * math.sin(i * _GOLDEN))
+        for i in range(len(radii))
     )
-    return _Cursor(
-        x=x + width,
-        y=y,
-        row_height=max(height, width),
-        centres=(*cursor.centres, (x + width / 2, y + width / 2)),
+    return np.array(turns, dtype=np.float64).reshape(-1, 2) * step
+
+
+def _overlap(centres: _Points, radii: _Points) -> _Points:
+    apart = np.linalg.norm(centres[:, None, :] - centres[None, :, :], axis=-1)
+    needed = radii[:, None] + radii[None, :] + GAP
+    return np.clip(needed - apart, 0, None) * (1 - np.eye(len(radii)))
+
+
+def _pushed(centres: _Points, radii: _Points) -> _Points:
+    offsets = centres[:, None, :] - centres[None, :, :]
+    apart = np.linalg.norm(offsets, axis=-1) + np.eye(len(radii))
+    push = offsets / apart[..., None] * _overlap(centres, radii)[..., None] / 2
+    return centres + push.sum(axis=1) / 2
+
+
+def _settled(centres: _Points, radii: _Points) -> bool:
+    return float(_overlap(centres, radii).max(initial=0.0)) < 1e-3
+
+
+def _packed(radii: _Points) -> _Points:
+    return reduce(
+        lambda centres, _: (
+            centres if _settled(centres, radii) else _pushed(centres, radii)
+        ),
+        range(SETTLE_STEPS),
+        _spiral(radii),
     )
 
 
-def _ring(members: Sequence[str], centre: _Point) -> dict[str, _Point]:
-    radius = _radius(len(members))
+def _disc(
+    links: nx.Graph[str], group: Sequence[str], centre: _Points
+) -> dict[str, _Point]:
+    placed = nx.spring_layout(links.subgraph(group), seed=LAYOUT_SEED)
+    raw = np.array([placed[member] for member in group], dtype=np.float64)
+    spread = raw - raw.mean(axis=0)
+    reach = max(float(np.linalg.norm(spread, axis=1).max()), 1e-9)
+    scaled = centre + spread * (_radius(len(group)) / reach)
     return {
-        member: (
-            centre[0] + radius * math.cos(2 * math.pi * i / len(members)),
-            centre[1] + radius * math.sin(2 * math.pi * i / len(members)),
-        )
-        for i, member in enumerate(members)
+        member: (float(point[0]), float(point[1]))
+        for member, point in zip(group, scaled, strict=True)
     }
 
 
-def _beside(points: Sequence[_Point]) -> _Point:
-    if not points:
-        return (0.0, -GAP)
-    return (
-        sum(x for x, _ in points) / len(points) + GAP / 4,
-        sum(y for _, y in points) / len(points) + GAP / 4,
+def _ring(start: float, k: int) -> tuple[float, int]:
+    radius = start + k * DOT
+    return radius, max(1, int(2 * math.pi * radius / DOT))
+
+
+def _rings(start: float, total: int) -> tuple[tuple[float, int], ...]:
+    filled = accumulate((_ring(start, k)[1] for k in count()), initial=0)
+    needed = next(k for k, placed in enumerate(filled) if placed >= total)
+    rings = tuple(_ring(start, k) for k in range(needed))
+    before = tuple(accumulate((size for _, size in rings), initial=0))[:-1]
+    return tuple(
+        (radius, min(size, total - placed))
+        for (radius, size), placed in zip(rings, before, strict=True)
     )
 
 
-def _terminals(graph: FieldGraph, fields: Mapping[str, _Point]) -> dict[str, _Point]:
-    return {
-        node.id: _beside(
-            tuple(
-                fields[other]
-                for edge in graph.edges
-                for mine, other in (
-                    (edge.source, edge.target),
-                    (edge.target, edge.source),
-                )
-                if mine == node.id and other in fields
-            )
-        )
-        for node in graph.nodes
-        if node.kind is not NodeKind.FIELD
-    }
-
-
-def layout(graph: FieldGraph, clusters: ClusterSet) -> dict[str, _Point]:
-    groups = (
-        *(cluster.members for cluster in clusters.clusters),
-        *((member,) for member in clusters.isolated),
+def _band(nodes: Sequence[str], start: float) -> dict[str, _Point]:
+    slots = tuple(
+        (radius * math.cos(angle), radius * math.sin(angle))
+        for radius, size in _rings(start, len(nodes))
+        for angle in (2 * math.pi * j / size + radius for j in range(size))
     )
-    widths = tuple(2 * _radius(len(group)) + GAP for group in groups)
-    row_width = max(math.sqrt(sum(w * w for w in widths)), max(widths, default=GAP))
-    cursor = reduce(lambda c, w: _placed(row_width, c, w), widths, _Cursor())
-    fields = {
+    return dict(zip(nodes, slots, strict=True))
+
+
+def layout(graph: FieldGraph) -> dict[str, _Point]:
+    links = _links(graph)
+    groups = _groups(links)
+    radii = np.array([_radius(len(group)) for group in groups], dtype=np.float64)
+    centres = _packed(radii)
+    discs = {
         member: point
-        for group, centre in zip(groups, cursor.centres, strict=True)
-        for member, point in _ring(group, centre).items()
+        for group, centre in zip(groups, centres, strict=True)
+        for member, point in _disc(links, group, centre).items()
     }
-    return {**fields, **_terminals(graph, fields)}
+    reach = float((np.linalg.norm(centres, axis=1) + radii).max(initial=0.0))
+    ranked = sorted(
+        (node.kind is not NodeKind.FIELD, node.program, node.id)
+        for node in graph.nodes
+        if node.id not in discs
+    )
+    rest = tuple(entry[2] for entry in ranked)
+    return {**discs, **_band(rest, reach + 4 * GAP)}
