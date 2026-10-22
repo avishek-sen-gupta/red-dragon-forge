@@ -406,6 +406,8 @@ def _parts(
             ((call_site(node), call_areas(node, index)),),
             (),
         )
+    if node.file:
+        return (operand_occurrence_extents(node.file_operand, index), (), ())
     return _statement_parts(statements, node.id, index, received)
 
 

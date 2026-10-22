@@ -229,6 +229,7 @@ def _dynamic_corpus(tmp_path: Path) -> tuple[Path, Path]:
                 _link("WS-ONE", literal=False),
                 _link("WS-TWO", literal=False),
                 _link("WS-NONE", literal=False),
+                _move(),
             ],
             "PROGB": [_move()],
             "PROGC": [_link("WS-NEXT", literal=False)],
@@ -245,6 +246,11 @@ def _dynamic_corpus(tmp_path: Path) -> tuple[Path, Path]:
             ),
             _target_row("PROGA", "MAIN/2", "WS-NONE", [], ["uninitialised"]),
             _target_row("PROGC", "MAIN/0", "WS-NEXT", ["PROGD"], []),
+            {
+                **_target_row("PROGA", "MAIN/3", "WS-FILE", ["PROGZ"], []),
+                "kind": "file",
+                "transfer": "CICS_READ",
+            },
         ],
     )
     return asg_dir, targets

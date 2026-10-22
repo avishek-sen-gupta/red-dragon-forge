@@ -2,7 +2,13 @@
 
 from typing import Annotated, Literal
 
-from cobble.dataflow.srccfg.cfg import Atom, Node, NodeKind, SourceSpan
+from cobble.dataflow.srccfg.cfg import (
+    NO_TARGET_OPERAND,
+    Atom,
+    Node,
+    NodeKind,
+    SourceSpan,
+)
 from cobble.dataflow.srccfg.rows.cfg_row_type import CfgRowType
 from cobble.dataflow.srccfg.using_argument import UsingArgument
 from cobol_asg.ref_mod import RefModOperand
@@ -42,6 +48,8 @@ class CfgNodeRow(BaseModel):
     target_resolved: bool
     target_operand: Operand
     transfer_operand: str
+    file: str = ""
+    file_operand: Operand = NO_TARGET_OPERAND
     using: tuple[UsingArgument, ...]
     span: SourceSpan
     resume: str
@@ -60,6 +68,8 @@ class CfgNodeRow(BaseModel):
             target_resolved=self.target_resolved,
             target_operand=self.target_operand,
             transfer_operand=self.transfer_operand,
+            file=self.file,
+            file_operand=self.file_operand,
             using=self.using,
             span=self.span,
             resume=self.resume,

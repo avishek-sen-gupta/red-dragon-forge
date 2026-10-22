@@ -23,6 +23,9 @@ class MemberCounts(BaseModel):
     resolved_one: int = 0
     resolved_several: int = 0
     unresolved_reasons: tuple[str, ...] = ()
+    file_sites: int = 0
+    file_resolved_one: int = 0
+    file_resolved_several: int = 0
     scope: Scope = Scope.WHOLE
     tracked: int = 0
     relevant: int = 0

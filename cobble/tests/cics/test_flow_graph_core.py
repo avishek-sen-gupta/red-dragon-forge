@@ -67,3 +67,24 @@ def test_returning_to_a_transaction_still_maps_as_before() -> None:
         NodeKind.TRANSACTION,
         EdgeKind.RETURN_TRANSID,
     )
+
+
+def test_a_file_verb_naming_a_literal_file_is_an_edge_and_a_data_item_is_not() -> None:
+    """A literal FILE(...) is the whole answer, so the verb's own edge names it.
+    A file named through a data item has no file_name -- the dataflow's targets
+    table, or the not-attempted marking, gives that site its edge instead."""
+    assert [
+        _edge_fields(_verb(verb, file_name="usrsec"))
+        for verb in ("READ", "STARTBR", "WRITE", "REWRITE", "DELETE", "ENDBR")
+    ] == [
+        ("SOMEPROG", NodeKind.PROGRAM, "USRSEC", NodeKind.CICS_FILE, kind)
+        for kind in (
+            EdgeKind.READS,
+            EdgeKind.READS,
+            EdgeKind.WRITES,
+            EdgeKind.UPDATES,
+            EdgeKind.DELETES,
+            EdgeKind.ENDS_BROWSE,
+        )
+    ]
+    assert _edge_fields(_verb("READ", file_operand="WS-USRSEC-FILE")) == ()

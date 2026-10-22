@@ -1,10 +1,11 @@
-"""Dynamic call sites the combined run resolved completely, read for the area need."""
+"""Dynamic call sites the combined run resolved completely, read for the area need; file sites are not calls."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path
 
+from cobble.dataflow.fixpoint.target_kind import TargetKind
 from cobble.dataflow.fixpoint.transid_jump import TransidJump
 from pydantic import BaseModel, ConfigDict
 
@@ -20,13 +21,19 @@ class TargetSite(BaseModel):
 
     caller: str
     node: str
+    kind: TargetKind = TargetKind.PROGRAM
     candidates: tuple[str, ...] = ()
     reasons: tuple[str, ...] = ()
     outside: tuple[str, ...] = ()
 
     @property
-    def resolved(self) -> bool:
-        return bool(self.candidates) and not self.reasons and not self.outside
+    def resolved_call(self) -> bool:
+        return (
+            self.kind is TargetKind.PROGRAM
+            and bool(self.candidates)
+            and not self.reasons
+            and not self.outside
+        )
 
 
 def _rows(path: Path) -> tuple[str, ...]:
@@ -38,7 +45,7 @@ def _targets(combined_dir: Path) -> Sites:
         (site.caller, site.node, site.candidates)
         for line in _rows(combined_dir / "targets.jsonl")
         for site in (TargetSite.model_validate_json(line),)
-        if site.resolved
+        if site.resolved_call
     )
 
 

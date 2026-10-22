@@ -138,6 +138,7 @@ from cobble.dataflow.fixpoint.member_counts import MemberCounts
 from cobble.dataflow.fixpoint.options import ITERATION_FACTOR, AnalysisOptions
 from cobble.dataflow.fixpoint.rows import Row
 from cobble.dataflow.fixpoint.scope import Scope
+from cobble.dataflow.fixpoint.target_kind import TargetKind
 from cobble.dataflow.fixpoint.targets import ResolvedTarget
 from cobble.dataflow.jumps.jump import Jump
 from cobble.dataflow.jumps.rows import jump_identity, jump_row
@@ -219,6 +220,9 @@ class RunTotals:
     resolved_one: int = 0
     resolved_several: int = 0
     unresolved_reasons: tuple[str, ...] = ()
+    file_sites: int = 0
+    file_resolved_one: int = 0
+    file_resolved_several: int = 0
 
     @property
     def coverage(self) -> float:
@@ -448,12 +452,16 @@ def _dead_ends(result: MemberResult) -> tuple[str, ...]:
     return tuple(stopped.values())
 
 
-def _resolved_one(result: MemberResult) -> int:
-    return sum(1 for target in result.targets if len(target.candidates) == 1)
+def _of_kind(result: MemberResult, kind: TargetKind) -> tuple[ResolvedTarget, ...]:
+    return tuple(target for target in result.targets if target.kind is kind)
 
 
-def _resolved_several(result: MemberResult) -> int:
-    return sum(1 for target in result.targets if len(target.candidates) > 1)
+def _resolved_one(targets: Sequence[ResolvedTarget]) -> int:
+    return sum(1 for target in targets if len(target.candidates) == 1)
+
+
+def _resolved_several(targets: Sequence[ResolvedTarget]) -> int:
+    return sum(1 for target in targets if len(target.candidates) > 1)
 
 
 def _unresolved_reasons(result: MemberResult) -> tuple[str, ...]:
@@ -465,7 +473,7 @@ def _unresolved_reasons(result: MemberResult) -> tuple[str, ...]:
     reason, so this does not partition ``dynamic_sites`` and is not made to."""
     return tuple(
         reason.value
-        for target in result.targets
+        for target in _of_kind(result, TargetKind.PROGRAM)
         if not target.candidates
         for reason in target.reasons
     )
@@ -473,6 +481,8 @@ def _unresolved_reasons(result: MemberResult) -> tuple[str, ...]:
 
 def counts_of(result: MemberResult) -> MemberCounts:
     """What a member adds to the run's report, without the records themselves."""
+    calls = _of_kind(result, TargetKind.PROGRAM)
+    files = _of_kind(result, TargetKind.FILE)
     return MemberCounts(
         member=result.member,
         program=result.program,
@@ -486,10 +496,13 @@ def counts_of(result: MemberResult) -> MemberCounts:
         edges=len(result.edges),
         aliased=_aliased(result),
         dead_ends=_dead_ends(result),
-        dynamic_sites=len(result.targets),
-        resolved_one=_resolved_one(result),
-        resolved_several=_resolved_several(result),
+        dynamic_sites=len(calls),
+        resolved_one=_resolved_one(calls),
+        resolved_several=_resolved_several(calls),
         unresolved_reasons=_unresolved_reasons(result),
+        file_sites=len(files),
+        file_resolved_one=_resolved_one(files),
+        file_resolved_several=_resolved_several(files),
         scope=result.scope,
         tracked=result.tracked,
         relevant=result.relevant,
@@ -513,6 +526,11 @@ def _folded(totals: RunTotals, counts: MemberCounts) -> RunTotals:
         resolved_one=totals.resolved_one + counts.resolved_one,
         resolved_several=totals.resolved_several + counts.resolved_several,
         unresolved_reasons=(*totals.unresolved_reasons, *counts.unresolved_reasons),
+        file_sites=totals.file_sites + counts.file_sites,
+        file_resolved_one=totals.file_resolved_one + counts.file_resolved_one,
+        file_resolved_several=(
+            totals.file_resolved_several + counts.file_resolved_several
+        ),
     )
 
 
@@ -903,6 +921,22 @@ def _report_targets(totals: RunTotals) -> None:
     )
 
 
+def _report_file_sites(totals: RunTotals) -> None:
+    """Nothing for a run with no dynamic file sites; the three buckets partition
+    ``file_sites`` as the call buckets partition ``dynamic_sites``."""
+    if not totals.file_sites:
+        return
+    none = totals.file_sites - totals.file_resolved_one - totals.file_resolved_several
+    logger.info(
+        "fields: %d dynamic file sites, %d resolved to one file, %d to several, "
+        "%d to none",
+        totals.file_sites,
+        totals.file_resolved_one,
+        totals.file_resolved_several,
+        none,
+    )
+
+
 def _report_members(totals: RunTotals) -> None:
     logger.info(
         "fields: %d members, coverage %.1f%% (%d/%d writes), %d unhandled, %d unmodelled, %d skipped",
@@ -916,6 +950,7 @@ def _report_members(totals: RunTotals) -> None:
     )
     _report_aliases(totals)
     _report_targets(totals)
+    _report_file_sites(totals)
     for member, reason in sorted(totals.skipped):
         logger.warning("fields: !! skipped %s: %s", member, reason)
     if totals.unsettled:

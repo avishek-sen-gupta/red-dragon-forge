@@ -52,7 +52,9 @@ from types import MappingProxyType
 
 from cobble.dataflow.fields.values import EMPTY as VALUES_EMPTY
 from cobble.dataflow.fields.values import ValueSet
+from cobble.dataflow.fixpoint.target_kind import TargetKind
 from cobble.dataflow.fixpoint.targets import ResolvedTarget
+from cobble.dataflow.jumps.rows import fact_dict
 from cobble.dataflow.layout import Cell
 from cobble.sink_state import FirstSighting
 
@@ -277,17 +279,32 @@ def alias_row(alias: CommareaAlias) -> _Row:
     )
 
 
-def target_fields(target: ResolvedTarget) -> dict[str, str | list[str]]:
-    """One dynamic call site's row fields, before they are written as text."""
-    return {
-        "caller": target.caller,
-        "node": target.node,
-        "transfer": target.transfer,
-        "expression": target.expression,
-        "candidates": list(target.candidates),
-        "reasons": [reason.value for reason in target.reasons],
-        "dropped": list(target.dropped),
-    }
+def target_fields(
+    target: ResolvedTarget,
+) -> dict[str, str | list[str] | dict[str, str | list[str]]]:
+    """One dynamic site's row fields, before they are written as text. A file site
+    also carries its operand's fact, which the combine walks back from."""
+    return _with_operand(
+        target,
+        {
+            "caller": target.caller,
+            "node": target.node,
+            "kind": target.kind.value,
+            "transfer": target.transfer,
+            "expression": target.expression,
+            "candidates": list(target.candidates),
+            "reasons": [reason.value for reason in target.reasons],
+            "dropped": list(target.dropped),
+        },
+    )
+
+
+def _with_operand(
+    target: ResolvedTarget, fields: Mapping[str, str | list[str]]
+) -> dict[str, str | list[str] | dict[str, str | list[str]]]:
+    if target.kind is not TargetKind.FILE:
+        return {**fields}
+    return {**fields, "operand": fact_dict(target.operand)}
 
 
 def target_row(target: ResolvedTarget) -> _Row:

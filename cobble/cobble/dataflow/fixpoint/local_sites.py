@@ -25,7 +25,7 @@ from cobble.dataflow.fixpoint.site_values import (
     touching,
     values_at,
 )
-from cobble.dataflow.fixpoint.targets import is_program_name
+from cobble.dataflow.fixpoint.target_kind import TargetKind
 from cobble.dataflow.jumps.discover import transid_operand
 from cobble.dataflow.layout import Record
 from cobble.dataflow.srccfg.cfg import Cfg
@@ -54,7 +54,7 @@ def _names(values: ValueSet) -> tuple[str, ...]:
                 name
                 for value in values.values
                 for name in (value.decode("utf-8", errors="replace").rstrip(),)
-                if is_program_name(name)
+                if TargetKind.PROGRAM.can_name(name)
             }
         )
     )

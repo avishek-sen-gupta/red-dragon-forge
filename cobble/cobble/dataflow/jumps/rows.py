@@ -37,7 +37,7 @@ class _JumpRow(BaseModel):
     areas: tuple[_AreaRow, ...] = ()
 
 
-def _fact_dict(fact: Fact) -> dict[str, str | list[str]]:
+def fact_dict(fact: Fact) -> dict[str, str | list[str]]:
     return {
         "extent": fact.extent,
         "values": list(fact.values),
@@ -52,7 +52,7 @@ def _area_dict(
     return {
         "param": area.param,
         "extent": area.extent,
-        "fields": [_fact_dict(field) for field in area.fields],
+        "fields": [fact_dict(field) for field in area.fields],
     }
 
 
@@ -64,8 +64,8 @@ def jump_row(jump: Jump) -> str:
             "line": jump.line,
             "kind": jump.kind.value,
             "returns": jump.returns,
-            "target": _fact_dict(jump.target),
-            "transid": _fact_dict(jump.transid),
+            "target": fact_dict(jump.target),
+            "transid": fact_dict(jump.transid),
             "areas": [_area_dict(area) for area in jump.areas],
         }
     )

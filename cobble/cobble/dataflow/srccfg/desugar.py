@@ -106,9 +106,22 @@ CALL_TRANSFERS = {
     "CICS_XCTL": XCTL_TRANSFER,
     CALL_TRANSFER: CALL_TRANSFER,
 }
+FILE_TRANSFERS = frozenset(
+    {
+        "CICS_READ",
+        "CICS_STARTBR",
+        "CICS_READNEXT",
+        "CICS_READPREV",
+        "CICS_WRITE",
+        "CICS_REWRITE",
+        "CICS_DELETE",
+        "CICS_ENDBR",
+    }
+)
 NO_OPERAND = CicsOperand(text="", is_literal=False)
 PROGRAM_OPTION = "PROGRAM"
 COMMAREA_OPTION = "COMMAREA"
+FILE_OPTIONS = ("FILE", "DATASET")
 
 WRITES_ONLY_KINDS = ("InitializeStatement",)
 # A verb whose sink is outside the program still reads its operands.
@@ -1188,7 +1201,11 @@ def _exec_cics(statement, ctx: Ctx, path: str) -> Fragment:
 
 def _command(statement, ctx: Ctx, path: str, verb: str) -> Fragment:
     plain = _plain_without_arms(statement, ctx, path)
-    annotated = _called(statement, plain, verb) if verb in ("LINK", "XCTL") else plain
+    annotated = (
+        _called(statement, plain, verb)
+        if verb in ("LINK", "XCTL")
+        else _filed(statement, plain)
+    )
     body = _with_arms(statement, ctx, path, annotated)
     if _suppressed(statement):
         return body
@@ -1300,7 +1317,10 @@ def _callee(statement) -> str:
     a runtime choice -- but it must not be recorded as the bare name, which claims
     a scalar the program never declared and resolves against no cell at all.
     """
-    operand = _option_operand(statement, PROGRAM_OPTION)
+    return _spelled(_option_operand(statement, PROGRAM_OPTION))
+
+
+def _spelled(operand: CicsOperand) -> str:
     if not operand.subscripts:
         return operand.text
     indices = ", ".join(_index_text(node) for node in operand.subscripts)
@@ -1350,6 +1370,29 @@ def _option_is_literal(statement, name: str) -> bool:
         if key.upper() == upper_name
     )
     return next(matches, False)
+
+
+def _file_operand(statement) -> CicsOperand:
+    """FILE, or DATASET, its older synonym, when FILE is absent."""
+    named = (_option_operand(statement, option) for option in FILE_OPTIONS)
+    return next((operand for operand in named if operand.text), NO_OPERAND)
+
+
+def _with_file(statement, node: Node) -> Node:
+    operand = _file_operand(statement)
+    if node.transfer not in FILE_TRANSFERS or not operand.text or operand.is_literal:
+        return node
+    return replace(node, file=_spelled(operand), file_operand=_ref_mod_operand(operand))
+
+
+def _filed(statement, fragment: Fragment) -> Fragment:
+    return replace(
+        fragment,
+        nodes=tuple(
+            _with_file(statement, node) if node.id == fragment.entry else node
+            for node in fragment.nodes
+        ),
+    )
 
 
 def _called(statement, fragment: Fragment, verb: str) -> Fragment:

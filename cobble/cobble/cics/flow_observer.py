@@ -30,12 +30,16 @@ class CicsVerb:
     # rather than a literal -- xctl_target carries the literal case, this one
     # the unresolved case, so a data-name is never mistaken for a program.
     program_operand: str = ""
+    # FILE(...)/DATASET(...)'s operand, as written, when it named a data item
+    # rather than a literal -- file_name carries the literal case.
+    file_operand: str = ""
 
 
 @dataclass(frozen=True)
 class DynamicSite:
-    """One EXEC CICS XCTL/LINK PROGRAM(...) operand the walk saw with no static
-    resolution -- the CICS-side half of a dynamic call site.
+    """One EXEC CICS XCTL/LINK PROGRAM(...) or file verb FILE(...)/DATASET(...)
+    operand the walk saw naming a data item -- the CICS-side half of a dynamic
+    site. ``transfer`` is the verb: XCTL, LINK, or a file verb such as READ.
 
     Surfaced as plain data rather than through the sink a CicsVerb's edges
     reach: a program-transfer edge built from it would dedupe keep-first

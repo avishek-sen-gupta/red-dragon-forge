@@ -7,7 +7,7 @@ member is named for; a batch or contained program after it is not analysed
 
 1. `cobble-extents` writes every member's declared field layout.
 2. `cobble-dataflow-fixpoint` settles each program alone: which writes reach each read, the
-   values a field can hold, and the candidates at each dynamic call site.
+   values a field can hold, and the candidates at each dynamic call or CICS file site.
 3. `cobble-dataflow-combine` links those results across programs.
 4. `cobble-dataflow-fixpoint-query` answers questions over the output.
 
@@ -62,7 +62,7 @@ cobble-dataflow-fixpoint --asg-dir ASG_DIR --out-dir OUT_DIR --extents EXTENTS
 | `--iteration-factor` | worklist budget: dequeues allowed per CFG node (default 150) |
 | `--sweeps` | run reverse-postorder passes instead, at most N. Exclusive with `--iteration-factor` |
 | `--min-coverage` | floor for the fraction of writes resolved to storage (default 0.60) |
-| `--call-targets-only` | keep only entries a dynamic call target or handed-over area depends on |
+| `--call-targets-only` | keep only entries a dynamic call target, a dynamic file name or a handed-over area depends on |
 | `--narrow-areas` | with `--call-targets-only`: of each handed-over area, track only the bytes the area-need file says some program reads |
 | `--force` | discard every finished member directory and analyse again |
 | `--max-workers` | worker processes (default 4) |
@@ -110,7 +110,7 @@ back edge too.
 | `graph.jsonl` | `FIELD` endpoint, and `(node, source extent, target extent)` | node rows carry only the id; edge rows are `FLOWS_TO` with the `node` that moved the bytes |
 | `defs.jsonl` | `(program, node, source extent)` read that feeds a write | `definers` (statements whose writes reach the read; empty for a `VALUE` or nothing), `values` (quoted literals only), `reasons` |
 | `aliases.jsonl` | call site and caller window | `caller_extent` and `callee_extent` of the shared window, or the reason none is shared and the callee it stopped on |
-| `targets.jsonl` | dynamic `CALL`/`XCTL`/`LINK` site | `caller`, `node`, `transfer`, `expression`, `candidates`, `reasons`, `dropped` (values that name no program) |
+| `targets.jsonl` | dynamic `CALL`/`XCTL`/`LINK` site, and dynamic CICS file site | `caller`, `node`, `kind` (`program` or `file`), `transfer`, `expression`, `candidates`, `reasons`, `dropped` (values that cannot name a program, or a CICS file); a file row also carries `operand`, its operand's fact (`extent`, `values`, `writers`, `reasons`), which the combine walks back from |
 | `jumps.jsonl` | jump, exit, `RETRIEVE` and entry | what it hands over: target, transaction id, areas |
 | `members/<MEMBER>/` | finished member | that member's five tables and `counts.json` |
 
@@ -149,7 +149,7 @@ asks for `--force`. `cobble-dataflow-fixpoint-query` refuses a call-targets-only
 ### Call-targets-only
 
 Before each member's walk, a backward liveness pass finds what later reads need: every dynamic
-call target, every handed-over area, and the `LINKAGE` areas read at an exit or a CICS
+call target, every dynamic file name, every handed-over area, and the `LINKAGE` areas read at an exit or a CICS
 `RETURN`. Entries that overlap nothing live are dropped. `targets.jsonl`, `jumps.jsonl` and the
 combine's results equal a full run's; `graph` and `defs` keep only rows for writes that are
 live afterwards. `counts.json` records `scope`, `tracked` and `relevant`.
@@ -184,6 +184,14 @@ against the corpus's program names.
 | `unmodelled` | a statement with no transfer of its own may have written the bytes |
 | `hop-limit` | combine only: a walk stopped at `--max-hops` crossings |
 | `readback-skipped` | combine only: `--skip-readbacks` left a `LINK` write-back unfollowed |
+
+A CICS file statement gets a row of kind `file` when its file is named by a data item:
+`READ`, `STARTBR`, `READNEXT`, `READPREV`, `WRITE`, `REWRITE`, `DELETE` or `ENDBR` with
+`FILE(...)`, or `DATASET(...)` (its older synonym) when `FILE` is absent. `transfer` is the verb
+(`CICS_READ`). A literal file is no row. A candidate is a printable value of at most eight
+characters, the CICS limit on a file name; a longer one goes to `dropped`. The reasons are the
+same as for a call target. The run report counts file sites on a line of their own:
+`fields: N dynamic file sites, N resolved to one file, N to several, N to none`.
 
 The bridge does not serialise nested programs, so a `CALL` inside a nested `PROGRAM-ID` is not
 seen.
@@ -231,7 +239,7 @@ directory or cache is exit 2, writing nothing.
 
 | File | Row | Holds |
 |---|---|---|
-| `targets.jsonl` | dynamic site | the fixpoint's row after linking, plus `outside`: programs outside the linked set known to jump into the caller |
+| `targets.jsonl` | dynamic site | the fixpoint's row after linking, plus `outside`: programs outside the linked set known to jump into the caller. A file site's name is answered across links the way a call target is, so a file name handed over in a commarea resolves |
 | `links.jsonl` | link used | `caller`, `node`, `transfer`, `callee`, `caller_extent`, `callee_extent`, `returns`, `discovered` (exists only because linking resolved its target) |
 
 The run report goes to stderr. `cobble-build --dynamic-call-targets` and

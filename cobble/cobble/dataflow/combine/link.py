@@ -24,7 +24,8 @@ from cobble.dataflow.combine.stop import Stop
 from cobble.dataflow.combine.stop_kind import StopKind
 from cobble.dataflow.fields.extent_text import NO_RANGE, ByteRange, byte_range
 from cobble.dataflow.fields.values import UnresolvedReason
-from cobble.dataflow.fixpoint.targets import ResolvedTarget, is_program_name
+from cobble.dataflow.fixpoint.target_kind import TargetKind
+from cobble.dataflow.fixpoint.targets import ResolvedTarget
 from cobble.dataflow.jumps.fact import Fact
 from cobble.dataflow.jumps.jump import Jump
 from cobble.dataflow.jumps.jump_area import JumpArea
@@ -147,18 +148,34 @@ def _program_answers(
     round_, before, jumps, index, programs = place
     return tuple(
         (
-            (program, jump.node, fact),
+            (program, node, fact),
             _fact_held(
                 world,
                 program,
-                jump.node,
+                node,
                 fact,
                 position(round_, before + number, jumps, index, programs, program),
                 closures,
             ),
         )
-        for number, jump in enumerate(tables.jumps.values(), 1)
-        for fact in (jump.target, jump.transid)
+        for number, (node, fact) in enumerate(_questions(tables), 1)
+    )
+
+
+def _questions(tables: ProgramTables) -> tuple[tuple[str, Fact], ...]:
+    """Every operand this program's round must answer: each jump's target and
+    transaction id, then each file site's operand."""
+    return (
+        *(
+            (jump.node, fact)
+            for jump in tables.jumps.values()
+            for fact in (jump.target, jump.transid)
+        ),
+        *(
+            (node, site.operand)
+            for node, site in tables.sites.items()
+            if site.kind is TargetKind.FILE
+        ),
     )
 
 
@@ -238,8 +255,8 @@ def _answer(world: _World, program: str, node: str, fact: Fact) -> Held:
     return world.answers[(program, node, fact)]
 
 
-def _names(values: frozenset[str]) -> tuple[str, ...]:
-    return tuple(sorted({v.rstrip() for v in values if is_program_name(v.rstrip())}))
+def _names(values: frozenset[str], kind: TargetKind) -> tuple[str, ...]:
+    return tuple(sorted({v.rstrip() for v in values if kind.can_name(v.rstrip())}))
 
 
 def _fact_held(
@@ -407,16 +424,20 @@ def _edges(world: _World) -> tuple[Edge, ...]:
 def _program_callees(
     world: _World, program: str, jump: Jump
 ) -> tuple[tuple[str, bool], ...]:
-    own = frozenset(_names(frozenset(jump.target.values)))
-    found = _names(_answer(world, program, jump.node, jump.target).values)
+    own = frozenset(_names(frozenset(jump.target.values), TargetKind.PROGRAM))
+    found = _names(
+        _answer(world, program, jump.node, jump.target).values, TargetKind.PROGRAM
+    )
     return tuple((name, name not in own) for name in found)
 
 
 def _transaction_callees(
     world: _World, program: str, jump: Jump
 ) -> tuple[tuple[str, bool], ...]:
-    own = frozenset(_names(frozenset(jump.transid.values)))
-    found = _names(_answer(world, program, jump.node, jump.transid).values)
+    own = frozenset(_names(frozenset(jump.transid.values), TargetKind.PROGRAM))
+    found = _names(
+        _answer(world, program, jump.node, jump.transid).values, TargetKind.PROGRAM
+    )
     return tuple(
         (world.transactions[t], t not in own) for t in found if t in world.transactions
     )
@@ -542,20 +563,33 @@ def _answered(held: Held) -> Held:
     return held_join(held, _INBOUND)
 
 
+def _operand(tables: ProgramTables, node: str) -> Fact:
+    site = tables.sites[node]
+    if site.kind is TargetKind.FILE:
+        return site.operand
+    return tables.jumps[node].target
+
+
+def _answerable(tables: ProgramTables, node: str) -> bool:
+    return node in tables.jumps or tables.sites[node].kind is TargetKind.FILE
+
+
 def _target(world: _World, program: str, node: str) -> LinkedTarget:
     tables = world.tables[program]
     site = tables.sites[node]
-    held = _answered(_answer(world, program, node, tables.jumps[node].target))
-    names = _names(held.values)
+    held = _answered(_answer(world, program, node, _operand(tables, node)))
+    names = _names(held.values, site.kind)
     return LinkedTarget(
         ResolvedTarget(
             caller=program,
             node=node,
+            kind=site.kind,
             transfer=site.transfer,
             expression=site.expression,
             candidates=names,
             reasons=_sorted_reasons(held.reasons),
             dropped=tuple(sorted({v.rstrip() for v in held.values} - set(names))),
+            operand=site.operand,
         ),
         tuple(sorted(held.outside)),
     )
@@ -591,7 +625,7 @@ def _linked(world: _World, rounds: int) -> Linked:
             _target(world, program, node)
             for program in sorted(world.tables)
             for node in sorted(world.tables[program].sites)
-            if node in world.tables[program].jumps
+            if _answerable(world.tables[program], node)
         ),
         edges=_sorted_edges(world.edges),
         report=RunReport(
