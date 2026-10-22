@@ -9,6 +9,7 @@ class TargetRow(BaseModel):
     model_config = ConfigDict(frozen=True)
     caller: str
     node: str
+    kind: str = "program"
     transfer: str
     expression: str
     candidates: tuple[str, ...]

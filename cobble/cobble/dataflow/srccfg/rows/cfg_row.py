@@ -47,6 +47,8 @@ def node_row(program: str, node: Node) -> CfgNodeRow:
         target_resolved=node.target_resolved,
         target_operand=node.target_operand,
         transfer_operand=node.transfer_operand,
+        file=node.file,
+        file_operand=node.file_operand,
         using=node.using,
         span=node.span,
         resume=node.resume,

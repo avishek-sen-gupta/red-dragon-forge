@@ -34,7 +34,9 @@ from cobble.dataflow.fixpoint.build_corpus import (
 )
 from cobble.dataflow.fixpoint.options import ITERATION_FACTOR, AnalysisOptions
 from cobble.dataflow.fixpoint.query import load
+from cobble.dataflow.fixpoint.target_kind import TargetKind
 from cobble.dataflow.fixpoint.targets import ResolvedTarget
+from cobble.dataflow.jumps.fact import Fact
 from cobble.file_location import FileLocationReason, NoFileLocation
 from cobble.knowledge_graph.graph_file import read_graph
 from cobble.knowledge_graph.graph_types import EdgeKind, GraphEdge, GraphNode, NodeKind
@@ -971,6 +973,7 @@ def test_a_dynamic_site_is_one_row_whether_or_not_it_resolved():
     resolved = ResolvedTarget(
         caller="PROGA",
         node="MAIN/3",
+        kind=TargetKind.PROGRAM,
         transfer="CICS_XCTL",
         expression="WS-PGM",
         candidates=("COSGN00C",),
@@ -978,10 +981,24 @@ def test_a_dynamic_site_is_one_row_whether_or_not_it_resolved():
     unresolved = ResolvedTarget(
         caller="PROGA",
         node="MAIN/7",
+        kind=TargetKind.PROGRAM,
         transfer="CICS_XCTL",
         expression="CDEMO-TO-PROGRAM",
         reasons=(UnresolvedReason.INBOUND_LINKAGE,),
         dropped=("",),
+    )
+    file_site = ResolvedTarget(
+        caller="PROGA",
+        node="MAIN/9",
+        kind=TargetKind.FILE,
+        transfer="CICS_READ",
+        expression="WS-FILE",
+        candidates=("USRSEC",),
+        operand=Fact(
+            extent="WS-FILE@working_storage[0:8]",
+            values=("USRSEC  ",),
+            writers=("PROGA/MAIN/2",),
+        ),
     )
 
     assert target_row(resolved) == (
@@ -990,6 +1007,7 @@ def test_a_dynamic_site_is_one_row_whether_or_not_it_resolved():
             {
                 "caller": "PROGA",
                 "node": "MAIN/3",
+                "kind": "program",
                 "transfer": "CICS_XCTL",
                 "expression": "WS-PGM",
                 "candidates": ["COSGN00C"],
@@ -999,6 +1017,22 @@ def test_a_dynamic_site_is_one_row_whether_or_not_it_resolved():
         ),
     )
     assert json.loads(target_row(unresolved)[1])["reasons"] == ["inbound-linkage"]
+    assert json.loads(target_row(file_site)[1]) == {
+        "caller": "PROGA",
+        "node": "MAIN/9",
+        "kind": "file",
+        "transfer": "CICS_READ",
+        "expression": "WS-FILE",
+        "candidates": ["USRSEC"],
+        "reasons": [],
+        "dropped": [],
+        "operand": {
+            "extent": "WS-FILE@working_storage[0:8]",
+            "values": ["USRSEC  "],
+            "writers": ["PROGA/MAIN/2"],
+            "reasons": [],
+        },
+    }
 
 
 def _two_dynamic_sites() -> dict:
@@ -1017,6 +1051,32 @@ def _two_dynamic_sites() -> dict:
                     _move("'XPROGB'", "WS-TARGET"),
                     _dynamic_link("WS-TARGET"),
                 ],
+            }
+        ],
+    }
+
+
+def _dynamic_read(field: str) -> dict:
+    """A CICS READ whose DATASET is a field, so the file is known only at run time."""
+    return {
+        "type": "EXEC_CICS",
+        "verb": "READ",
+        "options": {"DATASET": {"text": field, "is_literal": False}},
+    }
+
+
+def _call_and_file_sites() -> dict:
+    """XPROGA's two LINK sites, and a READ naming its file through the same field
+    between the MOVE and the second LINK, which may write the field back."""
+    member = _two_dynamic_sites()
+    (paragraph,) = member["paragraphs"]
+    first, move, second = paragraph["statements"]
+    return {
+        **member,
+        "paragraphs": [
+            {
+                **paragraph,
+                "statements": [first, move, _dynamic_read("WS-TARGET"), second],
             }
         ],
     }
@@ -1041,15 +1101,21 @@ def test_a_dynamic_call_site_is_published_whether_or_not_it_resolves(corpus):
 
 
 def test_the_report_states_how_dynamic_sites_resolved(corpus, caplog):
-    argv, _ = corpus({"XPROGA": _member_json(_two_dynamic_sites())})
+    argv, _ = corpus({"XPROGA": _member_json(_call_and_file_sites())})
 
     with caplog.at_level(logging.INFO):
         assert cli(argv) == 0
 
-    assert (
+    assert [
+        record.getMessage()
+        for record in caplog.records
+        if "resolved to one" in record.getMessage()
+    ] == [
         "fields: 2 dynamic call sites, 1 resolved to one program, 0 to several, "
-        "1 to none (uninitialised 1)" in caplog.text
-    )
+        "1 to none (uninitialised 1)",
+        "fields: 1 dynamic file sites, 1 resolved to one file, 0 to several, "
+        "0 to none",
+    ]
 
 
 def test_the_two_alias_counts_can_both_hold_one_site(corpus, caplog):

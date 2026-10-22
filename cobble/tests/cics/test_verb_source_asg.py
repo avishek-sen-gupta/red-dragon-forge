@@ -102,3 +102,37 @@ def test_a_field_with_a_value_clause_is_still_not_resolved() -> None:
     assert _transfer_operands(
         "EXEC CICS XCTL PROGRAM(WS-ABEND-PGM) END-EXEC", (ws_abend_pgm,)
     ) == ("", "WS-ABEND-PGM")
+
+
+def _file_operands(text: str, data_fields: tuple = ()) -> tuple[str, str, str]:
+    """A file verb's operand, as (verb, file_name, file_operand)."""
+    stmt = _parse_under_production_dialects(
+        {"type": "EXEC_CICS", "exec_cics_text": text}
+    )
+    assert isinstance(stmt, ExecCicsStatement)
+    verb = _statement_to_verb(stmt, "SOMEPROG", list(data_fields))
+    assert verb is not None
+    return (verb.verb, verb.file_name, verb.file_operand)
+
+
+def test_a_file_named_by_a_data_item_is_carried_unresolved_even_with_a_value() -> None:
+    """A literal FILE(...) is the whole answer. A data item is carried as
+    file_operand for the dataflow to answer, whatever VALUE it declares, since a
+    MOVE may overwrite it before the statement runs; DATASET is FILE's older
+    spelling."""
+    ws_file = CobolField(
+        name="WS-USRSEC-FILE",
+        level=1,
+        pic="X(8)",
+        usage="DISPLAY",
+        offset=0,
+        value="USRSEC",
+        value_is_figurative=False,
+    )
+    assert _file_operands(
+        "EXEC CICS READ FILE('ACCTDAT') INTO(WS-REC) RIDFLD(WS-KEY) END-EXEC"
+    ) == ("READ", "ACCTDAT", "")
+    assert _file_operands(
+        "EXEC CICS READ DATASET(WS-USRSEC-FILE) INTO(WS-REC) RIDFLD(WS-KEY) END-EXEC",
+        (ws_file,),
+    ) == ("READ", "", "WS-USRSEC-FILE")

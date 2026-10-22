@@ -35,7 +35,7 @@ import logging
 import sys
 from collections import Counter
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import partial
 from itertools import chain
 from pathlib import Path
@@ -44,6 +44,10 @@ from types import MappingProxyType
 import networkx as nx
 from cics.csd_parse import CsdParseError, parse_csd
 from cobble.cics.asg_dialect_scope import asg_dialect_parsers_registered
+from cobble.cics.flow_graph_core import (
+    VSAM_FILE_CANDIDATE_EDGE_KIND,
+    VSAM_FILE_EDGE_KIND,
+)
 from cobble.cics.flow_map import FlowExtraction, extract_transaction_flow_graph
 from cobble.cics.flow_observer import DynamicSite
 from cobble.cics.graph_sink import GraphSink
@@ -56,6 +60,7 @@ from cobble.corpus_index_builder import build_corpus_index
 from cobble.dataflow.fields.emit_extents import worker_count
 from cobble.dataflow.fixpoint.rows import Row, strings, text
 from cobble.dataflow.fixpoint.rows import read as read_targets
+from cobble.dataflow.fixpoint.target_kind import TargetKind
 from cobble.dynamic_call_targets import NO_DYNAMIC_CALL_TARGETS, DynamicCallTargets
 from cobble.jcl.cobol_file_graph import file_accesses, file_graph
 from cobble.jcl.file_accesses import FileAccesses
@@ -328,6 +333,7 @@ _ORDINARY: Mapping[str, EdgeKind] = MappingProxyType(
         "CICS_XCTL": EdgeKind.XCTL,
         "CICS_LINK": EdgeKind.LINK,
         "CALL": EdgeKind.CALL,
+        **{f"CICS_{verb}": kind for verb, kind in VSAM_FILE_EDGE_KIND.items()},
     }
 )
 
@@ -338,14 +344,23 @@ _CANDIDATE: Mapping[str, EdgeKind] = MappingProxyType(
         "CICS_XCTL": EdgeKind.XCTL_CANDIDATE,
         "CICS_LINK": EdgeKind.LINK_CANDIDATE,
         "CALL": EdgeKind.CALL_CANDIDATE,
+        **{
+            f"CICS_{verb}": kind for verb, kind in VSAM_FILE_CANDIDATE_EDGE_KIND.items()
+        },
     }
 )
 
-# CicsVerb spells XCTL/LINK without the CICS_ prefix targets.jsonl's
-# ``transfer`` column carries; only these two verbs reach _not_attempted_graph,
-# since a dynamic COBOL CALL is invisible to the walk that fills it.
+# CicsVerb spells XCTL/LINK and the file verbs without the CICS_ prefix
+# targets.jsonl's ``transfer`` column carries; only these verbs reach
+# _not_attempted_graph, since a dynamic COBOL CALL is invisible to the walk that
+# fills it.
 _CICS_TRANSFER: Mapping[str, EdgeKind] = MappingProxyType(
-    {"XCTL": EdgeKind.XCTL, "LINK": EdgeKind.LINK}
+    {"XCTL": EdgeKind.XCTL, "LINK": EdgeKind.LINK, **VSAM_FILE_EDGE_KIND}
+)
+
+# What a resolved name of each kind of site points at.
+_NAMED_KIND: Mapping[TargetKind, NodeKind] = MappingProxyType(
+    {TargetKind.PROGRAM: NodeKind.PROGRAM, TargetKind.FILE: NodeKind.CICS_FILE}
 )
 
 # A graph-level value the lattice never produces -- nothing in the analysis
@@ -377,46 +392,77 @@ def _dynamic_target_node(
     )
 
 
-def _ordinary_target(
-    caller: str, transfer: str, candidate: str, corpus_index: CorpusIndex
-) -> _DynamicGraph:
-    """Exactly one candidate and no doubt: a proven CALL/XCTL/LINK edge."""
-    return (
-        (_program_node(candidate, corpus_index),),
-        (_ref_edge(caller, candidate, NodeKind.PROGRAM, _ORDINARY[transfer]),),
+@dataclass(frozen=True)
+class _RowSite:
+    """One targets.jsonl row's site: who names it, by which statement, and whether
+    it names a program or a CICS file."""
+
+    caller: str
+    transfer: str
+    kind: TargetKind
+
+
+def _row_site(row: Row) -> _RowSite:
+    return _RowSite(
+        caller=text(row, "caller"),
+        transfer=text(row, "transfer"),
+        kind=TargetKind(text(row, "kind", TargetKind.PROGRAM.value)),
     )
+
+
+def _named_node(site: _RowSite, name: str, corpus_index: CorpusIndex) -> GraphNode:
+    return _ref_node(name, _NAMED_KIND[site.kind], corpus_index)
+
+
+def _ordinary_target(
+    site: _RowSite, candidate: str, corpus_index: CorpusIndex
+) -> _DynamicGraph:
+    """Exactly one candidate and no doubt: a proven edge to the program or file."""
+    node = _named_node(site, candidate, corpus_index)
+    return (
+        (node,),
+        (_ref_edge(site.caller, node.id, node.kind, _ORDINARY[site.transfer]),),
+    )
+
+
+def _candidate_edge(
+    site: _RowSite, node: GraphNode, reasons: Sequence[str]
+) -> GraphEdge:
+    """A file candidate carries why it is not proven; a call candidate does not."""
+    edge = _ref_edge(site.caller, node.id, node.kind, _CANDIDATE[site.transfer])
+    if site.kind is not TargetKind.FILE:
+        return edge
+    return replace(edge, attrs={"reasons": ", ".join(reasons)})
 
 
 def _candidate_targets(
-    caller: str, transfer: str, candidates: Sequence[str], corpus_index: CorpusIndex
+    site: _RowSite,
+    candidates: Sequence[str],
+    reasons: Sequence[str],
+    corpus_index: CorpusIndex,
 ) -> _DynamicGraph:
     """Two or more candidates, or one carrying doubt: one *_CANDIDATE edge each."""
-    kind = _CANDIDATE[transfer]
-    return (
-        tuple(_program_node(candidate, corpus_index) for candidate in candidates),
-        tuple(
-            _ref_edge(caller, candidate, NodeKind.PROGRAM, kind)
-            for candidate in candidates
-        ),
-    )
+    nodes = tuple(_named_node(site, name, corpus_index) for name in candidates)
+    return nodes, tuple(_candidate_edge(site, node, reasons) for node in nodes)
 
 
 def _no_candidate_target(
-    caller: str,
-    transfer: str,
-    expression: str,
-    reasons: Sequence[str],
-    dropped: Sequence[str],
-    corpus_index: CorpusIndex,
+    site: _RowSite, row: Row, corpus_index: CorpusIndex
 ) -> _DynamicGraph:
     """No candidate survived: a proven transfer to a DYNAMIC_TARGET node, which
     carries why -- the reasons, or (candidates and reasons both empty) the
     dropped values that explain it on their own."""
     node = _dynamic_target_node(
-        caller, expression, ", ".join(reasons), dropped, corpus_index
+        site.caller,
+        text(row, "expression"),
+        ", ".join(strings(row, "reasons")),
+        strings(row, "dropped"),
+        corpus_index,
     )
     return (node,), (
-        _ref_edge(caller, node.id, NodeKind.DYNAMIC_TARGET, _ORDINARY[transfer]),
+        _ref_edge(
+            site.caller, node.id, NodeKind.DYNAMIC_TARGET, _ORDINARY[site.transfer]
+        ),
     )
 
 
@@ -427,22 +473,14 @@ def _row_target(row: Row, corpus_index: CorpusIndex) -> _DynamicGraph:
     candidate: a walk that did not settle yields a subset, so a singleton
     carrying a reason may have a second candidate the walk never reached.
     """
-    caller = text(row, "caller")
-    transfer = text(row, "transfer")
+    site = _row_site(row)
     candidates = strings(row, "candidates")
     reasons = strings(row, "reasons")
     if len(candidates) == 1 and not reasons:
-        return _ordinary_target(caller, transfer, candidates[0], corpus_index)
+        return _ordinary_target(site, candidates[0], corpus_index)
     if candidates:
-        return _candidate_targets(caller, transfer, candidates, corpus_index)
-    return _no_candidate_target(
-        caller,
-        transfer,
-        text(row, "expression"),
-        reasons,
-        strings(row, "dropped"),
-        corpus_index,
-    )
+        return _candidate_targets(site, candidates, reasons, corpus_index)
+    return _no_candidate_target(site, row, corpus_index)
 
 
 def dynamic_target_graph(
@@ -499,29 +537,39 @@ def _operand_name(expression: str) -> str:
     return expression.split("(", 1)[0].strip()
 
 
-def _site(caller: str, expression: str) -> tuple[str, str]:
-    return caller, _operand_name(expression)
+def _site(caller: str, expression: str, kind: TargetKind) -> tuple[str, str, str]:
+    return caller, _operand_name(expression), kind.value
 
 
-def _covered_sites(targets: DynamicCallTargets) -> frozenset[tuple[str, str]]:
-    """Every (caller, operand) the dynamic-call-targets table answers for.
+def _dynamic_site_kind(site: DynamicSite) -> TargetKind:
+    return (
+        TargetKind.FILE if site.transfer in VSAM_FILE_EDGE_KIND else TargetKind.PROGRAM
+    )
+
+
+def _covered_sites(targets: DynamicCallTargets) -> frozenset[tuple[str, str, str]]:
+    """Every (caller, operand, kind) the dynamic-call-targets table answers for.
 
     Matched on the operand and not on the CFG node id: a row carries the node the
     fixpoint's own CFG named, and the CICS walk knows a site by the program and the
     operand alone. A caller writing one operand at several sites is answered by one
-    entry, which is how the DYNAMIC_TARGET id is scoped too.
+    entry, which is how the DYNAMIC_TARGET id is scoped too. The kind keeps a file
+    row from answering a call naming its program through the same field.
     """
     return frozenset(
-        _site(text(row, "caller"), text(row, "expression")) for row in targets.rows
+        _site(text(row, "caller"), text(row, "expression"), _row_site(row).kind)
+        for row in targets.rows
     )
 
 
 def _unanswered_sites(
-    sites: Sequence[DynamicSite], covered: frozenset[tuple[str, str]]
+    sites: Sequence[DynamicSite], covered: frozenset[tuple[str, str, str]]
 ) -> tuple[DynamicSite, ...]:
     """The sites no row in the table speaks for."""
     return tuple(
-        site for site in sites if _site(site.program, site.expression) not in covered
+        site
+        for site in sites
+        if _site(site.program, site.expression, _dynamic_site_kind(site)) not in covered
     )
 
 

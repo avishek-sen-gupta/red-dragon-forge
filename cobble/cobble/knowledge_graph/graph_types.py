@@ -93,6 +93,14 @@ class EdgeKind(Enum):
     UPDATES = "UPDATES"
     DELETES = "DELETES"
     ENDS_BROWSE = "ENDS_BROWSE"
+    # A CICS file statement naming its file through a data item, with two or
+    # more candidate files, or one the analysis could not fully vouch for.
+    # Distinct from READS..ENDS_BROWSE for the reason the call candidates are.
+    READS_CANDIDATE = "READS_CANDIDATE"
+    WRITES_CANDIDATE = "WRITES_CANDIDATE"
+    UPDATES_CANDIDATE = "UPDATES_CANDIDATE"
+    DELETES_CANDIDATE = "DELETES_CANDIDATE"
+    ENDS_BROWSE_CANDIDATE = "ENDS_BROWSE_CANDIDATE"
     # CICS_FILE -> DATASET, from a CSD's DEFINE FILE(name) ... DSNAME(...).
     DEFINES_DATASET = "DEFINES_DATASET"
     # FIELD -> FIELD, from field-level byte dataflow: the source's bytes reach

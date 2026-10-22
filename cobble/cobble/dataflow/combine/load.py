@@ -13,6 +13,7 @@ from cobble.dataflow.combine.target_site import TargetSite
 from cobble.dataflow.fields.extent_text import ByteRange, byte_range
 from cobble.dataflow.fields.values import UnresolvedReason
 from cobble.dataflow.fixpoint import rows
+from cobble.dataflow.fixpoint.target_kind import TargetKind
 from cobble.dataflow.jumps.fact import Fact
 from cobble.dataflow.jumps.jump import Jump
 from cobble.dataflow.jumps.jump_kind import JumpKind
@@ -50,6 +51,44 @@ def _def_facts(
             (byte_range(rows.text(row, "extent"), program), _def_fact(row)),
         )
         for row in rows.read(member / "defs.jsonl")
+    )
+
+
+def _operand_fact(row: rows.Row) -> Fact:
+    operand = rows.nested(row, "operand")
+    return Fact(
+        extent=rows.text(operand, "extent"),
+        values=rows.strings(operand, "values"),
+        writers=rows.strings(operand, "writers"),
+        reasons=tuple(UnresolvedReason(r) for r in rows.strings(operand, "reasons")),
+    )
+
+
+def _site(row: rows.Row) -> TargetSite:
+    return TargetSite(
+        transfer=rows.text(row, "transfer"),
+        expression=rows.text(row, "expression"),
+        kind=TargetKind(rows.text(row, "kind", TargetKind.PROGRAM.value)),
+        operand=_operand_fact(row),
+    )
+
+
+def _sites(member: Path) -> Mapping[str, TargetSite]:
+    return MappingProxyType(
+        {
+            rows.text(row, "node"): _site(row)
+            for row in rows.read(member / "targets.jsonl")
+        }
+    )
+
+
+def _site_facts(
+    sites: Mapping[str, TargetSite], program: str
+) -> tuple[tuple[str, tuple[ByteRange, Fact]], ...]:
+    return tuple(
+        (node, (byte_range(site.operand.extent, program), site.operand))
+        for node, site in sites.items()
+        if site.operand.extent
     )
 
 
@@ -92,12 +131,14 @@ def load_tables(fixpoint_dir: Path, program: str) -> ProgramTables:
     jumps = _jumps(member)
     entries = tuple(jump for jump in jumps if jump.kind is JumpKind.ENTRY)
     real = tuple(jump for jump in jumps if jump.kind is not JumpKind.ENTRY)
+    sites = _sites(member)
     return ProgramTables(
         program=program,
         facts=_grouped(
             (
                 *_def_facts(member, program),
                 *(f for jump in real for f in _jump_facts(jump)),
+                *_site_facts(sites, program),
             )
         ),
         flows=_grouped(_flows(member, program)),
@@ -107,12 +148,5 @@ def load_tables(fixpoint_dir: Path, program: str) -> ProgramTables:
             for entry in entries[:1]
             for area in entry.areas
         ),
-        sites=MappingProxyType(
-            {
-                rows.text(row, "node"): TargetSite(
-                    rows.text(row, "transfer"), rows.text(row, "expression")
-                )
-                for row in rows.read(member / "targets.jsonl")
-            }
-        ),
+        sites=sites,
     )

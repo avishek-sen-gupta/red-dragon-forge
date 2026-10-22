@@ -126,10 +126,10 @@ def _transfer_verb(stmt: ExecCicsStatement, program: str, _data_fields):
     match stmt.options.get("PROGRAM"):
         case None:
             return _verb(stmt.verb, program)
-        case operand if operand.is_literal:
-            return _verb(stmt.verb, program, xctl_target=operand.text)
-        case operand:
-            return _verb(stmt.verb, program, program_operand=operand.text)
+        case literal if literal.is_literal:
+            return _verb(stmt.verb, program, xctl_target=literal.text)
+        case named:
+            return _verb(stmt.verb, program, program_operand=named.text)
 
 
 def _map_verb(stmt: ExecCicsStatement, program: str, data_fields):
@@ -146,17 +146,21 @@ def _map_verb(stmt: ExecCicsStatement, program: str, data_fields):
     )
 
 
-def _file_verb(stmt: ExecCicsStatement, program: str, data_fields):
-    """The VSAM point and browse verbs, with DATASET as the older spelling of FILE."""
-    options = stmt.options
-    return _verb(
-        stmt.verb,
-        program,
-        file_name=_resolve_operand(
-            options.get("FILE") or options.get("DATASET"), data_fields
-        )
-        or "",
-    )
+def _file_verb(stmt: ExecCicsStatement, program: str, _data_fields):
+    """The VSAM point and browse verbs, with DATASET as the older spelling of FILE.
+
+    Like PROGRAM, FILE is not resolved through ``_resolve_operand``: a VALUE may be
+    overwritten before the statement runs. A literal is the whole answer, carried
+    as ``file_name``; a data item is carried unresolved, as ``file_operand``, for
+    the dataflow analysis (or its absence) to answer.
+    """
+    match stmt.options.get("FILE") or stmt.options.get("DATASET"):
+        case None:
+            return _verb(stmt.verb, program)
+        case literal if literal.is_literal:
+            return _verb(stmt.verb, program, file_name=literal.text)
+        case named:
+            return _verb(stmt.verb, program, file_operand=named.text)
 
 
 _FILE_VERBS = (
@@ -209,19 +213,25 @@ def _program_edges(verbs, bms_mapsets):
 
 
 def _program_dynamic_sites(verbs) -> tuple[DynamicSite, ...]:
-    """Every XCTL/LINK the program named a data item for, rather than a literal.
+    """Every XCTL/LINK, and every file verb, the program named a data item for,
+    rather than a literal.
 
     Not carried as edges: build_graph reads this only when there is no
     targets.jsonl to resolve these sites instead, and it decides that once for
     the whole corpus, not per verb.
     """
     return tuple(
-        DynamicSite(
-            program=verb.program, transfer=verb.verb, expression=verb.program_operand
-        )
+        DynamicSite(program=verb.program, transfer=verb.verb, expression=operand)
         for verb in verbs
-        if verb.verb in _TRANSFER_VERBS and verb.program_operand
+        for operand in (_dynamic_operand(verb),)
+        if operand
     )
+
+
+def _dynamic_operand(verb) -> str:
+    if verb.verb in _TRANSFER_VERBS:
+        return verb.program_operand
+    return verb.file_operand
 
 
 @dataclasses.dataclass(frozen=True)

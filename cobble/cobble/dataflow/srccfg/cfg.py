@@ -115,6 +115,8 @@ class Node:
     target_resolved: bool = True
     target_operand: RefModOperand = NO_TARGET_OPERAND
     transfer_operand: str = ""
+    file: str = ""
+    file_operand: RefModOperand = NO_TARGET_OPERAND
     using: tuple[UsingArgument, ...] = ()
     span: SourceSpan = NO_SPAN
     resume: str = ""

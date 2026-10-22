@@ -100,7 +100,7 @@ cobble-build --config CONFIG --output OUTPUT [--dynamic-call-targets FILE]
 |---|---|
 | `--config` | corpus config |
 | `--output` | the graph file: one JSON line per node and per edge, tagged `"type": "node"` or `"type": "edge"` |
-| `--dynamic-call-targets` | a `targets.jsonl` from `cobble-dataflow-fixpoint` or `cobble-dataflow-combine`. Without it, no dynamic-target edges. A named file that does not exist stops the build before it starts |
+| `--dynamic-call-targets` | a `targets.jsonl` from `cobble-dataflow-fixpoint` or `cobble-dataflow-combine`. Without it, each dynamic `XCTL`/`LINK` or CICS file site the extractor sees gets a not-attempted edge, and a dynamic `CALL` none. A named file that does not exist stops the build before it starts |
 
 Requires `JCL_BRIDGE_JAR`. Runs four extractors: JCL, `CALL`/`COPY`, CICS flow, and batch
 `FILE-CONTROL`. The CICS flow and `FILE-CONTROL` extractors read ASGs from `asg_dir`:
@@ -120,6 +120,16 @@ Each `targets.jsonl` row becomes edges by this rule:
 | exactly one | none | one `CALL`/`XCTL`/`LINK` edge to the `PROGRAM` |
 | one or more | any | one `CALL_CANDIDATE`/`XCTL_CANDIDATE`/`LINK_CANDIDATE` edge per candidate |
 | none | | one edge to a `DYNAMIC_TARGET` node carrying the reasons or dropped values |
+
+A row of kind `file` follows the same rule against `CICS_FILE` nodes, with the verb's edge
+kind: `READS` (`READ`, `STARTBR`, `READNEXT`, `READPREV`), `WRITES`, `UPDATES` (`REWRITE`),
+`DELETES`, `ENDS_BROWSE` (`ENDBR`), and their `*_CANDIDATE` forms. A file candidate edge carries
+its `reasons`; a call candidate edge carries none. A literal `FILE(...)` is an ordinary edge from
+the CICS flow extractor. A file named by a data item never takes its `VALUE` clause: it gets its
+edge from this table, or, when no row covers it, a not-attempted edge like a dynamic `XCTL`'s: an
+edge of the verb's ordinary kind to a `DYNAMIC_TARGET` whose reason is `not-attempted`.
+Coverage is matched on the caller, the operand and the kind, so a file row never answers a call
+naming its program through the same field.
 
 A `DYNAMIC_TARGET` id is `<program>.<expression>`, scoped to the program that names it.
 

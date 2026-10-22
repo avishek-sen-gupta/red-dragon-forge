@@ -20,7 +20,7 @@ from cobble.knowledge_graph.graph_types import EdgeKind, GraphEdge, NodeKind
 
 # Which edge each verb yields, grouped by what the edge points at. A verb absent
 # from all four tables is one the graph does not read.
-_VSAM_FILE_EDGE_KIND: dict[str, EdgeKind] = {
+VSAM_FILE_EDGE_KIND: dict[str, EdgeKind] = {
     "READ": EdgeKind.READS,
     "WRITE": EdgeKind.WRITES,
     "REWRITE": EdgeKind.UPDATES,
@@ -29,6 +29,18 @@ _VSAM_FILE_EDGE_KIND: dict[str, EdgeKind] = {
     "READNEXT": EdgeKind.READS,
     "READPREV": EdgeKind.READS,
     "ENDBR": EdgeKind.ENDS_BROWSE,
+}
+
+# The same verbs, for the kind an edge earns when the file is a candidate only.
+VSAM_FILE_CANDIDATE_EDGE_KIND: dict[str, EdgeKind] = {
+    "READ": EdgeKind.READS_CANDIDATE,
+    "WRITE": EdgeKind.WRITES_CANDIDATE,
+    "REWRITE": EdgeKind.UPDATES_CANDIDATE,
+    "DELETE": EdgeKind.DELETES_CANDIDATE,
+    "STARTBR": EdgeKind.READS_CANDIDATE,
+    "READNEXT": EdgeKind.READS_CANDIDATE,
+    "READPREV": EdgeKind.READS_CANDIDATE,
+    "ENDBR": EdgeKind.ENDS_BROWSE_CANDIDATE,
 }
 
 _PROGRAM_EDGE_KIND: dict[str, EdgeKind] = {
@@ -77,7 +89,7 @@ def _file_edge(
     verb: CicsVerb, _bms_mapsets: Mapping[str, BmsMapSet]
 ) -> tuple[GraphEdge, ...]:
     """The VSAM point and browse verbs, which name a CICS file."""
-    if verb.verb not in _VSAM_FILE_EDGE_KIND or not verb.file_name:
+    if verb.verb not in VSAM_FILE_EDGE_KIND or not verb.file_name:
         return ()
     return (
         GraphEdge(
@@ -85,7 +97,7 @@ def _file_edge(
             source_kind=NodeKind.PROGRAM,
             target=verb.file_name.upper(),
             target_kind=NodeKind.CICS_FILE,
-            kind=_VSAM_FILE_EDGE_KIND[verb.verb],
+            kind=VSAM_FILE_EDGE_KIND[verb.verb],
         ),
     )
 
