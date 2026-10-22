@@ -8,13 +8,14 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
-from cobble.dataflow.fields.trace_query import load
+from cobble.dataflow.fields.trace_query import DepRow, load
 from cobble.experimental.partition.barrier_kind import BarrierKind
 from cobble.experimental.partition.extent_row import ExtentRow
 from cobble.experimental.partition.graph_build import field_graph
 from cobble.experimental.partition.graph_file import write_graph
-from cobble.experimental.partition.leaf_index import leaf_index
+from cobble.experimental.partition.leaf_index import LeafIndex, leaf_index
 from cobble.experimental.partition.link_row import LinkRow
+from cobble.experimental.partition.progress import counted
 
 logger = logging.getLogger(__name__)
 
@@ -65,21 +66,37 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _deps(traces: Sequence[Path]) -> tuple[DepRow, ...]:
+    return tuple(
+        dep
+        for trace in counted(traces, "traces read", len(traces))
+        for dep in load(trace)
+    )
+
+
+def _links(path: Path) -> tuple[LinkRow, ...]:
+    if path == Path():
+        return ()
+    return tuple(LinkRow.model_validate_json(line) for line in _lines(path))
+
+
+def _index(path: Path) -> LeafIndex:
+    extents = _lines(path)
+    return leaf_index(
+        ExtentRow.model_validate_json(line)
+        for line in counted(extents, "extent rows indexed", len(extents))
+    )
+
+
 def main(argv: Sequence[str] = ()) -> int:
     configure_cli_logging()
     arguments = _parser().parse_args(tuple(argv) if argv else None)
     traces = tuple(sorted(arguments.traces.glob("*.jsonl")))
-    deps = tuple(dep for trace in traces for dep in load(trace))
-    links = (
-        tuple(LinkRow.model_validate_json(line) for line in _lines(arguments.links))
-        if arguments.links != Path()
-        else ()
-    )
-    index = leaf_index(
-        ExtentRow.model_validate_json(line) for line in _lines(arguments.extents)
-    )
+    deps = _deps(traces)
+    links = _links(arguments.links)
     barrier = arguments.barrier.barrier(arguments.fanout_limit)
-    graph = field_graph(index, deps, links, barrier)
+    graph = field_graph(_index(arguments.extents), deps, links, barrier)
+    logger.info("partition graph: writing %s", arguments.out)
     write_graph(arguments.out, graph)
     logger.info(
         "partition graph: %d traces, %d dep rows, %d links -> %d nodes, %d edges (%d blocked by %s) in %s",

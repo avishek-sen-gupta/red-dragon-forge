@@ -1,0 +1,24 @@
+"""A long pass over rows logs how far it has got."""
+
+from __future__ import annotations
+
+import logging
+
+import pytest
+
+from cobble.experimental.partition.progress import PROGRESS_EVERY, counted
+
+
+def test_a_counted_pass_yields_every_item_and_logs_each_thousand(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    items = tuple(range(2 * PROGRESS_EVERY + 1))
+
+    with caplog.at_level(logging.INFO):
+        assert tuple(counted(items, "dep rows", len(items))) == items
+
+    assert [record.getMessage() for record in caplog.records] == [
+        f"partition graph: dep rows {PROGRESS_EVERY}/{len(items)}",
+        f"partition graph: dep rows {2 * PROGRESS_EVERY}/{len(items)}",
+        f"partition graph: dep rows {len(items)}/{len(items)} done",
+    ]
