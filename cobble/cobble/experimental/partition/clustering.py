@@ -56,7 +56,6 @@ def cluster_set(graph: FieldGraph, split_at: int) -> ClusterSet:
     )
     grouped = {member for _, members in found for member in members}
     return ClusterSet(
-        barrier=graph.barrier,
         clusters=tuple(
             Cluster(
                 id=i, component=component, program=fields[members[0]], members=members

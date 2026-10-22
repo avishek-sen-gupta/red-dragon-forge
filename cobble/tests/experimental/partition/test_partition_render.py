@@ -33,11 +33,11 @@ def _edge(source: str, target: str, *, clustered: bool = True) -> GraphEdge:
         sites=2,
         clustered=clustered,
         cross_program=False,
+        barrier="fanout-8",
     )
 
 
 GRAPH = FieldGraph(
-    barrier="fanout-8",
     nodes=(
         *(_field(name) for name in "ABCDE"),
         GraphNode(id="P|sink|MAP:M", kind=NodeKind.SINK, label="P MAP:M", program="P"),
@@ -99,6 +99,7 @@ def test_the_page_embeds_the_graph_with_each_field_s_component_and_cluster() -> 
             "sites": 2,
             "clustered": e.clustered,
             "cross_program": False,
+            "barrier": "fanout-8",
         }
         for e in GRAPH.edges
     ]
@@ -107,7 +108,6 @@ def test_the_page_embeds_the_graph_with_each_field_s_component_and_cluster() -> 
 def test_linked_groups_are_packed_without_overlapping() -> None:
     chains = (("A", "B", "C", "D", "E", "F"), ("G", "H"), ("I", "J"))
     graph = FieldGraph(
-        barrier="fanout-8",
         nodes=tuple(_field(name) for chain in chains for name in chain),
         edges=tuple(
             _edge(f"P:REC.{a}", f"P:REC.{b}")

@@ -68,7 +68,7 @@ def cluster_report(graph: FieldGraph, clusters: ClusterSet) -> str:
         (index, tuple(group)) for index, group in groupby(clusters.clusters, _component)
     )
     lines = (
-        f"# Field partitions (barrier {clusters.barrier})",
+        f"# Field partitions (barrier {graph.barrier})",
         "",
         f"{_count(len(components), 'component')} of 2+ fields, "
         f"{_count(len(clusters.clusters), 'cluster')}, "

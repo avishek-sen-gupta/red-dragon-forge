@@ -1,4 +1,4 @@
-"""The field graph as one value, and as the file the graph stage writes."""
+"""The field graph as one value."""
 
 from __future__ import annotations
 
@@ -8,10 +8,13 @@ from pydantic import BaseModel, ConfigDict
 
 
 class FieldGraph(BaseModel):
-    """Every node and edge, and the barrier that decided which edges clustering crosses."""
+    """Every node and edge."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    barrier: str
     nodes: tuple[GraphNode, ...]
     edges: tuple[GraphEdge, ...]
+
+    @property
+    def barrier(self) -> str:
+        return ", ".join(sorted({edge.barrier for edge in self.edges}))

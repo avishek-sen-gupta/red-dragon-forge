@@ -27,6 +27,7 @@ def _edge(source: str, target: str, *, clustered: bool = True) -> GraphEdge:
         sites=1,
         clustered=clustered,
         cross_program=source.split(":")[0] != target.split(":")[0],
+        barrier="fanout-8",
     )
 
 
@@ -35,7 +36,6 @@ ORIGIN = GraphNode(
 )
 
 GRAPH = FieldGraph(
-    barrier="fanout-8",
     nodes=(
         _field("P", "A"),
         _field("P", "B"),
@@ -65,7 +65,6 @@ def _two_cliques() -> FieldGraph:
         for b in side[i + 1 :]
     )
     return FieldGraph(
-        barrier="none",
         nodes=(*left, *right),
         edges=(*within, _edge(left[0].id, right[0].id)),
     )
@@ -78,7 +77,6 @@ def test_components_are_bounded_by_program_and_by_blocked_edges() -> None:
         (0, 0, "P", ("P:OUT.C", "P:REC.A", "P:REC.B")),
     ]
     assert clusters.isolated == ("P:REC.D", "Q:REC.E")
-    assert clusters.barrier == "fanout-8"
 
 
 def test_a_component_at_the_split_size_is_divided_into_communities() -> None:

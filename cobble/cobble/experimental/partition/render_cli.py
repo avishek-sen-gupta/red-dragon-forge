@@ -9,8 +9,8 @@ from pathlib import Path
 
 import cobble.knowledge_graph
 from cobble.cli_logging import configure_cli_logging
-from cobble.experimental.partition.cluster_set import ClusterSet
-from cobble.experimental.partition.field_graph import FieldGraph
+from cobble.experimental.partition.cluster_file import read_clusters
+from cobble.experimental.partition.graph_file import read_graph
 from cobble.experimental.partition.page import page
 
 logger = logging.getLogger(__name__)
@@ -45,10 +45,8 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] = ()) -> int:
     configure_cli_logging()
     arguments = _parser().parse_args(tuple(argv) if argv else None)
-    graph = FieldGraph.model_validate_json(arguments.graph.read_text(encoding="utf-8"))
-    clusters = ClusterSet.model_validate_json(
-        arguments.clusters.read_text(encoding="utf-8")
-    )
+    graph = read_graph(arguments.graph)
+    clusters = read_clusters(arguments.clusters)
     scripts = tuple(script.read_text(encoding="utf-8") for script in SCRIPTS)
     arguments.out.write_text(page(graph, clusters, scripts), encoding="utf-8")
     logger.info("partition render: %d nodes -> %s", len(graph.nodes), arguments.out)

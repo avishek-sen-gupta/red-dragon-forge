@@ -8,9 +8,10 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
+from cobble.experimental.partition.cluster_file import write_clusters
 from cobble.experimental.partition.cluster_report import cluster_report
 from cobble.experimental.partition.clustering import cluster_set
-from cobble.experimental.partition.field_graph import FieldGraph
+from cobble.experimental.partition.graph_file import read_graph
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,7 @@ def _parser() -> argparse.ArgumentParser:
         help="components of at least this many fields are split into Louvain communities",
     )
     parser.add_argument(
-        "--out", type=Path, required=True, help="the clusters JSON to write"
+        "--out", type=Path, required=True, help="the clusters JSONL to write"
     )
     parser.add_argument(
         "--report", type=Path, required=True, help="the markdown report to write"
@@ -46,9 +47,9 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] = ()) -> int:
     configure_cli_logging()
     arguments = _parser().parse_args(tuple(argv) if argv else None)
-    graph = FieldGraph.model_validate_json(arguments.graph.read_text(encoding="utf-8"))
+    graph = read_graph(arguments.graph)
     clusters = cluster_set(graph, arguments.split_at)
-    arguments.out.write_text(clusters.model_dump_json(), encoding="utf-8")
+    write_clusters(arguments.out, clusters)
     arguments.report.write_text(cluster_report(graph, clusters), encoding="utf-8")
     logger.info(
         "partition clusters: %d clusters, %d isolated fields -> %s, %s",

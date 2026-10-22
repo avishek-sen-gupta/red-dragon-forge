@@ -12,6 +12,7 @@ from cobble.dataflow.fields.trace_query import load
 from cobble.experimental.partition.barrier_kind import BarrierKind
 from cobble.experimental.partition.extent_row import ExtentRow
 from cobble.experimental.partition.graph_build import field_graph
+from cobble.experimental.partition.graph_file import write_graph
 from cobble.experimental.partition.leaf_index import leaf_index
 from cobble.experimental.partition.link_row import LinkRow
 
@@ -59,7 +60,7 @@ def _parser() -> argparse.ArgumentParser:
         help="partners one field may have in one statement before the fanout barrier blocks it",
     )
     parser.add_argument(
-        "--out", type=Path, required=True, help="the graph JSON to write"
+        "--out", type=Path, required=True, help="the graph JSONL to write"
     )
     return parser
 
@@ -77,10 +78,9 @@ def main(argv: Sequence[str] = ()) -> int:
     index = leaf_index(
         ExtentRow.model_validate_json(line) for line in _lines(arguments.extents)
     )
-    graph = field_graph(
-        index, deps, links, arguments.barrier.barrier(arguments.fanout_limit)
-    )
-    arguments.out.write_text(graph.model_dump_json(), encoding="utf-8")
+    barrier = arguments.barrier.barrier(arguments.fanout_limit)
+    graph = field_graph(index, deps, links, barrier)
+    write_graph(arguments.out, graph)
     logger.info(
         "partition graph: %d traces, %d dep rows, %d links -> %d nodes, %d edges (%d blocked by %s) in %s",
         len(traces),
@@ -89,7 +89,7 @@ def main(argv: Sequence[str] = ()) -> int:
         len(graph.nodes),
         len(graph.edges),
         sum(1 for edge in graph.edges if not edge.clustered),
-        graph.barrier,
+        barrier.name,
         arguments.out,
     )
     return 0

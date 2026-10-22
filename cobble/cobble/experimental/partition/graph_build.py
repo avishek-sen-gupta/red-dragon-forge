@@ -175,7 +175,10 @@ def _linked(index: LeafIndex, barrier: Barrier, link: LinkRow) -> tuple[_Moved, 
 
 
 def _edge(
-    ends: tuple[str, str], flows: Iterable[Flow], programs: Mapping[str, str]
+    ends: tuple[str, str],
+    flows: Iterable[Flow],
+    programs: Mapping[str, str],
+    barrier: str,
 ) -> GraphEdge:
     taken = tuple(flows)
     source, target = ends
@@ -185,6 +188,7 @@ def _edge(
         sites=len({flow.site for flow in taken}),
         clustered=any(flow.clustered for flow in taken),
         cross_program=programs[source] != programs[target],
+        barrier=barrier,
     )
 
 
@@ -223,9 +227,9 @@ def field_graph(
     )
     programs = {node.id: node.program for node in nodes.values()}
     return FieldGraph(
-        barrier=barrier.name,
         nodes=tuple(nodes[node] for node in sorted(nodes)),
         edges=tuple(
-            _edge(ends, group, programs) for ends, group in groupby(flows, _ends)
+            _edge(ends, group, programs, barrier.name)
+            for ends, group in groupby(flows, _ends)
         ),
     )

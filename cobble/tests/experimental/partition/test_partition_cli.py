@@ -9,7 +9,6 @@ from typing import TypedDict
 
 from cobble.experimental.partition import clusters_cli, graph_cli, render_cli
 from cobble.experimental.partition.extent_row import ExtentRow
-from cobble.experimental.partition.field_graph import FieldGraph
 from cobble.experimental.partition.link_row import LinkRow
 
 
@@ -69,6 +68,26 @@ def _dep(
     )
 
 
+class _EdgeLine(TypedDict):
+    source: str
+    target: str
+    sites: int
+    clustered: bool
+    cross_program: bool
+    barrier: str
+
+
+def _edge_line(source: str, target: str, *, cross_program: bool = False) -> _EdgeLine:
+    return _EdgeLine(
+        source=source,
+        target=target,
+        sites=1,
+        clustered=True,
+        cross_program=cross_program,
+        barrier="fanout-8",
+    )
+
+
 def _jsonl(path: Path, lines: Sequence[str]) -> Path:
     path.write_text("".join(f"{line}\n" for line in lines), encoding="utf-8")
     return path
@@ -114,7 +133,7 @@ def test_the_commands_turn_traces_into_a_graph_clusters_a_report_and_a_page(
             ).model_dump_json()
         ],
     )
-    graph_path, clusters_path = tmp_path / "graph.json", tmp_path / "clusters.json"
+    graph_path, clusters_path = tmp_path / "graph.jsonl", tmp_path / "clusters.jsonl"
     report_path, page_path = tmp_path / "clusters.md", tmp_path / "page.html"
 
     assert (
@@ -159,18 +178,44 @@ def test_the_commands_turn_traces_into_a_graph_clusters_a_report_and_a_page(
         == 0
     )
 
-    graph = FieldGraph.model_validate_json(graph_path.read_text(encoding="utf-8"))
-    assert graph.barrier == "fanout-8"
-    assert [
-        (e.source, e.target, e.sites, e.clustered, e.cross_program) for e in graph.edges
-    ] == [
-        ("P:IN.A", "P:OUT.C", 1, True, False),
-        ("P:IN.B", "P:OUT.D", 1, True, False),
-        ("P:OUT.C", "P|sink|FILE:F", 1, True, False),
-        ("P:OUT.C", "Q:LK.LK", 1, True, True),
-        ("P:OUT.D", "P|sink|FILE:F", 1, True, False),
-        ("P:OUT.D", "Q:LK.LK", 1, True, True),
-        ("P|origin|LITERAL", "P:IN.A", 1, True, False),
+    graph_lines = [json.loads(line) for line in graph_path.read_text().splitlines()]
+    assert [line["node"]["id"] for line in graph_lines if "node" in line] == [
+        "P:IN.A",
+        "P:IN.B",
+        "P:OUT.C",
+        "P:OUT.D",
+        "P|origin|LITERAL",
+        "P|sink|FILE:F",
+        "Q:LK.LK",
+    ]
+    assert [line["edge"] for line in graph_lines if "edge" in line] == [
+        _edge_line("P:IN.A", "P:OUT.C"),
+        _edge_line("P:IN.B", "P:OUT.D"),
+        _edge_line("P:OUT.C", "P|sink|FILE:F"),
+        _edge_line("P:OUT.C", "Q:LK.LK", cross_program=True),
+        _edge_line("P:OUT.D", "P|sink|FILE:F"),
+        _edge_line("P:OUT.D", "Q:LK.LK", cross_program=True),
+        _edge_line("P|origin|LITERAL", "P:IN.A"),
+    ]
+    assert len(graph_lines) == 14
+    assert [json.loads(line) for line in clusters_path.read_text().splitlines()] == [
+        {
+            "cluster": {
+                "id": 0,
+                "component": 0,
+                "program": "P",
+                "members": ["P:IN.A", "P:OUT.C"],
+            }
+        },
+        {
+            "cluster": {
+                "id": 1,
+                "component": 1,
+                "program": "P",
+                "members": ["P:IN.B", "P:OUT.D"],
+            }
+        },
+        {"isolated": "Q:LK.LK"},
     ]
     assert report_path.read_text(encoding="utf-8") == (
         "# Field partitions (barrier fanout-8)\n"
