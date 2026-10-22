@@ -29,6 +29,7 @@ config/*.toml
 !config/*.example.toml
 # CardDemo is a public sample corpus, so its configs identify nothing.
 !config/carddemo.toml
+!config/carddemo-partition.toml
 !config/parse-carddemo.toml
 !config/carddemo-fields-tests.toml
 

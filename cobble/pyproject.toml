@@ -72,6 +72,11 @@ cobble-fields-access = "cobble.dataflow.fields.access_report:main"
 cobble-access-query = "cobble.dataflow.fields.access_query:main"
 cobble-bms-metadata = "cobble.bms_metadata:main"
 cobble-bms-render = "cobble.bms_render:main"
+# Experimental: field partitions from path traces. No stability promise about
+# their output; see docs/reference/cobble/partition.md.
+cobble-experimental-partition-graph = "cobble.experimental.partition.graph_cli:main"
+cobble-experimental-partition-clusters = "cobble.experimental.partition.clusters_cli:main"
+cobble-experimental-partition-render = "cobble.experimental.partition.render_cli:main"
 
 # The project is installed (editable) into the venv so that [project.scripts]
 # exists at all -- `uv run diagnose-copybooks` needs an installed entry point,
