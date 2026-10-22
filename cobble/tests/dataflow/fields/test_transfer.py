@@ -454,7 +454,7 @@ def test_a_call_through_a_data_item_credits_a_sink_no_member_can_be(
     assert names_reaching(state, index, "WS-A") == {"%CALL:%DYNAMIC:WS-PROG"}
 
 
-def test_exec_cics_read_into_marks_the_target_as_coming_from_the_file(
+def test_exec_cics_read_into_marks_the_target_as_coming_from_the_file_or_dataset(
     program_of, field, after, names_reaching
 ):
     asg = program_of(
@@ -466,12 +466,30 @@ def test_exec_cics_read_into_marks_the_target_as_coming_from_the_file(
                     "FILE": {"text": "CUSTFILE", "is_literal": True},
                     "INTO": {"text": "WS-REC", "is_literal": False},
                 },
-            }
+            },
+            {
+                "type": "EXEC_CICS",
+                "verb": "READ",
+                "options": {
+                    "DATASET": {"text": "WS-USRSEC-FILE", "is_literal": False},
+                    "INTO": {"text": "WS-USER", "is_literal": False},
+                },
+            },
         ],
-        data_fields=[field(1, "REC", children=[field(5, "WS-REC", "X(8)", offset=0)])],
+        data_fields=[
+            field(
+                1,
+                "REC",
+                children=[
+                    field(5, "WS-REC", "X(8)", offset=0),
+                    field(5, "WS-USER", "X(8)", offset=8),
+                ],
+            )
+        ],
     )
     state, index = after(asg)
     assert names_reaching(state, index, "WS-REC") == {"FILE:CUSTFILE"}
+    assert names_reaching(state, index, "WS-USER") == {"FILE:WS-USRSEC-FILE"}
 
 
 def test_exec_cics_receive_map_marks_the_target_as_cics_state(
