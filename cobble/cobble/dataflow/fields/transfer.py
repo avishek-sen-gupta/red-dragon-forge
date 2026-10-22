@@ -122,6 +122,20 @@ def _synthetic(origin: str, node: str) -> frozenset[Source]:
     return frozenset({Source(origin=origin, extent=NOWHERE, node=node)})
 
 
+def _unresolved(operand: RefModOperand, reason: str, node: str) -> frozenset[Source]:
+    literal = operand.name if is_literal(operand.name) else ""
+    return frozenset(
+        {
+            Source(
+                origin=_unresolved_origin(operand, reason),
+                extent=NOWHERE,
+                node=node,
+                literal=literal,
+            )
+        }
+    )
+
+
 def _unresolved_origin(operand: RefModOperand, reason: str) -> str:
     """A literal reads no storage, and neither does LENGTH OF or a FUNCTION.
 
@@ -172,12 +186,11 @@ def _one_move(
     layout it runs on.
     """
     if not sources.extents:
-        origin = _unresolved_origin(operand, sources.reason)
         return iter(
             (
                 Write(
                     target,
-                    _synthetic(origin, node),
+                    _unresolved(operand, sources.reason, node),
                     values=_literal_value(operand, target.length),
                 ),
             )

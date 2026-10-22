@@ -118,7 +118,8 @@ NO_WINDOW = Window()
 class Dep:
     """One statement's write, one source of it, and where that source was defined.
 
-    ``origin`` is non-empty exactly when the source is not storage, and
+    ``origin`` is non-empty exactly when the source is not storage, ``literal`` is
+    the literal it wrote when it is one, and
     ``definers`` is then empty -- nothing in any program wrote a literal or a file
     record. ``definers`` are program-qualified node ids, which is what lets a
     definer that crossed a call name the member it is in. ``via`` is the call site
@@ -142,6 +143,7 @@ class Dep:
     via: str
     source_program: str
     sink: str = ""
+    literal: str = ""
 
 
 @dataclass(frozen=True)
@@ -621,6 +623,7 @@ def _witnessed(walk: _Walk, held: State, writes: Sequence[Write]) -> frozenset[D
             node=walk.node,
             target=entry.target,
             origin=one.origin,
+            literal=one.literal,
             source=one.extent,
             definers=_definers(held, one),
             via=walk.via,
@@ -925,6 +928,7 @@ def _bridge(
             node=frame.site,
             target=caller_ext,
             origin=source.origin,
+            literal=source.literal,
             source=source.extent,
             definers=_definers(store.get(_reader(source), EMPTY), source),
             via=_via(resumed),

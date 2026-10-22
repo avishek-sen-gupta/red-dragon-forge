@@ -189,7 +189,9 @@ def test_a_figurative_constant_source_reaches_the_target_as_a_literal(
         data_fields=[field(1, "REC", children=[field(5, "WS-A", "X(4)", offset=0)])],
     )
     state, index = after(asg)
+    (extent,) = operand_extents(RefModOperand(name="WS-A"), index).extents
     assert names_reaching(state, index, "WS-A") == {"LITERAL"}
+    assert {source.literal for source in reaching(state, extent)} == {"SPACES"}
 
 
 def test_a_computed_subscript_target_is_a_weak_update(

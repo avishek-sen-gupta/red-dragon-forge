@@ -77,12 +77,14 @@ class Source:
     ``origin`` is empty exactly when ``extent`` is real storage, and ``extent`` is
     ``NOWHERE`` exactly when ``origin`` names one. ``node`` is the CFG node id that
     wrote it, which is how a reader recovers the guard conditions this lattice
-    deliberately does not carry.
+    deliberately does not carry. ``literal`` is the literal as written when the
+    origin is one, and empty otherwise.
     """
 
     origin: str
     extent: FieldExtent
     node: str
+    literal: str = ""
 
 
 _NO_SOURCES: Mapping[FieldExtent, frozenset[Source]] = MappingProxyType({})

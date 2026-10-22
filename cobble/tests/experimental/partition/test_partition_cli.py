@@ -26,6 +26,7 @@ class _Dep(TypedDict):
     via: str
     target: _Range | None
     origin: str
+    literal: str
     sink: str
     source: _Range | None
     source_program: str
@@ -59,6 +60,7 @@ def _dep(
             via="",
             target=target,
             origin="" if source else "LITERAL",
+            literal="" if source else "'Y'",
             sink=sink,
             source=source,
             source_program="P",
@@ -184,7 +186,7 @@ def test_the_commands_turn_traces_into_a_graph_clusters_a_report_and_a_page(
         "P:IN.B",
         "P:OUT.C",
         "P:OUT.D",
-        "P|origin|LITERAL",
+        "P|origin|LITERAL 'Y'",
         "P|sink|FILE:F",
         "Q:LK.LK",
     ]
@@ -195,7 +197,7 @@ def test_the_commands_turn_traces_into_a_graph_clusters_a_report_and_a_page(
         _edge_line("P:OUT.C", "Q:LK.LK", cross_program=True),
         _edge_line("P:OUT.D", "P|sink|FILE:F"),
         _edge_line("P:OUT.D", "Q:LK.LK", cross_program=True),
-        _edge_line("P|origin|LITERAL", "P:IN.A"),
+        _edge_line("P|origin|LITERAL 'Y'", "P:IN.A"),
     ]
     assert len(graph_lines) == 14
     assert [json.loads(line) for line in clusters_path.read_text().splitlines()] == [
@@ -224,7 +226,7 @@ def test_the_commands_turn_traces_into_a_graph_clusters_a_report_and_a_page(
         "\n"
         "## Component 0: P, 2 fields\n"
         "\n"
-        "terminals: P FILE:F; P LITERAL\n"
+        "terminals: P FILE:F; P LITERAL 'Y'\n"
         "\n"
         "- cluster 0, 2 fields; records IN (1), OUT (1)\n"
         "  - P.A, P.C\n"
@@ -246,7 +248,7 @@ def test_the_commands_turn_traces_into_a_graph_clusters_a_report_and_a_page(
         ("P:IN.B", 1),
         ("P:OUT.C", 0),
         ("P:OUT.D", 1),
-        ("P|origin|LITERAL", -1),
+        ("P|origin|LITERAL 'Y'", -1),
         ("P|sink|FILE:F", -1),
         ("Q:LK.LK", -1),
     ]

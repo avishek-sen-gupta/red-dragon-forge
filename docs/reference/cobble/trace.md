@@ -60,7 +60,9 @@ new branch (`nothing unexplored is reachable`).
 JSONL, appended per path, so a killed run still leaves a queryable file. Footer rows (dead
 ends, coverage, limits) are written at the end. Dep rows can repeat across paths. A dep row
 carries `source_program` beside `source`, because at a `LINK` return the caller is credited
-with bytes named in the callee's address space.
+with bytes named in the callee's address space. A dep row whose origin is `LITERAL` carries the
+literal as written in `literal` (`'Y'`, `SPACES`); the field is empty for every other row and for
+`INITIALIZE`, which writes no literal of its own.
 
 A dep row with a `sink` records bytes leaving the program, and its `target` is null. Its
 `source` is what went out, and its definers are read after the statement's own writes:
