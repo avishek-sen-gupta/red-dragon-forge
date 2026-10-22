@@ -465,4 +465,12 @@ fileignoreconfig:
   checksum: ba44fc0466d1b89b3e0cae478741b7ea25c140489f097415839b815fd256c9bc
 - filename: docs/presentation/index.html
   checksum: f393f594c48c11263cd7f0733862bc326f941e457d1d66b30e4a902663f24a66
+- filename: cobble/cobble/experimental/aggregates/io.py
+  checksum: 721e16fe12122ae919b113f6305285f7bad21cd36c6ba62eed332f55618a83f2
+- filename: cobble/cobble/experimental/aggregates/decompose.py
+  checksum: 07419399e9190a4fae9ef83119a6645287f4fa92ff4dc1f7e36ab697fdddfc51
+- filename: cobble/cobble/experimental/aggregates/matrix.py
+  checksum: 7b34a1f9feb98ae60acb59bb4b7e408404ae396875eebb27b02e02caa9db509b
+- filename: cobble/cobble/experimental/aggregates/unify.py
+  checksum: c7d9fbdf3d8e9072fb4460faf029bff4928de37f40cb4e8093e93e513c85cd3b
 version: "1.0"

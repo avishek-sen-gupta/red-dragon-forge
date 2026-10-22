@@ -1,0 +1,4 @@
+{"caller":"PROGA","node":"2000-CALL-PROGB/1","transfer":"LINK","callee":"PROGB","caller_extent":"WS-COMM@working_storage[100:120]","callee_extent":"DFHCOMMAREA@linkage[0:20]","returns":true,"reason":""}
+{"caller":"PROGA","node":"3000-CALL-PROGC/1","transfer":"LINK","callee":"PROGC","caller_extent":"WS-COMM@working_storage[100:120]","callee_extent":"DFHCOMMAREA@linkage[0:20]","returns":true,"reason":""}
+{"caller":"PROGB","node":"5000-CALL-PROGD/1","transfer":"XCTL","callee":"PROGD","caller_extent":"WS-DATA@working_storage[0:40]","callee_extent":"DFHCOMMAREA@linkage[0:40]","returns":false,"reason":""}
+{"caller":"PROGC","node":"4000-CALL-PROGD/1","transfer":"LINK","callee":"PROGD","caller_extent":"WS-OUT@working_storage[200:240]","callee_extent":"DFHCOMMAREA@linkage[0:40]","returns":true,"reason":""}
