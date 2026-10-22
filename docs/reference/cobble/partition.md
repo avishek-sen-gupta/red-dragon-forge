@@ -48,6 +48,9 @@ cobble-experimental-partition-graph --extents EXTENTS --traces DIR --out OUT
 | `--barrier`, `--fanout-limit` | which crossings clustering does not cross (default `fanout`, 8) |
 | `--out` | the graph JSONL |
 
+It logs a progress line every 1000 trace files, extent rows, dep rows and links it works through,
+and one when each pass is done.
+
 A node is an elementary field: one with nothing declared under it, so every variant of a
 `REDEFINES` has its own fields. Every occurrence of an `OCCURS` table is one node, named
 `<program>:<record>.<field>`. Each program's origins (`LITERAL`, `FILE:`, `%CICS-STATE`,
