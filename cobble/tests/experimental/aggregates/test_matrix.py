@@ -48,7 +48,7 @@ DEFS = (
     _def("P1/0", "X@working_storage[0:2]", ("P2/1",)),
     _def("P1/1", "Y@working_storage[2:4]"),
     _def("P2/0", "Y@working_storage[2:4]"),
-    _def("P3/0", "Z@working_storage[4:6]", ("9999-ABEND/0",)),
+    _def("P3/0", "Z@working_storage[4:6]"),
     _def("P3/1", "W@working_storage[6:8]"),
     _def("P4/0", "Z@working_storage[4:6]"),
 )

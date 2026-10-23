@@ -21,8 +21,6 @@ from scipy.sparse import coo_matrix, csr_matrix, load_npz, save_npz
 
 logger = logging.getLogger(__name__)
 
-INFRA_PREFIXES = ("9999-",)
-
 _Paragraph = tuple[str, str]
 
 
@@ -48,10 +46,6 @@ def _paragraph(node: str) -> str:
     return node.split("/")[0]
 
 
-def _counted(paragraph: str) -> bool:
-    return not paragraph.startswith(INFRA_PREFIXES)
-
-
 def _touches(
     row: DefLine, index: LeafIndex, canonical: Mapping[str, str]
 ) -> Iterable[tuple[_Paragraph, str]]:
@@ -63,7 +57,6 @@ def _touches(
     return (
         ((row.program, place), field)
         for place in sorted(places)
-        if _counted(place)
         for field in sorted(fields)
     )
 
