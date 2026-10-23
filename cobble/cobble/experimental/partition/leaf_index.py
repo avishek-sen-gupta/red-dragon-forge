@@ -38,6 +38,7 @@ def _undeclared(extent: ByteRange) -> FieldLeaf:
         end=extent.end,
         pic="",
         path=(extent.name,),
+        subscripts=(),
     )
 
 
@@ -52,9 +53,10 @@ def _leaves_of(row: ExtentRow) -> tuple[FieldLeaf, ...]:
             end=extent.end,
             pic=pic,
             path=path,
+            subscripts=subscripts,
         )
-        for text, record, path, pic in zip(
-            row.extents, row.records, row.paths, row.pics, strict=True
+        for text, record, path, pic, subscripts in zip(
+            row.extents, row.records, row.paths, row.pics, row.indexes, strict=True
         )
         for extent in (byte_range(text, row.program),)
     )

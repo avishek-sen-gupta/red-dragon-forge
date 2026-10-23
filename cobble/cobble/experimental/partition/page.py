@@ -8,6 +8,7 @@ from pathlib import Path
 
 from cobble.experimental.partition.cluster_set import ClusterSet
 from cobble.experimental.partition.field_graph import FieldGraph
+from cobble.experimental.partition.fold import folded
 from cobble.experimental.partition.layout import layout
 from cobble.experimental.partition.page_data import PageData
 from cobble.experimental.partition.page_node import PageNode
@@ -15,13 +16,16 @@ from cobble.experimental.partition.page_node import PageNode
 TEMPLATE = Path(__file__).with_name("partition_page.html")
 
 
-def _data(graph: FieldGraph, clusters: ClusterSet) -> PageData:
+def _data(full: FieldGraph, clusters: ClusterSet) -> PageData:
+    drawn = folded(full, clusters)
+    graph = drawn.graph
     points = layout(graph)
     placed = {
         member: (cluster.component, cluster.id)
         for cluster in clusters.clusters
         for member in cluster.members
     }
+    stands = {node: run[0].id for node, run in drawn.occurrences.items()}
     degree = Counter(end for edge in graph.edges for end in (edge.source, edge.target))
     return PageData(
         barrier=graph.barrier,
@@ -35,9 +39,12 @@ def _data(graph: FieldGraph, clusters: ClusterSet) -> PageData:
                 pic=node.pic,
                 x=points[node.id][0],
                 y=points[node.id][1],
-                component=placed.get(node.id, (-1, -1))[0],
-                cluster=placed.get(node.id, (-1, -1))[1],
+                component=placed.get(stands.get(node.id, node.id), (-1, -1))[0],
+                cluster=placed.get(stands.get(node.id, node.id), (-1, -1))[1],
                 degree=degree[node.id],
+                occurrences=tuple(
+                    member.label for member in drawn.occurrences.get(node.id, ())
+                ),
             )
             for node in graph.nodes
         ),

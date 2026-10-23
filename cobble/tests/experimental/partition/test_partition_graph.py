@@ -22,6 +22,7 @@ def _row(program: str, path: tuple[str, ...], *spans: tuple[int, int]) -> Extent
         records=tuple(path[0] for _ in spans),
         paths=tuple(path for _ in spans),
         pics=tuple("X" for _ in spans),
+        indexes=tuple((i,) if len(spans) > 1 else () for i in range(1, len(spans) + 1)),
     )
 
 
@@ -135,7 +136,7 @@ def test_moves_become_field_edges_by_the_declared_layout_and_the_writes_they_rea
         ("P:AREA.X", NodeKind.FIELD, "P", "AREA"),
         ("P:AREA.Y", NodeKind.FIELD, "P", "AREA"),
         ("P:AREA.Z", NodeKind.FIELD, "P", "AREA"),
-        ("P:TAB.T", NodeKind.FIELD, "P", "TAB"),
+        ("P:TAB.T(2)", NodeKind.FIELD, "P", "TAB"),
         ("Q:LK.LA", NodeKind.FIELD, "Q", "LK"),
         ("Q:LK.LB", NodeKind.FIELD, "Q", "LK"),
         ("P|origin|LITERAL 'Y'", NodeKind.ORIGIN, "P", ""),
@@ -173,7 +174,7 @@ def test_moves_become_field_edges_by_the_declared_layout_and_the_writes_they_rea
         ("P:ACC.ID", "P|sink|FILE:H", 1, True),
         ("P:SRC.S2", "P|sink|FILE:H", 1, True),
         ("P:SRC.S3", "P|sink|FILE:H", 1, True),
-        ("P:REC.A", "P:TAB.T", 1, True),
+        ("P:REC.A", "P:TAB.T(2)", 1, True),
         ("P:REC.A", "Q:LK.LA", 1, True),
         ("P:REC.B", "Q:LK.LB", 1, True),
         ("Q:LK.LA", "P:REC.A", 1, True),
@@ -202,3 +203,80 @@ def test_a_fanout_barrier_keeps_wide_crossings_out_of_clustering() -> None:
     }
     assert len(graph.edges) == 28
     assert graph.barrier == "fanout-1"
+
+
+def _layout(
+    program: str, region: str, path: tuple[str, ...], *spans: tuple[int, int]
+) -> ExtentRow:
+    return ExtentRow(
+        program=program,
+        extents=tuple(f"{path[-1]}@{region}[{s}:{e}]" for s, e in spans),
+        records=tuple(path[0] for _ in spans),
+        paths=tuple(path for _ in spans),
+        pics=tuple("X" for _ in spans),
+        indexes=tuple((i,) if len(spans) > 1 else () for i in range(1, len(spans) + 1)),
+    )
+
+
+def test_a_handover_through_a_byte_table_keeps_each_occurrence_apart_and_the_barrier_counts_them_as_one_field() -> (
+    None
+):
+    extents = (
+        _layout("R", "working_storage", ("CA",), (0, 4)),
+        _layout("R", "working_storage", ("CA", "CA-A"), (0, 2)),
+        _layout("R", "working_storage", ("CA", "CA-B"), (2, 4)),
+        _layout("S", "linkage", ("DFH",), (0, 4)),
+        _layout("S", "linkage", ("DFH", "LKB"), (0, 1), (1, 2), (2, 3), (3, 4)),
+        _layout("S", "working_storage", ("SA",), (0, 4)),
+        _layout("S", "working_storage", ("SA", "SA-A"), (0, 2)),
+        _layout("S", "working_storage", ("SA", "SA-B"), (2, 4)),
+    )
+    moved_in = DepRow(
+        program="S",
+        via="",
+        target=ByteRange(
+            program="S", region="working_storage", start=0, end=4, name="SA", known=True
+        ),
+        origin="",
+        source=ByteRange(
+            program="S", region="linkage", start=0, end=4, name="DFH", known=True
+        ),
+        site="S/m1",
+        definers=(),
+        sink="",
+    )
+    handover = LinkRow(
+        caller="R",
+        node="x1",
+        callee="S",
+        caller_extent="CA@working_storage[0:4]",
+        callee_extent="DFH@linkage[0:4]",
+        returns=False,
+    )
+
+    graph = field_graph(leaf_index(extents), (moved_in,), (handover,), NoBarrier())
+    narrow = field_graph(
+        leaf_index(extents), (moved_in,), (handover,), FanoutBarrier(limit=1)
+    )
+
+    assert {
+        (n.id, n.label) for n in graph.nodes if n.program == "S" and n.record == "DFH"
+    } == {
+        ("S:DFH.LKB(1)", "S.LKB(1)"),
+        ("S:DFH.LKB(2)", "S.LKB(2)"),
+        ("S:DFH.LKB(3)", "S.LKB(3)"),
+        ("S:DFH.LKB(4)", "S.LKB(4)"),
+    }
+    assert {(s, t) for s, t, _, _ in _edges(graph)} == {
+        ("R:CA.CA-A", "S:DFH.LKB(1)"),
+        ("R:CA.CA-A", "S:DFH.LKB(2)"),
+        ("R:CA.CA-B", "S:DFH.LKB(3)"),
+        ("R:CA.CA-B", "S:DFH.LKB(4)"),
+        ("S:DFH.LKB(1)", "S:SA.SA-A"),
+        ("S:DFH.LKB(2)", "S:SA.SA-A"),
+        ("S:DFH.LKB(3)", "S:SA.SA-B"),
+        ("S:DFH.LKB(4)", "S:SA.SA-B"),
+    }
+    assert {(s, t, clustered) for s, t, _, clustered in _edges(narrow)} == {
+        (s, t, True) for s, t, _, _ in _edges(graph)
+    }
