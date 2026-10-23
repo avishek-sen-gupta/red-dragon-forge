@@ -19,3 +19,4 @@ class GraphNode(BaseModel):
     pic: str = ""
     field: str = ""
     subscripts: tuple[int, ...] = ()
+    size: int = 0

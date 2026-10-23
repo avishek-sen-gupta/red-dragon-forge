@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from cobble.dataflow.fields.extent_text import NO_RANGE, ByteRange
 from cobble.dataflow.fields.trace_query import DepRow
+from cobble.experimental.partition.byte_alignment import ByteAlignment
 from cobble.experimental.partition.extent_row import ExtentRow
 from cobble.experimental.partition.fanout_barrier import FanoutBarrier
 from cobble.experimental.partition.field_graph import FieldGraph
@@ -186,6 +187,28 @@ def test_moves_become_field_edges_by_the_declared_layout_and_the_writes_they_rea
         ("Q:LK.LA", "P:REC.A"),
         ("Q:LK.LB", "P:REC.B"),
     }
+    assert {
+        (e.source, e.target): (e.alignments, e.aligned)
+        for e in graph.edges
+        if (e.source, e.target)
+        in {
+            ("P:REC.A", "P:OUT.OUT"),
+            ("P:REC.B", "P:OUT.OUT"),
+            ("P|origin|LITERAL 'Y'", "P:REC.A"),
+            ("P:REC.A", "P|sink|FILE:F"),
+        }
+    } == {
+        ("P:REC.A", "P:OUT.OUT"): (
+            (ByteAlignment(source=0, target=0, length=4),),
+            True,
+        ),
+        ("P:REC.B", "P:OUT.OUT"): (
+            (ByteAlignment(source=0, target=4, length=6),),
+            True,
+        ),
+        ("P|origin|LITERAL 'Y'", "P:REC.A"): ((), False),
+        ("P:REC.A", "P|sink|FILE:F"): ((), False),
+    }
     assert graph.barrier == "none"
 
 
@@ -218,7 +241,7 @@ def _layout(
     )
 
 
-def test_a_handover_through_a_byte_table_keeps_each_occurrence_apart_and_the_barrier_counts_them_as_one_field() -> (
+def test_a_handover_through_a_byte_table_keeps_each_occurrence_apart_and_every_byte_s_place() -> (
     None
 ):
     extents = (
@@ -279,4 +302,48 @@ def test_a_handover_through_a_byte_table_keeps_each_occurrence_apart_and_the_bar
     }
     assert {(s, t, clustered) for s, t, _, clustered in _edges(narrow)} == {
         (s, t, True) for s, t, _, _ in _edges(graph)
+    }
+    assert {(e.source, e.target): (e.alignments, e.aligned) for e in graph.edges} == {
+        ("R:CA.CA-A", "S:DFH.LKB(1)"): (
+            (ByteAlignment(source=0, target=0, length=1),),
+            True,
+        ),
+        ("R:CA.CA-A", "S:DFH.LKB(2)"): (
+            (ByteAlignment(source=1, target=0, length=1),),
+            True,
+        ),
+        ("R:CA.CA-B", "S:DFH.LKB(3)"): (
+            (ByteAlignment(source=0, target=0, length=1),),
+            True,
+        ),
+        ("R:CA.CA-B", "S:DFH.LKB(4)"): (
+            (ByteAlignment(source=1, target=0, length=1),),
+            True,
+        ),
+        ("S:DFH.LKB(1)", "S:SA.SA-A"): (
+            (ByteAlignment(source=0, target=0, length=1),),
+            True,
+        ),
+        ("S:DFH.LKB(2)", "S:SA.SA-A"): (
+            (ByteAlignment(source=0, target=1, length=1),),
+            True,
+        ),
+        ("S:DFH.LKB(3)", "S:SA.SA-B"): (
+            (ByteAlignment(source=0, target=0, length=1),),
+            True,
+        ),
+        ("S:DFH.LKB(4)", "S:SA.SA-B"): (
+            (ByteAlignment(source=0, target=1, length=1),),
+            True,
+        ),
+    }
+    assert {n.id: n.size for n in graph.nodes} == {
+        "R:CA.CA-A": 2,
+        "R:CA.CA-B": 2,
+        "S:DFH.LKB(1)": 1,
+        "S:DFH.LKB(2)": 1,
+        "S:DFH.LKB(3)": 1,
+        "S:DFH.LKB(4)": 1,
+        "S:SA.SA-A": 2,
+        "S:SA.SA-B": 2,
     }

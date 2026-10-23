@@ -71,6 +71,12 @@ def _dep(
     )
 
 
+class _Placed(TypedDict):
+    source: int
+    target: int
+    length: int
+
+
 class _EdgeLine(TypedDict):
     source: str
     target: str
@@ -78,16 +84,25 @@ class _EdgeLine(TypedDict):
     clustered: bool
     cross_program: bool
     barrier: str
+    alignments: list[_Placed]
+    aligned: bool
 
 
-def _edge_line(source: str, target: str, *, cross_program: bool = False) -> _EdgeLine:
+def _edge_line(
+    ends: tuple[str, str],
+    placed: Sequence[tuple[int, int, int]] = (),
+    *,
+    cross_program: bool = False,
+) -> _EdgeLine:
     return _EdgeLine(
-        source=source,
-        target=target,
+        source=ends[0],
+        target=ends[1],
         sites=1,
         clustered=True,
         cross_program=cross_program,
         barrier="fanout-8",
+        alignments=[_Placed(source=s, target=t, length=n) for s, t, n in placed],
+        aligned=bool(placed),
     )
 
 
@@ -192,13 +207,13 @@ def test_the_commands_turn_traces_into_a_graph_clusters_a_report_and_a_page(
         "Q:LK.LK",
     ]
     assert [line["edge"] for line in graph_lines if "edge" in line] == [
-        _edge_line("P:IN.A", "P:OUT.C"),
-        _edge_line("P:IN.B", "P:OUT.D"),
-        _edge_line("P:OUT.C", "P|sink|FILE:F"),
-        _edge_line("P:OUT.C", "Q:LK.LK", cross_program=True),
-        _edge_line("P:OUT.D", "P|sink|FILE:F"),
-        _edge_line("P:OUT.D", "Q:LK.LK", cross_program=True),
-        _edge_line("P|origin|LITERAL 'Y'", "P:IN.A"),
+        _edge_line(("P:IN.A", "P:OUT.C"), ((0, 0, 4),)),
+        _edge_line(("P:IN.B", "P:OUT.D"), ((0, 0, 4),)),
+        _edge_line(("P:OUT.C", "P|sink|FILE:F")),
+        _edge_line(("P:OUT.C", "Q:LK.LK"), ((0, 0, 4),), cross_program=True),
+        _edge_line(("P:OUT.D", "P|sink|FILE:F")),
+        _edge_line(("P:OUT.D", "Q:LK.LK"), ((0, 4, 4),), cross_program=True),
+        _edge_line(("P|origin|LITERAL 'Y'", "P:IN.A")),
     ]
     assert len(graph_lines) == 14
     assert [json.loads(line) for line in clusters_path.read_text().splitlines()] == [

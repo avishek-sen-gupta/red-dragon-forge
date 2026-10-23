@@ -100,6 +100,8 @@ def test_the_page_embeds_the_graph_with_each_field_s_component_and_cluster() -> 
             "clustered": e.clustered,
             "cross_program": False,
             "barrier": "fanout-8",
+            "alignments": [],
+            "aligned": False,
         }
         for e in GRAPH.edges
     ]
