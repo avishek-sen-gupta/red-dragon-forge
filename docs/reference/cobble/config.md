@@ -50,6 +50,9 @@ full flag list with `--help`.
 | `cobble-experimental-partition-graph` | extents, traces, combine links | [partition](partition.md) (experimental) |
 | `cobble-experimental-partition-clusters` | partition graph | [partition](partition.md) (experimental) |
 | `cobble-experimental-partition-render` | partition graph and clusters | [partition](partition.md) (experimental) |
+| `cobble-experimental-aggregate-unify` | partition graph | [aggregates](aggregates.md) (experimental) |
+| `cobble-experimental-aggregate-matrix` | fixpoint defs, extents, unified classes | [aggregates](aggregates.md) (experimental) |
+| `cobble-experimental-aggregate-decompose` | aggregate matrix | [aggregates](aggregates.md) (experimental) |
 
 ## Environment and tools
 

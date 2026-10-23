@@ -79,7 +79,11 @@ never picks up another's fields. Edges then run from source fields to target fie
 
 A combine link binds the caller's window to the callee's the same way, and binds them back when
 the link returns. An edge records how many sites move bytes along it, whether clustering crosses
-it, the barrier that decided that, and whether it joins two programs.
+it, the barrier that decided that, and whether it joins two programs. It also records where the
+bytes land: each alignment is `{"source", "target", "length"}`, `length` bytes from offset `source`
+in the source field to offset `target` in the target field, the distinct placements over all its
+sites. `aligned` is true when every site's placement is known; a move through a clamped extent, and
+every origin and sink edge, has none. A field node carries its `size` in bytes.
 
 The graph file is a flat list, one object per line: every node as `{"node": {...}}`, then every
 edge as `{"edge": {...}}`.

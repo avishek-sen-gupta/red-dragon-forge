@@ -1,139 +1,155 @@
-"""Build a field × field PPMI co-occurrence matrix from defs.jsonl."""
+"""A field x field positive PMI matrix over the paragraphs each graph field is read or written in."""
 
 from __future__ import annotations
 
-import json
 import logging
-from collections import Counter, defaultdict
-from math import log
+from collections import Counter
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
+from itertools import combinations, groupby
+from math import log2
+from operator import itemgetter
 from pathlib import Path
 
 import numpy as np
-from scipy.sparse import csr_matrix, lil_matrix, save_npz, load_npz
-
-from cobble.experimental.aggregates.io import extract_paragraph, parse_extent, read_jsonl
+from cobble.dataflow.fields.extent_text import byte_range
+from cobble.experimental.aggregates.def_line import DefLine
+from cobble.experimental.aggregates.matrix_meta import MatrixMeta
+from cobble.experimental.aggregates.paragraph_ref import ParagraphRef
+from cobble.experimental.partition.leaf_index import LeafIndex
+from scipy.sparse import coo_matrix, csr_matrix, load_npz, save_npz
 
 logger = logging.getLogger(__name__)
 
 INFRA_PREFIXES = ("9999-",)
 
-
-def _is_infra(para: str) -> bool:
-    return any(para.startswith(p) for p in INFRA_PREFIXES)
+_Paragraph = tuple[str, str]
 
 
-def build_ppmi_matrix(
-    defs_path: Path,
-    canonical_map: dict[str, str] | None = None,
-    min_fields_per_para: int = 3,
-    min_occurrences: int = 5,
-    min_cooccurrences: int = 3,
-) -> tuple[csr_matrix, list[str], list[dict], dict]:
-    """Build a symmetric PPMI matrix from paragraph–field co-occurrences.
+@dataclass(frozen=True)
+class MatrixLimits:
+    """The fewest fields a paragraph keeps, paragraphs a field appears in, and paragraphs a pair shares."""
 
-    Returns *(matrix, field_list, paragraph_list, stats)*.
-    """
-    cmap = canonical_map or {}
+    fields_per_paragraph: int
+    occurrences: int
+    cooccurrences: int
 
-    def canon(field: str) -> str:
-        return cmap.get(field, field)
 
-    para_fields: dict[tuple[str, str], set[str]] = defaultdict(set)
-    field_to_raw: dict[str, set[str]] = defaultdict(set)
+@dataclass(frozen=True)
+class PpmiMatrix:
+    """The symmetric matrix, the field each row stands for, and the paragraphs it was counted over."""
 
-    for row in read_jsonl(defs_path):
-        program = row.get("program", "")
-        node = row["node"]
-        para = extract_paragraph(node)
-        if _is_infra(para):
-            continue
+    matrix: csr_matrix
+    fields: tuple[str, ...]
+    paragraphs: tuple[_Paragraph, ...]
 
-        para_key = (program, para)
-        parsed = parse_extent(row["extent"])
-        if parsed is None:
-            continue
-        raw_field = parsed[0]
-        field = canon(raw_field)
 
-        para_fields[para_key].add(field)
-        field_to_raw[field].add(raw_field)
+def _paragraph(node: str) -> str:
+    return node.split("/")[0]
 
-        for d in row.get("definers", []):
-            d_para = extract_paragraph(d)
-            if not _is_infra(d_para):
-                para_fields[(program, d_para)].add(field)
 
-    para_fields = {
-        k: v for k, v in para_fields.items() if len(v) >= min_fields_per_para
+def _counted(paragraph: str) -> bool:
+    return not paragraph.startswith(INFRA_PREFIXES)
+
+
+def _touches(
+    row: DefLine, index: LeafIndex, canonical: Mapping[str, str]
+) -> Iterable[tuple[_Paragraph, str]]:
+    fields = {
+        canonical.get(leaf.node, leaf.node)
+        for leaf in index.fields_in(byte_range(row.extent, row.program))
     }
-    n_paras = len(para_fields)
-    logger.info("matrix: %d paragraphs after filtering", n_paras)
+    places = {_paragraph(node) for node in (row.node, *row.definers)}
+    return (
+        ((row.program, place), field)
+        for place in sorted(places)
+        if _counted(place)
+        for field in sorted(fields)
+    )
 
-    field_freq: Counter = Counter()
-    for fields in para_fields.values():
-        for f in fields:
-            field_freq[f] += 1
 
-    valid = {f for f, c in field_freq.items() if c >= min_occurrences}
-    field_list = sorted(valid)
-    field_idx = {f: i for i, f in enumerate(field_list)}
-    n_fields = len(field_list)
-    logger.info("matrix: %d fields (min %d occurrences)", n_fields, min_occurrences)
-
-    pair_count: Counter = Counter()
-    for fields in para_fields.values():
-        fl = sorted(fields & valid)
-        for i in range(len(fl)):
-            for j in range(i + 1, len(fl)):
-                pair_count[(fl[i], fl[j])] += 1
-
-    mat = lil_matrix((n_fields, n_fields), dtype=np.float32)
-    nnz = 0
-    for (a, b), count in pair_count.items():
-        if count < min_cooccurrences:
-            continue
-        pa = field_freq[a] / n_paras
-        pb = field_freq[b] / n_paras
-        pab = count / n_paras
-        pmi = log(pab / (pa * pb)) / log(2)
-        if pmi > 0:
-            ia, ib = field_idx[a], field_idx[b]
-            mat[ia, ib] = pmi
-            mat[ib, ia] = pmi
-            nnz += 2
-
-    result = mat.tocsr()
-    logger.info("matrix: %d × %d, %d non-zeros", n_fields, n_fields, result.nnz)
-
-    para_list = [{"program": p, "paragraph": q} for p, q in sorted(para_fields.keys())]
-    stats = {
-        "n_paragraphs": n_paras,
-        "n_fields": n_fields,
-        "nnz": result.nnz,
-        "min_fields_per_para": min_fields_per_para,
-        "min_occurrences": min_occurrences,
-        "min_cooccurrences": min_cooccurrences,
+def paragraph_fields(
+    rows: Iterable[DefLine], index: LeafIndex, canonical: Mapping[str, str]
+) -> Mapping[_Paragraph, frozenset[str]]:
+    touched = sorted(touch for row in rows for touch in _touches(row, index, canonical))
+    return {
+        paragraph: frozenset(field for _, field in group)
+        for paragraph, group in groupby(touched, itemgetter(0))
     }
-    return result, field_list, para_list, stats
 
 
-def save_matrix(
-    matrix: csr_matrix,
-    field_list: list[str],
-    para_list: list[dict],
-    stats: dict,
-    matrix_path: Path,
-    meta_path: Path,
-) -> None:
-    save_npz(matrix_path, matrix)
-    meta = {"fields": field_list, "paragraphs": para_list, **stats}
-    meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
-    logger.info("matrix: saved to %s + %s", matrix_path, meta_path)
+def _pmi(together: int, first: int, second: int, total: int) -> float:
+    return log2(together * total / (first * second))
+
+
+def _cells(
+    kept: Mapping[_Paragraph, frozenset[str]],
+    place: Mapping[str, int],
+    limits: MatrixLimits,
+) -> tuple[tuple[int, int, float], ...]:
+    freq = Counter(field for fields in kept.values() for field in fields)
+    pairs = Counter(
+        pair
+        for fields in kept.values()
+        for pair in combinations(sorted(fields & place.keys()), 2)
+    )
+    return tuple(
+        cell
+        for (a, b), together in sorted(pairs.items())
+        if together >= limits.cooccurrences
+        for weight in (_pmi(together, freq[a], freq[b], len(kept)),)
+        if weight > 0
+        for cell in ((place[a], place[b], weight), (place[b], place[a], weight))
+    )
+
+
+def ppmi_matrix(
+    paragraphs: Mapping[_Paragraph, frozenset[str]], limits: MatrixLimits
+) -> PpmiMatrix:
+    kept = {
+        paragraph: fields
+        for paragraph, fields in paragraphs.items()
+        if len(fields) >= limits.fields_per_paragraph
+    }
+    freq = Counter(field for fields in kept.values() for field in fields)
+    fields = tuple(sorted(f for f, seen in freq.items() if seen >= limits.occurrences))
+    place = {field: i for i, field in enumerate(fields)}
+    cells = _cells(kept, place, limits)
+    matrix = csr_matrix(
+        coo_matrix(
+            (
+                np.array([cell[2] for cell in cells], dtype=np.float32),
+                (
+                    np.array([cell[0] for cell in cells], dtype=np.int64),
+                    np.array([cell[1] for cell in cells], dtype=np.int64),
+                ),
+            ),
+            shape=(len(fields), len(fields)),
+        )
+    )
+    logger.info(
+        "aggregate matrix: %d paragraphs, %d fields, %d non-zeros",
+        len(kept),
+        len(fields),
+        matrix.nnz,
+    )
+    return PpmiMatrix(matrix=matrix, fields=fields, paragraphs=tuple(sorted(kept)))
+
+
+def save_matrix(found: PpmiMatrix, matrix_path: Path, meta_path: Path) -> None:
+    save_npz(matrix_path, found.matrix)
+    meta = MatrixMeta(
+        fields=found.fields,
+        paragraphs=tuple(
+            ParagraphRef(program=program, paragraph=paragraph)
+            for program, paragraph in found.paragraphs
+        ),
+    )
+    meta_path.write_text(meta.model_dump_json(indent=2), encoding="utf-8")
 
 
 def load_matrix(
     matrix_path: Path, meta_path: Path
-) -> tuple[csr_matrix, list[str], dict]:
-    mat = load_npz(matrix_path)
-    meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    return mat, meta["fields"], meta
+) -> tuple[csr_matrix, list[str], MatrixMeta]:
+    meta = MatrixMeta.model_validate_json(meta_path.read_text(encoding="utf-8"))
+    return csr_matrix(load_npz(matrix_path)), list(meta.fields), meta

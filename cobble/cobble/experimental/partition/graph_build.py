@@ -10,6 +10,7 @@ from operator import itemgetter
 from cobble.dataflow.fields.extent_text import ByteRange, byte_range
 from cobble.dataflow.fields.trace_query import DepRow
 from cobble.experimental.partition.barrier import Barrier
+from cobble.experimental.partition.byte_alignment import ByteAlignment
 from cobble.experimental.partition.field_graph import FieldGraph
 from cobble.experimental.partition.field_leaf import FieldLeaf
 from cobble.experimental.partition.flow import Flow
@@ -36,6 +37,7 @@ def _field(leaf: FieldLeaf) -> GraphNode:
         pic=leaf.pic,
         field=leaf.name,
         subscripts=leaf.subscripts,
+        size=leaf.end - leaf.start,
     )
 
 
@@ -131,12 +133,31 @@ def _read(index: LeafIndex, rows: _Rows, dep: DepRow) -> Span:
     return Span(dep.source, _traced(index, rows, dep.source, dep.definers))
 
 
+def _placed(target: Span, source: Span, pair: _Pair) -> tuple[ByteAlignment, ...]:
+    if not (target.range.exact and source.range.exact):
+        return ()
+    s, t = pair
+    start, end = _aligned(target.range, source.range, t)
+    low, high = max(start, s.start), min(end, s.end)
+    if low >= high:
+        return ()
+    shift = source.range.start - target.range.start
+    return (
+        ByteAlignment(
+            source=low - s.start, target=low - shift - t.start, length=high - low
+        ),
+    )
+
+
 def _copied(barrier: Barrier, target: Span, source: Span, site: str) -> _Moved:
     pairs = _pairs(target, source)
     clustered = not barrier.blocks(set(pairs))
     return (
         tuple(_field(leaf) for pair in pairs for leaf in pair),
-        tuple(Flow(s.node, t.node, site, clustered) for s, t in pairs),
+        tuple(
+            Flow(s.node, t.node, site, clustered, _placed(target, source, (s, t)))
+            for s, t in pairs
+        ),
     )
 
 
@@ -196,7 +217,18 @@ def _edge(
         clustered=any(flow.clustered for flow in taken),
         cross_program=programs[source] != programs[target],
         barrier=barrier,
+        alignments=tuple(
+            ByteAlignment(source=start, target=landing, length=length)
+            for start, landing, length in sorted(
+                {_placement(placed) for flow in taken for placed in flow.alignment}
+            )
+        ),
+        aligned=all(flow.alignment for flow in taken),
     )
+
+
+def _placement(placed: ByteAlignment) -> tuple[int, int, int]:
+    return (placed.source, placed.target, placed.length)
 
 
 def _ends(flow: Flow) -> tuple[str, str]:

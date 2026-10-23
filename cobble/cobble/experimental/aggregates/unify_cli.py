@@ -1,4 +1,4 @@
-"""cobble-experimental-aggregate-unify: unify differently-named fields through byte-offset matching."""
+"""cobble-experimental-aggregate-unify: the fields of different programs the partition graph shows holding one datum."""
 
 from __future__ import annotations
 
@@ -8,7 +8,9 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
-from cobble.experimental.aggregates.unify import unify_fields, write_unified
+from cobble.experimental.aggregates.exact_merge import exact_classes
+from cobble.experimental.aggregates.unify import write_unified
+from cobble.experimental.partition.graph_file import read_graph
 
 logger = logging.getLogger(__name__)
 
@@ -17,21 +19,21 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="cobble-experimental-aggregate-unify",
         description=(
-            "Experimental: unify differently-named fields that occupy the same bytes "
-            "across inter-program call boundaries, using the alias and extent tables."
+            "Experimental: classes of fields in different programs whose every byte "
+            "the partition graph moves, in place, onto each other."
         ),
     )
     parser.add_argument(
-        "--aliases", type=Path, required=True,
-        help="aliases.jsonl from cobble-dataflow-fixpoint",
+        "--graph",
+        type=Path,
+        required=True,
+        help="graph.jsonl from cobble-experimental-partition-graph",
     )
     parser.add_argument(
-        "--extents", type=Path, required=True,
-        help="extents JSONL from cobble-extents (the full field layout dictionary)",
-    )
-    parser.add_argument(
-        "--out", type=Path, required=True,
-        help="output unified.jsonl: one line per equivalence class",
+        "--out",
+        type=Path,
+        required=True,
+        help="unified.jsonl: one line per class",
     )
     return parser
 
@@ -39,7 +41,7 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] = ()) -> int:
     configure_cli_logging()
     arguments = _parser().parse_args(tuple(argv) if argv else None)
-    uf = unify_fields(arguments.aliases, arguments.extents)
-    n = write_unified(arguments.out, uf)
-    logger.info("aggregate unify: %d classes with 2+ members -> %s", n, arguments.out)
+    classes = exact_classes(read_graph(arguments.graph))
+    write_unified(arguments.out, classes)
+    logger.info("aggregate unify: %d classes -> %s", len(classes), arguments.out)
     return 0

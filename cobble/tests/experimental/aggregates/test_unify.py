@@ -1,51 +1,88 @@
-"""Unification through COMMAREA byte-offset matching."""
+"""Exact classes: fields of different programs whose every byte lands in place on each other."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from cobble.experimental.aggregates.unify import unify_fields
+from cobble.experimental.aggregates.exact_merge import exact_classes
+from cobble.experimental.aggregates.unify import read_unified, write_unified
+from cobble.experimental.partition.byte_alignment import ByteAlignment
+from cobble.experimental.partition.field_graph import FieldGraph
+from cobble.experimental.partition.graph_edge import GraphEdge
+from cobble.experimental.partition.graph_node import GraphNode
+from cobble.experimental.partition.node_kind import NodeKind
 
-DATA = Path(__file__).parent / "data"
 
-
-def _classes() -> dict[str, list[str]]:
-    uf = unify_fields(
-        aliases_path=DATA / "aliases.jsonl",
-        extents_path=DATA / "extents.jsonl",
+def _field(node: str, size: int, subscripts: tuple[int, ...] = ()) -> GraphNode:
+    program, rest = node.split(":")
+    return GraphNode(
+        id=node,
+        kind=NodeKind.FIELD,
+        label=node,
+        program=program,
+        record=rest.split(".")[0],
+        subscripts=subscripts,
+        size=size,
     )
-    return uf.classes()
 
 
-def _canon() -> dict[str, str]:
-    classes = _classes()
-    canon = {}
-    for rep, members in classes.items():
-        for m in members:
-            canon[m] = rep
-    return canon
+def _moved(ends: tuple[str, str], *placed: tuple[int, int, int]) -> GraphEdge:
+    source, target = ends
+    return GraphEdge(
+        source=source,
+        target=target,
+        sites=1,
+        clustered=True,
+        cross_program=source.split(":")[0] != target.split(":")[0],
+        barrier="none",
+        alignments=tuple(
+            ByteAlignment(source=s, target=t, length=n) for s, t, n in placed
+        ),
+        aligned=bool(placed),
+    )
 
 
-def test_fields_at_same_commarea_offsets_are_unified() -> None:
-    canon = _canon()
-    assert canon.get("WS-COMM-AMOUNT") == canon.get("REC-AMOUNT")
-    assert canon.get("WS-COMM-AMOUNT") == canon.get("ITEM-AMT")
-    assert canon.get("WS-COMM-DATE") == canon.get("REC-DATE")
-    assert canon.get("WS-COMM-DATE") == canon.get("ITEM-DTE")
-    assert canon.get("WS-COMM-STATUS") == canon.get("REC-STATUS")
-    assert canon.get("WS-COMM-STATUS") == canon.get("ITEM-STAT")
+GRAPH = FieldGraph(
+    nodes=(
+        _field("R:CA.A", 2),
+        _field("R:CA.C", 2),
+        _field("R:CA.E", 4),
+        _field("R:CA.H", 2),
+        *(_field(f"S:LK.T({i})", 1, (i,)) for i in range(1, 5)),
+        _field("S:WS.B", 2),
+        _field("S:WS.D", 2),
+        _field("S:WS.F", 2),
+        _field("S:WS.G", 2),
+        _field("S:WS.J", 2),
+        _field("S:WS.K", 2),
+        GraphNode(id="S|origin|LITERAL", kind=NodeKind.ORIGIN, label="S", program="S"),
+    ),
+    edges=(
+        _moved(("R:CA.A", "S:LK.T(1)"), (0, 0, 1)),
+        _moved(("R:CA.A", "S:LK.T(2)"), (1, 0, 1)),
+        _moved(("S:LK.T(1)", "S:WS.B"), (0, 0, 1)),
+        _moved(("S:LK.T(2)", "S:WS.B"), (0, 1, 1)),
+        _moved(("R:CA.C", "S:LK.T(3)"), (0, 0, 1)),
+        _moved(("R:CA.C", "S:LK.T(4)"), (1, 0, 1)),
+        _moved(("S:LK.T(3)", "S:WS.D"), (0, 1, 1)),
+        _moved(("S:LK.T(4)", "S:WS.D"), (0, 0, 1)),
+        _moved(("R:CA.E", "S:WS.F"), (0, 0, 2)),
+        _moved(("S:WS.B", "S:WS.G"), (0, 0, 2)),
+        _moved(("R:CA.H", "S:WS.J"), (0, 0, 2)),
+        _moved(("S:WS.K", "S:WS.J")),
+        _moved(("S|origin|LITERAL", "S:WS.B")),
+    ),
+)
 
 
-def test_unrelated_fields_are_not_unified() -> None:
-    canon = _canon()
-    amount_rep = canon.get("WS-COMM-AMOUNT")
-    assert amount_rep is not None
-    assert canon.get("WS-FLAG", "WS-FLAG") != amount_rep
-    assert canon.get("WS-TOTAL", "WS-TOTAL") != amount_rep
+def test_only_fields_whose_every_byte_lands_in_place_in_another_program_are_one_class(
+    tmp_path: Path,
+) -> None:
+    classes = exact_classes(GRAPH)
+    write_unified(tmp_path / "unified.jsonl", classes)
 
-
-def test_equivalence_class_sizes() -> None:
-    classes = _classes()
-    multi = {k: v for k, v in classes.items() if len(v) > 1}
-    size_3 = [v for v in multi.values() if len(v) == 3]
-    assert len(size_3) == 3
+    assert classes == (("R:CA.A", "S:WS.B"),)
+    assert read_unified(tmp_path / "unified.jsonl") == {
+        "R:CA.A": "R:CA.A",
+        "S:WS.B": "R:CA.A",
+    }

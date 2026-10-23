@@ -1,66 +1,89 @@
-"""PPMI matrix construction from defs + unification."""
+"""The PPMI matrix over the paragraphs each graph field is read or written in."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from cobble.experimental.aggregates.matrix import build_ppmi_matrix
-from cobble.experimental.aggregates.unify import unify_fields, read_unified, write_unified
+import pytest
 
-DATA = Path(__file__).parent / "data"
+from cobble.experimental.aggregates.def_line import DefLine
+from cobble.experimental.aggregates.matrix import (
+    MatrixLimits,
+    load_matrix,
+    paragraph_fields,
+    ppmi_matrix,
+    save_matrix,
+)
+from cobble.experimental.partition.extent_row import ExtentRow
+from cobble.experimental.partition.leaf_index import leaf_index
 
 
-def _unified_canon() -> dict[str, str]:
-    uf = unify_fields(
-        aliases_path=DATA / "aliases.jsonl",
-        extents_path=DATA / "extents.jsonl",
+def _row(path: tuple[str, ...], start: int, end: int) -> ExtentRow:
+    return ExtentRow(
+        program="P",
+        extents=(f"{path[-1]}@working_storage[{start}:{end}]",),
+        records=(path[0],),
+        paths=(path,),
+        pics=("X",),
+        indexes=((),),
     )
-    canon: dict[str, str] = {}
-    for rep, members in uf.classes().items():
-        for m in members:
-            canon[m] = rep
-    return canon
 
 
-def test_matrix_is_square_and_symmetric() -> None:
-    mat, field_list, para_list, stats = build_ppmi_matrix(
-        defs_path=DATA / "defs.jsonl",
-        canonical_map=_unified_canon(),
-        min_fields_per_para=2,
-        min_occurrences=2,
-        min_cooccurrences=2,
+INDEX = leaf_index(
+    (
+        _row(("REC",), 0, 8),
+        _row(("REC", "X"), 0, 2),
+        _row(("REC", "Y"), 2, 4),
+        _row(("REC", "Z"), 4, 6),
+        _row(("REC", "W"), 6, 8),
     )
-    assert mat.shape[0] == mat.shape[1]
-    diff = abs(mat - mat.T)
-    assert diff.max() < 1e-6
+)
 
 
-def test_cooccurring_fields_have_positive_ppmi() -> None:
-    canon = _unified_canon()
-    mat, field_list, para_list, stats = build_ppmi_matrix(
-        defs_path=DATA / "defs.jsonl",
-        canonical_map=canon,
-        min_fields_per_para=1,
-        min_occurrences=1,
-        min_cooccurrences=1,
+def _def(node: str, extent: str, definers: tuple[str, ...] = ()) -> DefLine:
+    return DefLine(program="P", node=node, extent=extent, definers=definers)
+
+
+DEFS = (
+    _def("P1/0", "X@working_storage[0:2]", ("P2/1",)),
+    _def("P1/1", "Y@working_storage[2:4]"),
+    _def("P2/0", "Y@working_storage[2:4]"),
+    _def("P3/0", "Z@working_storage[4:6]", ("9999-ABEND/0",)),
+    _def("P3/1", "W@working_storage[6:8]"),
+    _def("P4/0", "Z@working_storage[4:6]"),
+)
+
+
+def test_paragraphs_count_their_unified_fields_and_pairs_score_by_positive_pmi(
+    tmp_path: Path,
+) -> None:
+    paragraphs = paragraph_fields(DEFS, INDEX, {"P:REC.W": "Q:REC.W"})
+    every = ppmi_matrix(paragraphs, MatrixLimits(1, 1, 1))
+    wide = ppmi_matrix(paragraphs, MatrixLimits(2, 1, 1))
+    save_matrix(wide, tmp_path / "m.npz", tmp_path / "meta.json")
+    loaded, fields, meta = load_matrix(tmp_path / "m.npz", tmp_path / "meta.json")
+
+    assert paragraphs == {
+        ("P", "P1"): frozenset({"P:REC.X", "P:REC.Y"}),
+        ("P", "P2"): frozenset({"P:REC.X", "P:REC.Y"}),
+        ("P", "P3"): frozenset({"P:REC.Z", "Q:REC.W"}),
+        ("P", "P4"): frozenset({"P:REC.Z"}),
+    }
+    assert every.fields == ("P:REC.X", "P:REC.Y", "P:REC.Z", "Q:REC.W")
+    assert every.matrix.toarray().tolist() == [
+        [0, 1, 0, 0],
+        [1, 0, 0, 0],
+        [0, 0, 0, 1],
+        [0, 0, 1, 0],
+    ]
+    assert wide.paragraphs == (("P", "P1"), ("P", "P2"), ("P", "P3"))
+    assert loaded.toarray().ravel().tolist() == pytest.approx(
+        [0, 0.5849625, 0, 0]
+        + [0.5849625, 0, 0, 0]
+        + [0, 0, 0, 1.5849625]
+        + [0, 0, 1.5849625, 0]
     )
-    field_idx = {f: i for i, f in enumerate(field_list)}
-    amount_rep = canon.get("WS-COMM-AMOUNT", "WS-COMM-AMOUNT")
-    date_rep = canon.get("WS-COMM-DATE", "WS-COMM-DATE")
-
-    assert amount_rep in field_idx, f"{amount_rep} not in field list"
-    assert date_rep in field_idx, f"{date_rep} not in field list"
-    i = field_idx[amount_rep]
-    j = field_idx[date_rep]
-    assert mat[i, j] > 0, "amount and date should have positive PPMI"
-
-
-def test_matrix_has_no_negative_entries() -> None:
-    mat, field_list, para_list, stats = build_ppmi_matrix(
-        defs_path=DATA / "defs.jsonl",
-        canonical_map=_unified_canon(),
-        min_fields_per_para=2,
-        min_occurrences=2,
-        min_cooccurrences=2,
+    assert (fields, [(p.program, p.paragraph) for p in meta.paragraphs]) == (
+        ["P:REC.X", "P:REC.Y", "P:REC.Z", "Q:REC.W"],
+        [("P", "P1"), ("P", "P2"), ("P", "P3")],
     )
-    assert mat.min() >= 0
