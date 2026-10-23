@@ -29,8 +29,7 @@ one `{"members": [...]}` per class, and the first member names it.
 ## Matrix
 
 Each `defs.jsonl` row names the fields its range covers, through the extents, and the paragraphs of
-its node and of every definer; paragraphs named `9999-*` are skipped. Each field is replaced by its
-class. A paragraph keeps at least `--min-fields` fields, a field at least `--min-occurrences`
+its node and of every definer. Each field is replaced by its class. A paragraph keeps at least `--min-fields` fields, a field at least `--min-occurrences`
 paragraphs, and a pair at least `--min-cooccurrences` shared paragraphs. Each kept pair scores its
 positive PMI, `log2(n(a,b) * paragraphs / (n(a) * n(b)))`, in a symmetric sparse matrix;
 `meta.json` lists the field of each row and the paragraphs counted.
