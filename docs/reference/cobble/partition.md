@@ -52,8 +52,12 @@ It logs a progress line every 1000 trace files, extent rows, dep rows and links 
 and one when each pass is done.
 
 A node is an elementary field: one with nothing declared under it, so every variant of a
-`REDEFINES` has its own fields. Every occurrence of an `OCCURS` table is one node, named
-`<program>:<record>.<field>`. Each program's origins (`LITERAL`, `FILE:`, `%CICS-STATE`,
+`REDEFINES` has its own fields, named `<program>:<record>.<field>`. Each occurrence of an `OCCURS`
+table element is a node of its own, with its subscripts from the extents table:
+`COMEN01C:DFHCOMMAREA.LK-COMMAREA(9)`, `X(2,5)` for a nested table. A handover into a byte table
+in linkage and the `MOVE` out of it then keep each byte apart, so the caller's `CDEMO-USER-ID`
+reaches the callee's `CDEMO-USER-ID` through occurrences 25 to 32 and not through one node every
+commarea field shares. A computed subscript reaches every occurrence it may hit. Each program's origins (`LITERAL`, `FILE:`, `%CICS-STATE`,
 `%CALL:`) and sinks (`FILE:`, `MAP:`, `TSQ:`, `TDQ:`, `TRANSID:`) are nodes of their own. A literal
 origin is one node per literal as written, `P|origin|LITERAL 'Y'` apart from
 `P|origin|LITERAL SPACES`, so a program's literals do not meet in one hub. `SPACE` and `SPACES`
@@ -88,10 +92,11 @@ graph, drawn red, and clustering does not cross them.
 | Barrier | Blocks |
 |---|---|
 | `none` | nothing: clusters over the raw graph |
-| `fanout` | a statement in which one field is linked to more than `--fanout-limit` others: a record written from an undivided `PIC X(n)` area, a commarea saved whole, a report line assembled from many fields |
+| `fanout` | a statement in which one field is linked to more than `--fanout-limit` other declared fields, a table's occurrences counting as one: a record written from an undivided `PIC X(n)` area, a commarea saved whole, a report line assembled from many fields |
 
-At 8 on CardDemo, a date or phone number assembled from its parts stays clustered and the
-commarea, export and report crossings are blocked. A concept wider than the limit, such as a
+At 8 on CardDemo, a date or phone number assembled from its parts stays clustered, a commarea
+handed over through a linkage byte table stays clustered byte by byte, and a commarea saved whole
+(`WS-COMMAREA`), the export record and the report lines are blocked. A concept wider than the limit, such as a
 13-part timestamp, splits into its parts.
 
 ## cobble-experimental-partition-clusters
@@ -119,7 +124,10 @@ light. Only clustered edges between two fields place nodes, cross-program ones i
 connected group of fields they link is a disc, laid out by a seeded networkx `spring_layout`
 over its own edges. Discs are packed in a spiral, largest first, and pushed apart until none
 overlap; where two discs sit says nothing. Unclustered fields, then origins and sinks, fill
-rings around them. Dot sizes are in layout units, so they keep their spacing when zoomed out.
+rings around them. The page folds a run of consecutive occurrences of one table element that
+share a cluster and have exactly the same edges into one drawn node, `LK-COMMAREA(9:16)`, whose
+edges carry the largest site count among the edges they stand for; selecting it lists the
+occurrences. Only the page folds: `graph.jsonl` and `clusters.jsonl` keep every occurrence. Dot sizes are in layout units, so they keep their spacing when zoomed out.
 Labels show only for a hovered node and its neighbours, or the selected cluster. Colour shows the
 cluster. The side panel lists
 clusters or components. Clicking one zooms to it and lists its fields and terminals. Hovering a

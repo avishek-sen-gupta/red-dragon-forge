@@ -129,3 +129,81 @@ def test_linked_groups_are_packed_without_overlapping() -> None:
         (i, j): math.dist(centres[i], centres[j]) >= radii[i] + radii[j] + GAP - 1e-2
         for i, j in ((0, 1), (0, 2), (1, 2))
     } == {(0, 1): True, (0, 2): True, (1, 2): True}
+
+
+def _occurrence(index: int) -> GraphNode:
+    return GraphNode(
+        id=f"S:DFH.LKB({index})",
+        kind=NodeKind.FIELD,
+        label=f"S.LKB({index})",
+        program="S",
+        record="DFH",
+        pic="X",
+        field="LKB",
+        subscripts=(index,),
+    )
+
+
+def _named(record: str, name: str) -> GraphNode:
+    return GraphNode(
+        id=f"S:{record}.{name}",
+        kind=NodeKind.FIELD,
+        label=f"S.{name}",
+        program="S",
+        record=record,
+        field=name,
+    )
+
+
+def test_the_page_draws_a_run_of_occurrences_with_the_same_neighbours_as_one_node() -> (
+    None
+):
+    lanes = {1: "A", 2: "A", 3: "B", 4: "B", 6: "B"}
+    graph = FieldGraph(
+        nodes=(
+            *(_occurrence(i) for i in lanes),
+            *(
+                _named(record, f"{record}-{lane}")
+                for record in ("CA", "SA")
+                for lane in "AB"
+            ),
+        ),
+        edges=tuple(
+            edge
+            for i, lane in lanes.items()
+            for edge in (
+                _edge(f"S:CA.CA-{lane}", f"S:DFH.LKB({i})"),
+                _edge(f"S:DFH.LKB({i})", f"S:SA.SA-{lane}"),
+            )
+        ),
+    )
+    clusters = cluster_set(graph, split_at=30)
+    html = page(graph, clusters, scripts=())
+    payload = json.loads(html.split("const DATA = ", 1)[1].split(";\n", 1)[0])
+
+    assert sorted(
+        (n["id"], n["label"], n["occurrences"], n["degree"])
+        for n in payload["nodes"]
+        if n["record"] == "DFH"
+    ) == [
+        ("S:DFH.LKB(1:2)", "S.LKB(1:2)", ["S.LKB(1)", "S.LKB(2)"], 2),
+        ("S:DFH.LKB(3:4)", "S.LKB(3:4)", ["S.LKB(3)", "S.LKB(4)"], 2),
+        ("S:DFH.LKB(6)", "S.LKB(6)", [], 2),
+    ]
+    assert sorted((e["source"], e["target"], e["sites"]) for e in payload["edges"]) == [
+        ("S:CA.CA-A", "S:DFH.LKB(1:2)", 2),
+        ("S:CA.CA-B", "S:DFH.LKB(3:4)", 2),
+        ("S:CA.CA-B", "S:DFH.LKB(6)", 2),
+        ("S:DFH.LKB(1:2)", "S:SA.SA-A", 2),
+        ("S:DFH.LKB(3:4)", "S:SA.SA-B", 2),
+        ("S:DFH.LKB(6)", "S:SA.SA-B", 2),
+    ]
+    placed = {member: c.id for c in clusters.clusters for member in c.members}
+    assert {
+        n["id"]: n["cluster"] for n in payload["nodes"] if n["record"] == "DFH"
+    } == {
+        "S:DFH.LKB(1:2)": placed["S:DFH.LKB(1)"],
+        "S:DFH.LKB(3:4)": placed["S:DFH.LKB(3)"],
+        "S:DFH.LKB(6)": placed["S:DFH.LKB(6)"],
+    }
+    assert placed["S:DFH.LKB(1)"] != placed["S:DFH.LKB(3)"]

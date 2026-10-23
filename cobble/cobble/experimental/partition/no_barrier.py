@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Set
 
 from cobble.experimental.partition.barrier import Barrier
+from cobble.experimental.partition.field_leaf import FieldLeaf
 
 
 class NoBarrier(Barrier):
@@ -14,5 +15,5 @@ class NoBarrier(Barrier):
     def name(self) -> str:
         return "none"
 
-    def blocks(self, pairs: Set[tuple[str, str]]) -> bool:
+    def blocks(self, pairs: Set[tuple[FieldLeaf, FieldLeaf]]) -> bool:
         return False

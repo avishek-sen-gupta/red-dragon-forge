@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class ExtentRow(BaseModel):
-    """A field's extents with, per extent, its record, declaration path and picture."""
+    """A field's extents with, per extent, its record, declaration path, picture and subscripts."""
 
     model_config = ConfigDict(frozen=True, extra="ignore")
 
@@ -15,3 +15,4 @@ class ExtentRow(BaseModel):
     records: tuple[str, ...]
     paths: tuple[tuple[str, ...], ...]
     pics: tuple[str, ...]
+    indexes: tuple[tuple[int, ...], ...]

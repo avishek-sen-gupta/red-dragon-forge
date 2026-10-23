@@ -41,6 +41,7 @@ def _extent(program: str, path: tuple[str, ...], span: str) -> str:
         records=(path[0],),
         paths=(path,),
         pics=("X(4)",),
+        indexes=((),),
     ).model_dump_json()
 
 

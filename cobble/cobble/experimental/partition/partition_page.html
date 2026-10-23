@@ -127,7 +127,8 @@ function select(k, node) {
   const ids = groups().find(g => g[0] === k)[1];
   const s = summary(ids);
   focusTerminals = new Set(ids.flatMap(i => graph.neighbors(i).filter(m => !isField(m))));
-  const picked = node ? `${graph.getNodeAttribute(node, "label")} [${graph.getNodeAttribute(node, "record")}] ${graph.getNodeAttribute(node, "pic")}\n\n` : "";
+  const folds = node ? graph.getNodeAttribute(node, "occurrences") : [];
+  const picked = node ? `${graph.getNodeAttribute(node, "label")} [${graph.getNodeAttribute(node, "record")}] ${graph.getNodeAttribute(node, "pic")}\n${folds.length ? "occurrences: " + folds.join(", ") + "\n" : ""}\n` : "";
   detail.textContent = `${picked}${ids.length} fields in ${s.program}\nrecords: ${s.records.map(r => r[0] + "×" + r[1]).join(", ")}\n`
     + `terminals: ${[...focusTerminals].map(t => graph.getNodeAttribute(t, "label")).join("; ")}\n\n`
     + ids.map(i => graph.getNodeAttribute(i, "label")).sort().join("\n");

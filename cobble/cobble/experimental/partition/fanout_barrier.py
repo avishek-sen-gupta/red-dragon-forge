@@ -7,11 +7,12 @@ from collections.abc import Set
 from dataclasses import dataclass
 
 from cobble.experimental.partition.barrier import Barrier
+from cobble.experimental.partition.field_leaf import FieldLeaf
 
 
 @dataclass(frozen=True)
 class FanoutBarrier(Barrier):
-    """Blocks a statement when any one field it links has more than ``limit`` partners."""
+    """Blocks a statement when any one field it links has more than ``limit`` partner fields; a table's occurrences are one."""
 
     limit: int
 
@@ -19,8 +20,10 @@ class FanoutBarrier(Barrier):
     def name(self) -> str:
         return f"fanout-{self.limit}"
 
-    def blocks(self, pairs: Set[tuple[str, str]]) -> bool:
-        partners = Counter(("source", s) for s, _ in pairs) + Counter(
-            ("target", t) for _, t in pairs
+    def blocks(self, pairs: Set[tuple[FieldLeaf, FieldLeaf]]) -> bool:
+        outward = {(s.node, t.declared) for s, t in pairs}
+        inward = {(s.declared, t.node) for s, t in pairs}
+        partners = Counter(("source", s) for s, _ in outward) + Counter(
+            ("target", t) for _, t in inward
         )
         return any(count > self.limit for count in partners.values())

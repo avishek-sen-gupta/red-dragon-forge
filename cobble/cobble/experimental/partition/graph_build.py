@@ -30,10 +30,12 @@ def _field(leaf: FieldLeaf) -> GraphNode:
     return GraphNode(
         id=leaf.node,
         kind=NodeKind.FIELD,
-        label=f"{leaf.program}.{leaf.name}",
+        label=f"{leaf.program}.{leaf.occurrence}",
         program=leaf.program,
         record=leaf.record,
         pic=leaf.pic,
+        field=leaf.name,
+        subscripts=leaf.subscripts,
     )
 
 
@@ -131,7 +133,7 @@ def _read(index: LeafIndex, rows: _Rows, dep: DepRow) -> Span:
 
 def _copied(barrier: Barrier, target: Span, source: Span, site: str) -> _Moved:
     pairs = _pairs(target, source)
-    clustered = not barrier.blocks({(s.node, t.node) for s, t in pairs})
+    clustered = not barrier.blocks(set(pairs))
     return (
         tuple(_field(leaf) for pair in pairs for leaf in pair),
         tuple(Flow(s.node, t.node, site, clustered) for s, t in pairs),
