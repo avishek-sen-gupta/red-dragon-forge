@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TypedDict
+
+import pytest
 
 from cobble.experimental.partition import clusters_cli, graph_cli, render_cli
 from cobble.experimental.partition.extent_row import ExtentRow
@@ -86,6 +89,8 @@ class _EdgeLine(TypedDict):
     barrier: str
     alignments: list[_Placed]
     aligned: bool
+    certainty: str
+    reasons: list[str]
 
 
 def _edge_line(
@@ -103,6 +108,8 @@ def _edge_line(
         barrier="fanout-8",
         alignments=[_Placed(source=s, target=t, length=n) for s, t, n in placed],
         aligned=bool(placed),
+        certainty="exact",
+        reasons=[],
     )
 
 
@@ -268,3 +275,186 @@ def test_the_commands_turn_traces_into_a_graph_clusters_a_report_and_a_page(
         ("P|sink|FILE:F", -1),
         ("Q:LK.LK", -1),
     ]
+
+
+def _file_dep(
+    program: str, site: str, record: _Range, terminal: str, *, writes: bool
+) -> str:
+    return json.dumps(
+        _Dep(
+            kind="dep",
+            program=program,
+            via="",
+            target=None if writes else record,
+            origin="" if writes else terminal,
+            literal="",
+            sink=terminal if writes else "",
+            source=record if writes else None,
+            source_program=program,
+            site=f"{program}/{site}",
+            definers=[],
+        )
+    )
+
+
+def _kg_edge(
+    source: tuple[str, str], kind: str, target: tuple[str, str], **attrs: str
+) -> str:
+    return json.dumps(
+        {
+            "type": "edge",
+            "source": source[0],
+            "source_kind": source[1],
+            "target": target[0],
+            "target_kind": target[1],
+            "kind": kind,
+            "attrs": attrs,
+        }
+    )
+
+
+def _dataset_inputs(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
+    extents = _jsonl(
+        tmp_path / "extents.jsonl",
+        [
+            _extent("P", ("OUT",), "working_storage[8:16]"),
+            _extent("P", ("OUT", "C"), "working_storage[8:12]"),
+            _extent("P", ("OUT", "D"), "working_storage[12:16]"),
+            _extent("R", ("RIN",), "working_storage[0:8]"),
+            _extent("R", ("RIN", "RA"), "working_storage[0:4]"),
+            _extent("R", ("RIN", "RB"), "working_storage[4:8]"),
+            _extent("R", ("RCICS",), "working_storage[8:16]"),
+        ],
+    )
+    traces = tmp_path / "traces"
+    traces.mkdir()
+    _jsonl(
+        traces / "P.jsonl",
+        [_file_dep("P", "3", _range("OUT", 8, 16), "FILE:OUT-FILE", writes=True)],
+    )
+    _jsonl(
+        traces / "R.jsonl",
+        [
+            _file_dep("R", "1", _range("RIN", 0, 8), "FILE:IN-FILE", writes=False),
+            _file_dep("R", "9", _range("RCICS", 8, 16), "FILE:LIT-ACCT", writes=False),
+        ],
+    )
+    graph = _jsonl(
+        tmp_path / "knowledge-graph.jsonl",
+        [
+            _kg_edge(
+                ("P", "PROGRAM"),
+                "WRITES",
+                ("OUT", "COBOL_FILE"),
+                select_name="OUT-FILE",
+            ),
+            _kg_edge(("J.S1", "STEP"), "JCL_STEP_RUNS", ("P", "PROGRAM")),
+            _kg_edge(("J.S1", "STEP"), "WRITES", ("DS.X", "DATASET"), ddname="OUT"),
+            _kg_edge(
+                ("R", "PROGRAM"), "READS", ("IN", "COBOL_FILE"), select_name="IN-FILE"
+            ),
+            _kg_edge(("J.S2", "STEP"), "JCL_STEP_RUNS", ("R", "PROGRAM")),
+            _kg_edge(("J.S2", "STEP"), "READS", ("DS.X", "DATASET"), ddname="IN"),
+        ],
+    )
+    targets = _jsonl(
+        tmp_path / "targets.jsonl",
+        [
+            json.dumps(
+                {
+                    "caller": "R",
+                    "node": "9",
+                    "kind": "file",
+                    "candidates": ["ACCTDAT"],
+                    "reasons": [],
+                }
+            )
+        ],
+    )
+    return extents, traces, graph, targets
+
+
+def _graph(arguments: Sequence[str], out: Path) -> list[dict[str, dict[str, str]]]:
+    assert graph_cli.main([*arguments, "--out", str(out)]) == 0
+    return [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines()]
+
+
+def _dataset_view(
+    lines: list[dict[str, dict[str, str]]],
+) -> tuple[list[str], list[tuple[str, str, str]]]:
+    return (
+        [
+            line["node"]["id"]
+            for line in lines
+            if "node" in line and line["node"]["kind"] == "dataset"
+        ],
+        [
+            (line["edge"]["source"], line["edge"]["target"], line["edge"]["certainty"])
+            for line in lines
+            if "edge" in line and not line["edge"]["clustered"]
+        ],
+    )
+
+
+def test_without_a_knowledge_graph_the_graph_has_no_dataset_links(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    extents, traces, _, targets = _dataset_inputs(tmp_path)
+    base = ["--extents", str(extents), "--traces", str(traces)]
+
+    with caplog.at_level(logging.INFO):
+        plain = _graph(base, tmp_path / "plain.jsonl")
+        targeted = _graph(
+            [*base, "--targets", str(targets)], tmp_path / "targeted.jsonl"
+        )
+
+    assert (tmp_path / "plain.jsonl").read_bytes() == (
+        tmp_path / "targeted.jsonl"
+    ).read_bytes()
+    assert plain == targeted
+    assert _dataset_view(plain) == ([], [])
+    assert (
+        caplog.text.count(
+            "partition graph: no knowledge graph given, dataset links off"
+        )
+        == 2
+    )
+
+
+def test_with_a_knowledge_graph_file_sites_become_dataset_links(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    extents, traces, graph, targets = _dataset_inputs(tmp_path)
+    base = [
+        "--extents",
+        str(extents),
+        "--traces",
+        str(traces),
+        "--knowledge-graph",
+        str(graph),
+    ]
+
+    with caplog.at_level(logging.INFO):
+        full = _graph([*base, "--targets", str(targets)], tmp_path / "full.jsonl")
+        batch = _graph(base, tmp_path / "batch.jsonl")
+
+    batch_links = [
+        ("DS.X[0:4]", "R:RIN.RA", "exact"),
+        ("DS.X[4:8]", "R:RIN.RB", "exact"),
+        ("P:OUT.C", "DS.X[0:4]", "exact"),
+        ("P:OUT.D", "DS.X[4:8]", "exact"),
+    ]
+    assert _dataset_view(full) == (
+        ["ACCTDAT[0:8]", "DS.X[0:4]", "DS.X[4:8]"],
+        [("ACCTDAT[0:8]", "R:RCICS.RCICS", "exact"), *batch_links],
+    )
+    assert _dataset_view(batch) == (
+        ["DS.X[0:4]", "DS.X[4:8]", "R/9|?LIT-ACCT"],
+        [*batch_links, ("R/9|?LIT-ACCT", "R:RCICS.RCICS", "possible")],
+    )
+    assert (
+        caplog.text.count(
+            "partition graph: no targets given, CICS file sites unresolved"
+        )
+        == 1
+    )

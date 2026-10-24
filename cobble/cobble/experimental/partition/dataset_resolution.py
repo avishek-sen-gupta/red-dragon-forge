@@ -28,18 +28,33 @@ def _named(terminal: str) -> str:
     )
 
 
+def _written(dep: DepRow, name: str) -> tuple[FileSite, ...]:
+    if not dep.source.known:
+        return ()
+    return (FileSite(dep.program, dep.site, name, dep.source, True),)
+
+
+def _read(dep: DepRow, name: str) -> tuple[FileSite, ...]:
+    if not dep.target.known:
+        return ()
+    return (FileSite(dep.program, dep.site, name, dep.target, False),)
+
+
 def _uses(dep: DepRow) -> tuple[FileSite, ...]:
     written = _named(dep.sink)
     if written:
-        return (FileSite(dep.program, dep.site, written, dep.source, True),)
+        return _written(dep, written)
     read = _named(dep.origin)
-    if read and dep.target.known:
-        return (FileSite(dep.program, dep.site, read, dep.target, False),)
-    return ()
+    return _read(dep, read) if read else ()
 
 
 def file_sites(deps: Sequence[DepRow]) -> tuple[FileSite, ...]:
-    return tuple(dict.fromkeys(site for dep in deps for site in _uses(dep)))
+    crossings = frozenset(dep.via for dep in deps if dep.via)
+    return tuple(
+        dict.fromkeys(
+            site for dep in deps if dep.site not in crossings for site in _uses(dep)
+        )
+    )
 
 
 def _certainty(reasons: tuple[str, ...]) -> Certainty:

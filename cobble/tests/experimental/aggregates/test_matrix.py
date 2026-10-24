@@ -61,7 +61,7 @@ def test_paragraphs_count_their_unified_fields_and_pairs_score_by_positive_pmi(
     every = ppmi_matrix(paragraphs, MatrixLimits(1, 1, 1))
     wide = ppmi_matrix(paragraphs, MatrixLimits(2, 1, 1))
     save_matrix(wide, tmp_path / "m.npz", tmp_path / "meta.json")
-    loaded, fields, meta = load_matrix(tmp_path / "m.npz", tmp_path / "meta.json")
+    loaded = load_matrix(tmp_path / "m.npz", tmp_path / "meta.json")
 
     assert paragraphs == {
         ("P", "P1"): frozenset({"P:REC.X", "P:REC.Y"}),
@@ -77,13 +77,52 @@ def test_paragraphs_count_their_unified_fields_and_pairs_score_by_positive_pmi(
         [0, 0, 1, 0],
     ]
     assert wide.paragraphs == (("P", "P1"), ("P", "P2"), ("P", "P3"))
-    assert loaded.toarray().ravel().tolist() == pytest.approx(
+    assert loaded.matrix.toarray().ravel().tolist() == pytest.approx(
         [0, 0.5849625, 0, 0]
         + [0.5849625, 0, 0, 0]
         + [0, 0, 0, 1.5849625]
         + [0, 0, 1.5849625, 0]
     )
-    assert (fields, [(p.program, p.paragraph) for p in meta.paragraphs]) == (
-        ["P:REC.X", "P:REC.Y", "P:REC.Z", "Q:REC.W"],
-        [("P", "P1"), ("P", "P2"), ("P", "P3")],
+    assert (
+        loaded.fields,
+        loaded.paragraphs,
+        loaded.occurrences,
+        loaded.min_occurrences,
+    ) == (
+        ("P:REC.X", "P:REC.Y", "P:REC.Z", "Q:REC.W"),
+        (("P", "P1"), ("P", "P2"), ("P", "P3")),
+        (2, 2, 1, 1),
+        1,
     )
+
+
+def test_table_occurrences_count_as_their_declared_field() -> None:
+    table = leaf_index(
+        (
+            _row(("TAB",), 0, 4),
+            ExtentRow(
+                program="P",
+                extents=(
+                    "T@working_storage[0:2]",
+                    "T@working_storage[2:4]",
+                ),
+                records=("TAB", "TAB"),
+                paths=(("TAB", "T"), ("TAB", "T")),
+                pics=("X", "X"),
+                indexes=((1,), (2,)),
+            ),
+        )
+    )
+
+    assert paragraph_fields(
+        (
+            _def("P1/0", "T@working_storage[0:2]"),
+            _def("P1/1", "T@working_storage[2:4]"),
+            _def("P2/0", "TAB@working_storage[0:4]"),
+        ),
+        table,
+        {},
+    ) == {
+        ("P", "P1"): frozenset({"P:TAB.T"}),
+        ("P", "P2"): frozenset({"P:TAB.T"}),
+    }

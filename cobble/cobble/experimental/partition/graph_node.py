@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class GraphNode(BaseModel):
-    """An elementary field (one occurrence of a table element), or a program's origin or sink."""
+    """An elementary field (one occurrence of a table element), a program's origin or sink, or a dataset slot starting at ``offset`` in its record."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -20,3 +20,4 @@ class GraphNode(BaseModel):
     field: str = ""
     subscripts: tuple[int, ...] = ()
     size: int = 0
+    offset: int = 0

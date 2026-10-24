@@ -13,19 +13,26 @@ input[type=text] { width:100%; box-sizing:border-box; padding:5px; margin:4px 0 
 .muted { color:var(--muted); }
 #detail { white-space:pre-wrap; font:11px ui-monospace, monospace; margin-top:8px; border-top:1px solid var(--line); padding-top:8px; }
 label { margin-right:10px; }
+#layout { position:absolute; top:8px; right:8px; max-width:calc(100% - 16px); max-height:calc(100% - 16px); overflow:auto; background:var(--panel); border:1px solid var(--line); font:11px ui-monospace, monospace; z-index:2; }
+#layout:empty { display:none; }
+#layout table { border-collapse:collapse; }
+#layout th, #layout td { border:1px solid var(--line); padding:2px 6px; vertical-align:top; white-space:nowrap; text-align:left; }
+#layout th { position:sticky; top:0; background:var(--panel); }
+#layout .possible { color:var(--muted); font-style:italic; }
 </style></head>
 <body><div id="wrap"><div id="side">
 <b id="title"></b><div id="stats" class="muted"></div>
 <div style="margin-top:8px">
 <label><input type="radio" name="group" value="cluster" checked> clusters</label>
-<label><input type="radio" name="group" value="component"> components</label><br>
+<label><input type="radio" name="group" value="component"> components</label>
+<label><input type="radio" name="group" value="dataset"> datasets</label><br>
 <label><input type="checkbox" id="terminals" checked> origins and sinks</label>
 <label><input type="checkbox" id="blocked" checked> blocked edges</label>
-<div class="muted">grey: clustered · orange: cross-program · red: blocked by the barrier</div>
+<div class="muted">grey: clustered · pale orange: cross-program · red: blocked by the barrier · blue dots: dataset slots; dataset links (blue exact, pale blue possible) show only for a followed dataset: pick one under "datasets", click a slot, or type a dataset name and press Enter</div>
 </div>
 <input type="text" id="search" placeholder="search a field or program">
 <div id="list"></div><div id="detail"></div>
-</div><div id="graph"></div></div>
+</div><div id="graph"><div id="layout"></div></div></div>
 /*SCRIPTS*/
 <script>
 const DATA = /*DATA*/;
@@ -36,16 +43,21 @@ const hex = (h, s, l) => {
 };
 const colour = k => k < 0 ? "#999" : hex(((k * 0.618033988749895) % 1) * 360, 0.65, 0.45 + (k % 3) * 0.07);
 const dim = getComputedStyle(document.documentElement).getPropertyValue("--dim").trim();
+const SLOT = "#2e86de";
 const graph = new graphology.DirectedGraph();
 DATA.nodes.forEach(n => graph.addNode(n.id, { ...n, y: -n.y,
   size: n.kind === "field" ? 0.6 + 0.1 * Math.min(6, Math.sqrt(n.degree)) : 1,
-  color: n.kind === "sink" ? "#c0392b" : n.kind === "origin" ? "#2c3e50" : colour(n.cluster) }));
+  color: n.kind === "sink" ? "#c0392b" : n.kind === "origin" ? "#2c3e50" : n.kind === "dataset" ? SLOT : colour(n.cluster) }));
+const isSlot = id => graph.getNodeAttribute(id, "kind") === "dataset";
 DATA.edges.forEach(e => graph.addEdge(e.source, e.target, { ...e,
+  dataset: isSlot(e.source) || isSlot(e.target),
   size: Math.min(0.5, 0.1 + 0.1 * Math.log2(e.sites)),
-  color: !e.clustered ? "#c0392b" : e.cross_program ? "#e67e22" : "#bbb" }));
-let grouping = "cluster", showTerminals = true, showBlocked = true, focus = null, focusTerminals = null, hover = null, matching = null;
+  color: isSlot(e.source) || isSlot(e.target) ? (e.certainty === "exact" ? SLOT : "#aed6f1")
+    : !e.clustered ? "#c0392b" : e.cross_program ? "#f5cba7" : "#bbb" }));
+let grouping = "cluster", showTerminals = true, showBlocked = true, focus = null, focusTerminals = null, hover = null, matching = null, chain = null, followed = null;
 const groupOf = d => grouping === "cluster" ? d.cluster : d.component;
 const isField = id => graph.getNodeAttribute(id, "kind") === "field";
+const isStorage = id => isField(id) || isSlot(id);
 const inFocus = id => isField(id) && groupOf(graph.getNodeAttributes(id)) === focus;
 const Arrow = Sigma.rendering.createEdgeArrowProgram({ lengthToThicknessRatio: 6, widenessToThicknessRatio: 4 });
 const renderer = new Sigma(graph, document.getElementById("graph"), {
@@ -53,25 +65,30 @@ const renderer = new Sigma(graph, document.getElementById("graph"), {
   itemSizesReference: "positions", zoomToSizeRatioFunction: x => x,
   labelRenderedSizeThreshold: 7,
   nodeReducer: (id, d) => {
-    if (d.kind !== "field" && !showTerminals) return { ...d, hidden: true };
+    if (d.kind !== "field" && d.kind !== "dataset" && !showTerminals) return { ...d, hidden: true };
     const shown = { ...d, label: null, color: d.kind === "field" ? colour(groupOf(d)) : d.color };
     const labelled = { ...shown, label: d.label, forceLabel: true };
     const faded = { ...shown, color: dim };
     if (hover) return hover.has(id) ? labelled : faded;
+    if (chain) return chain.has(id) ? shown : { ...faded, size: Math.min(d.size, 0.6) };
     if (matching && !matching.has(id)) return faded;
     if (focus === null) return shown;
     return inFocus(id) || focusTerminals.has(id) ? labelled : faded;
   },
   edgeReducer: (id, d) => {
     const [s, t] = graph.extremities(id);
-    if (!d.clustered && !showBlocked) return { ...d, hidden: true };
-    if (!showTerminals && (!isField(s) || !isField(t))) return { ...d, hidden: true };
+    if (d.dataset && !(chain && chain.has(s) && chain.has(t))) return { ...d, hidden: true };
+    if (!d.clustered && !d.dataset && !showBlocked) return { ...d, hidden: true };
+    if (!showTerminals && (!isStorage(s) || !isStorage(t))) return { ...d, hidden: true };
     if (hover) return hover.has(s) && hover.has(t) ? { ...d, color: "#444" } : { ...d, hidden: true };
+    if (chain) return chain.has(s) && chain.has(t) ? { ...d, size: 0.6 } : { ...d, hidden: true };
     if (focus === null) return d;
     return inFocus(s) || inFocus(t) ? d : { ...d, hidden: true };
   },
 });
 const refresh = () => renderer.refresh({ skipIndexation: true });
+let settle = null;
+renderer.getCamera().on("updated", () => { clearTimeout(settle); settle = setTimeout(() => renderer.refresh({ skipIndexation: true }), 150); });
 renderer.on("enterNode", ({ node }) => { hover = new Set([node, ...graph.neighbors(node)]); refresh(); });
 renderer.on("leaveNode", () => { hover = null; refresh(); });
 let dragged = null, dragMoved = false;
@@ -86,9 +103,86 @@ renderer.getMouseCaptor().on("mousemovebody", e => {
   e.preventSigmaDefault(); e.original.preventDefault(); e.original.stopPropagation();
 });
 renderer.getMouseCaptor().on("mouseup", () => { dragged = null; });
-renderer.on("clickNode", ({ node }) => !dragMoved && isField(node) && select(groupOf(graph.getNodeAttributes(node)), node));
+renderer.on("clickNode", ({ node }) => {
+  if (dragMoved) return;
+  if (isSlot(node)) return follow(node);
+  if (!isField(node)) return;
+  const slot = graph.neighbors(node).find(isSlot);
+  if (grouping === "dataset" && slot) return followDataset(graph.getNodeAttribute(slot, "record"));
+  if (grouping === "dataset") { grouping = "cluster"; document.querySelector("input[name=group][value=cluster]").checked = true; }
+  const k = groupOf(graph.getNodeAttributes(node));
+  if (k < 0) return select(null);
+  select(k, node);
+});
 renderer.on("clickStage", () => select(null));
+function linked(slots) {
+  const seen = new Set(slots);
+  slots.forEach(slot => graph.forEachNeighbor(slot, n => seen.add(n)));
+  return seen;
+}
+const slotsOf = name => graph.filterNodes((id, d) => d.kind === "dataset" && d.record === name);
+function zoomTo(ids) {
+  const shown = ids.map(i => renderer.getNodeDisplayData(i));
+  const cx = shown.reduce((a, d) => a + d.x, 0) / shown.length;
+  const cy = shown.reduce((a, d) => a + d.y, 0) / shown.length;
+  const span = Math.max(...shown.map(d => Math.max(Math.abs(d.x - cx), Math.abs(d.y - cy)))) * 2.6 + 0.01;
+  renderer.getCamera().animate({ x: cx, y: cy, ratio: Math.min(1, span) }, { duration: 400 });
+}
+function follow(slot) { followAll([slot], graph.getNodeAttribute(slot, "label")); }
+function followDataset(name) { followAll(slotsOf(name), name); }
+function followAll(slots, title) {
+  focus = null; focusTerminals = null; chain = linked(slots); followed = title;
+  const fields = [...chain].filter(isField);
+  const programs = {};
+  fields.forEach(f => { const p = graph.getNodeAttribute(f, "program"); programs[p] = [...(programs[p] || []), graph.getNodeAttribute(f, "label")]; });
+  const links = graph.filterEdges((e, d, s, t) => d.dataset && chain.has(s) && chain.has(t))
+    .map(e => { const d = graph.getEdgeAttributes(e); return `${graph.getNodeAttribute(graph.source(e), "label")} -> ${graph.getNodeAttribute(graph.target(e), "label")}  ${d.certainty}${d.reasons.length ? ": " + d.reasons.join(", ") : ""}`; });
+  document.getElementById("detail").textContent = `${title}\n${fields.length} fields in ${Object.keys(programs).length} programs\n\n`
+    + Object.entries(programs).sort().map(([p, ls]) => `${p}: ${ls.sort().join(", ")}`).join("\n") + "\n\n" + links.sort().join("\n");
+  layoutOf(slots);
+  zoomTo([...chain]);
+  render(); refresh();
+}
+function cell(entries) {
+  const td = document.createElement("td");
+  entries.forEach(entry => {
+    const div = document.createElement("div");
+    div.textContent = entry.text;
+    if (entry.reasons.length) { div.className = "possible"; div.title = entry.reasons.join(", "); }
+    td.appendChild(div);
+  });
+  return td;
+}
+function layoutOf(slots) {
+  const ordered = [...slots].sort((a, b) => graph.getNodeAttribute(a, "offset") - graph.getNodeAttribute(b, "offset"));
+  const rows = ordered.map(slot => {
+    const at = new Map();
+    graph.forEachEdge(slot, (e, d, s, t) => {
+      const field = s === slot ? t : s, program = graph.getNodeAttribute(field, "program");
+      at.set(program, [...(at.get(program) || []), { text: `${graph.getNodeAttribute(field, "label")} ${s === slot ? "←" : "→"}`, reasons: d.reasons }]);
+    });
+    return [slot, at];
+  });
+  const programs = [...new Set(rows.flatMap(([, at]) => [...at.keys()]))].sort();
+  const table = document.createElement("table");
+  const head = table.insertRow();
+  ["bytes", ...programs].forEach(name => { const th = document.createElement("th"); th.textContent = name; head.appendChild(th); });
+  rows.forEach(([slot, at]) => {
+    const row = table.insertRow();
+    const start = graph.getNodeAttribute(slot, "offset");
+    row.insertCell().textContent = `${start}:${start + graph.getNodeAttribute(slot, "length")}`;
+    programs.forEach(program => row.appendChild(cell((at.get(program) || []).sort((a, b) => a.text < b.text ? -1 : 1))));
+  });
+  document.getElementById("layout").replaceChildren(table);
+}
+function datasets() {
+  const found = new Map();
+  graph.forEachNode((id, d) => { if (d.kind === "dataset") found.set(d.record, [...(found.get(d.record) || []), id]); });
+  return [...found.entries()].map(([name, slots]) => [name, [...linked(slots)].filter(isField)])
+    .sort((a, b) => b[1].length - a[1].length || (a[0] < b[0] ? -1 : 1));
+}
 function groups() {
+  if (grouping === "dataset") return datasets();
   const found = new Map();
   graph.forEachNode((id, d) => {
     if (d.kind !== "field" || groupOf(d) < 0) return;
@@ -97,6 +191,7 @@ function groups() {
   return [...found.entries()].sort((a, b) => b[1].length - a[1].length || a[0] - b[0]);
 }
 function summary(ids) {
+  if (!ids.length) return { program: "", records: [] };
   const records = {};
   ids.forEach(i => { const r = graph.getNodeAttribute(i, "record"); records[r] = (records[r] || 0) + 1; });
   return { program: graph.getNodeAttribute(ids[0], "program"), records: Object.entries(records).sort((a, b) => b[1] - a[1]) };
@@ -110,18 +205,22 @@ function render() {
   found.slice(0, 500).forEach(([k, ids]) => {
     const s = summary(ids);
     const row = document.createElement("div");
-    row.className = "c" + (focus === k ? " sel" : "");
+    row.className = "c" + (focus === k || followed === k ? " sel" : "");
     const swatch = document.createElement("span");
     swatch.className = "sw"; swatch.style.background = colour(k);
     const text = document.createElement("span");
-    text.textContent = `${ids.length} · ${s.program} · ${s.records.slice(0, 3).map(r => r[0]).join(", ")}`;
+    text.textContent = grouping === "dataset"
+      ? `${ids.length} · ${k} · ${new Set(ids.map(i => graph.getNodeAttribute(i, "program"))).size} programs`
+      : `${ids.length} · ${s.program} · ${s.records.slice(0, 3).map(r => r[0]).join(", ")}`;
     row.append(swatch, text);
     row.onclick = () => select(k);
     list.appendChild(row);
   });
 }
 function select(k, node) {
-  focus = k;
+  focus = k; chain = null; followed = null;
+  document.getElementById("layout").replaceChildren();
+  if (grouping === "dataset" && k !== null) return followDataset(k);
   const detail = document.getElementById("detail");
   if (k === null) { focusTerminals = null; detail.textContent = ""; render(); refresh(); return; }
   const ids = groups().find(g => g[0] === k)[1];
@@ -132,11 +231,7 @@ function select(k, node) {
   detail.textContent = `${picked}${ids.length} fields in ${s.program}\nrecords: ${s.records.map(r => r[0] + "×" + r[1]).join(", ")}\n`
     + `terminals: ${[...focusTerminals].map(t => graph.getNodeAttribute(t, "label")).join("; ")}\n\n`
     + ids.map(i => graph.getNodeAttribute(i, "label")).sort().join("\n");
-  const shown = ids.map(i => renderer.getNodeDisplayData(i));
-  const cx = shown.reduce((a, d) => a + d.x, 0) / shown.length;
-  const cy = shown.reduce((a, d) => a + d.y, 0) / shown.length;
-  const span = Math.max(...shown.map(d => Math.max(Math.abs(d.x - cx), Math.abs(d.y - cy)))) * 2.6 + 0.01;
-  renderer.getCamera().animate({ x: cx, y: cy, ratio: Math.min(1, span) }, { duration: 400 });
+  zoomTo(ids);
   render(); refresh();
 }
 document.querySelectorAll("input[name=group]").forEach(el => el.onchange = () => { grouping = el.value; select(null); });
@@ -146,6 +241,11 @@ document.getElementById("search").oninput = e => {
   const q = e.target.value.trim().toLowerCase();
   matching = q ? new Set(graph.filterNodes((id, d) => d.label.toLowerCase().includes(q) || d.program.toLowerCase() === q)) : null;
   refresh();
+};
+document.getElementById("search").onkeydown = e => {
+  if (!["Enter", "NumpadEnter"].includes(e.code) || !matching) return;
+  const slot = [...matching].find(isSlot);
+  if (slot) followDataset(graph.getNodeAttribute(slot, "record"));
 };
 document.getElementById("title").textContent = "Field partitions";
 render();

@@ -6,8 +6,9 @@ from enum import StrEnum
 
 
 class NodeKind(StrEnum):
-    """A field's storage, or a terminal where bytes enter or leave a program."""
+    """A field's storage, a terminal where bytes enter or leave a program, or a byte slot of a dataset record."""
 
     FIELD = "field"
     ORIGIN = "origin"
     SINK = "sink"
+    DATASET = "dataset"

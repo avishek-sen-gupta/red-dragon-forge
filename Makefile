@@ -23,7 +23,7 @@ help:
 	@echo "make test-all  - jar once, then run every package's full suite (cicada, squall, catnip, litter, jackal, cobble, forge)"
 	@echo "make fmt       - black-format the codebase"
 	@echo "make partition-traces   - experimental: parse, extents, call targets and one path trace per member (PARTITION_CONFIG, PARTITION_ASG)"
-	@echo "make partition-graph    - experimental: the field graph of those traces (PARTITION_BARRIER, PARTITION_FANOUT)"
+	@echo "make partition-graph    - experimental: the knowledge graph, then the field graph of those traces with dataset links (PARTITION_BARRIER, PARTITION_FANOUT)"
 	@echo "make partition-clusters - experimental: clusters of fields inside each program, and their report"
 	@echo "make partition-render   - experimental: the WebGL page of the graph and its clusters"
 	@echo "make db2-up    - start squall's Db2 container and wait until healthy (idempotent)"
@@ -64,6 +64,7 @@ jar-force:
 
 python:
 	uv sync --all-packages
+	uv run --no-sync python -m playwright install chromium
 
 test: jar
 	$(BRIDGE_ENV) && export SQUALL_DIR=squall && . squall/db2/dsn-env.sh && $(PYTEST) tests/ $(PYTEST_ARGS)
@@ -104,7 +105,8 @@ partition-traces: jar
 	done
 
 partition-graph: partition-traces
-	$(COBBLE) cobble-experimental-partition-graph --extents $(PARTITION_DIR)/extents.jsonl --traces $(PARTITION_DIR)/traces --links $(PARTITION_DIR)/combine/links.jsonl --barrier $(PARTITION_BARRIER) --fanout-limit $(PARTITION_FANOUT) --out $(PARTITION_DIR)/graph.jsonl
+	$(BRIDGE_ENV) && $(COBBLE) cobble-build --config $(PARTITION_CONFIG) --output $(PARTITION_DIR)/knowledge-graph.jsonl --dynamic-call-targets $(PARTITION_DIR)/combine/targets.jsonl
+	$(COBBLE) cobble-experimental-partition-graph --extents $(PARTITION_DIR)/extents.jsonl --traces $(PARTITION_DIR)/traces --links $(PARTITION_DIR)/combine/links.jsonl --knowledge-graph $(PARTITION_DIR)/knowledge-graph.jsonl --targets $(PARTITION_DIR)/combine/targets.jsonl --barrier $(PARTITION_BARRIER) --fanout-limit $(PARTITION_FANOUT) --out $(PARTITION_DIR)/graph.jsonl
 
 partition-clusters: partition-graph
 	$(COBBLE) cobble-experimental-partition-clusters --graph $(PARTITION_DIR)/graph.jsonl --out $(PARTITION_DIR)/clusters.jsonl --report $(PARTITION_DIR)/clusters.md

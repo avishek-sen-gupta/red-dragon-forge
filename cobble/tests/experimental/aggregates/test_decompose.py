@@ -1,52 +1,104 @@
-"""NMF decomposition recovers planted block structure."""
+"""NMF rounds: the strict fields' factors, then factors of what they leave in the looser fields."""
 
 from __future__ import annotations
 
+from dataclasses import replace
+from pathlib import Path
+
 import numpy as np
+import pytest
 from scipy.sparse import csr_matrix
 
-from cobble.experimental.aggregates.decompose import nmf_sweep
+from cobble.experimental.aggregates import decompose_cli
+from cobble.experimental.aggregates.decompose import rounds
+from cobble.experimental.aggregates.matrix import PpmiMatrix, save_matrix
+from cobble.experimental.aggregates.nmf_settings import NmfSettings
+from cobble.experimental.aggregates.round_step import RoundStep
+
+SETTINGS = NmfSettings(max_iter=500, seed=42)
 
 
-def test_nmf_recovers_two_planted_blocks() -> None:
-    rng = np.random.default_rng(42)
-    n = 10
-    mat = np.zeros((n, n), dtype=np.float32)
-
-    for i in range(5):
-        for j in range(5):
+def _block(mat: np.ndarray, members: range, weight: float) -> None:
+    rng = np.random.default_rng(len(members))
+    for i in members:
+        for j in members:
             if i != j:
-                mat[i, j] = 3.0 + rng.uniform(0, 0.5)
+                mat[i, j] = weight + rng.uniform(0, 0.5)
 
-    for i in range(5, 10):
-        for j in range(5, 10):
-            if i != j:
-                mat[i, j] = 3.0 + rng.uniform(0, 0.5)
 
-    sparse_mat = csr_matrix(mat)
-    fields = [f"FIELD-{i}" for i in range(n)]
+def _planted() -> PpmiMatrix:
+    mat = np.zeros((14, 14), dtype=np.float64)
+    _block(mat, range(0, 5), 3.0)
+    _block(mat, range(5, 10), 3.0)
+    _block(mat, range(10, 14), 2.0)
+    fields = tuple(f"FIELD-{i}" for i in range(14))
+    occurrences = (*(6 for _ in range(10)), *(2 for _ in range(4)))
+    return PpmiMatrix(
+        matrix=csr_matrix(mat),
+        fields=fields,
+        paragraphs=(),
+        occurrences=occurrences,
+        min_occurrences=2,
+    )
 
-    results = nmf_sweep(sparse_mat, fields, k_values=[2], max_iter=500, seed=42)
-    assert len(results) == 1
-    r = results[0]
-    assert r["k"] == 2
 
-    W = np.load(r["_W"]) if isinstance(r.get("_W"), str) else None
+def _members(factor_fields: list[str]) -> set[int]:
+    return {int(name.split("-")[1]) for name in factor_fields[:4]}
 
-    factors = r["factors"]
-    assert len(factors) == 2
-    for fac in factors:
-        top_field_ids = [int(f["field"].split("-")[1]) for f in fac["top_fields"][:5]]
-        in_block_a = sum(1 for x in top_field_ids if x < 5)
-        in_block_b = sum(1 for x in top_field_ids if x >= 5)
-        assert in_block_a >= 4 or in_block_b >= 4, (
-            f"factor should load on one block, got a={in_block_a} b={in_block_b}"
+
+def test_one_round_recovers_the_planted_blocks_of_the_strict_fields() -> None:
+    (only,) = rounds(_planted(), (RoundStep(min_occurrences=4, k=2),), SETTINGS)
+
+    assert (only.min_occurrences, only.explained_by_earlier, only.fit.k) == (4, 0.0, 2)
+    assert sorted(
+        tuple(sorted({i // 5 for i in _members([f.field for f in factor.top_fields])}))
+        for factor in only.fit.factors
+    ) == [(0,), (1,)]
+
+
+def test_a_later_round_factors_what_the_strict_round_leaves_in_the_looser_fields() -> (
+    None
+):
+    first, second = rounds(
+        _planted(),
+        (RoundStep(min_occurrences=4, k=2), RoundStep(min_occurrences=2, k=1)),
+        SETTINGS,
+    )
+
+    (left,) = second.fit.factors
+    assert (first.min_occurrences, second.min_occurrences) == (4, 2)
+    assert {f.field for f in left.top_fields[:4]} == {
+        f"FIELD-{i}" for i in range(10, 14)
+    }
+    assert 0.5 < second.explained_by_earlier < 1.0
+
+
+def test_a_round_below_the_matrix_s_own_threshold_is_refused(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    built = replace(_planted(), min_occurrences=4)
+    save_matrix(built, tmp_path / "m.npz", tmp_path / "meta.json")
+
+    with pytest.raises(SystemExit) as refused:
+        decompose_cli.main(
+            [
+                "--matrix",
+                str(tmp_path / "m.npz"),
+                "--meta",
+                str(tmp_path / "meta.json"),
+                "--min-occurrences",
+                "4",
+                "2",
+                "--k",
+                "2",
+                "1",
+                "--out-dir",
+                str(tmp_path / "out"),
+            ]
         )
 
-
-def test_nmf_sweep_error_decreases_with_k() -> None:
-    mat = csr_matrix(np.eye(5, dtype=np.float32) * 3.0)
-    fields = [f"F{i}" for i in range(5)]
-    results = nmf_sweep(mat, fields, k_values=[2, 3], max_iter=100, seed=0)
-    assert len(results) == 2
-    assert results[1]["reconstruction_error"] <= results[0]["reconstruction_error"]
+    assert refused.value.code == 2
+    assert capsys.readouterr().err.splitlines()[-1] == (
+        "cobble-experimental-aggregate-decompose: error: the matrix was built at "
+        "--min-occurrences 4, so a round at 2 sees no more fields; rebuild it at 2"
+    )

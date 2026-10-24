@@ -55,8 +55,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--min-occurrences",
         type=int,
-        default=5,
-        help="fewest paragraphs a field appears in (default 5)",
+        default=4,
+        help="fewest paragraphs a field appears in (default 4)",
     )
     parser.add_argument(
         "--min-cooccurrences",

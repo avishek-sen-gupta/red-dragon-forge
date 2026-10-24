@@ -17,7 +17,7 @@ From the forge root. Each target runs the one before it.
 | Target | Does |
 |---|---|
 | `partition-traces` | `cobble-parse-corpus`, `cobble-extents`, `cobble-dataflow-area-need`, `cobble-dataflow-fixpoint --call-targets-only`, `cobble-dataflow-combine --max-hops 5`, then one `cobble-fields-trace` per member |
-| `partition-graph` | `cobble-experimental-partition-graph` |
+| `partition-graph` | `cobble-build` (the knowledge graph), then `cobble-experimental-partition-graph` |
 | `partition-clusters` | `cobble-experimental-partition-clusters` |
 | `partition-render` | `cobble-experimental-partition-render` |
 
@@ -31,13 +31,15 @@ From the forge root. Each target runs the one before it.
 
 The CardDemo config parses into its own cache, so a cache written before a bridge change is
 never read. `PARTITION_DIR` then holds `extents.jsonl`, `area-need.jsonl`, `fixpoint/`,
-`combine/`, `traces/`, `graph.jsonl`, `clusters.jsonl`, `clusters.md` and `partition.html`.
+`combine/`, `traces/`, `knowledge-graph.jsonl`, `graph.jsonl`, `clusters.jsonl`, `clusters.md` and
+`partition.html`.
 
 ## cobble-experimental-partition-graph
 
 ```
 cobble-experimental-partition-graph --extents EXTENTS --traces DIR --out OUT
-    [--links LINKS] [--barrier {none,fanout}] [--fanout-limit N]
+    [--links LINKS] [--knowledge-graph GRAPH] [--targets TARGETS]
+    [--barrier {none,fanout}] [--fanout-limit N]
 ```
 
 | Flag | Meaning |
@@ -45,6 +47,8 @@ cobble-experimental-partition-graph --extents EXTENTS --traces DIR --out OUT
 | `--extents` | the table `cobble-extents` wrote |
 | `--traces` | a directory of `cobble-fields-trace` outputs; every `*.jsonl` in it is read |
 | `--links` | `links.jsonl` from `cobble-dataflow-combine`. Without it, programs join only where a trace entered a callee |
+| `--knowledge-graph` | the graph `cobble-build` wrote. Without it there are no dataset links and the graph is the one the traces and links alone give |
+| `--targets` | `targets.jsonl` from `cobble-dataflow-combine`, for the CICS file names. Without it batch sites still link and every CICS file site is unresolved |
 | `--barrier`, `--fanout-limit` | which crossings clustering does not cross (default `fanout`, 8) |
 | `--out` | the graph JSONL |
 
@@ -88,6 +92,41 @@ every origin and sink edge, has none. A field node carries its `size` in bytes.
 The graph file is a flat list, one object per line: every node as `{"node": {...}}`, then every
 edge as `{"edge": {...}}`.
 
+### Dataset links
+
+With `--knowledge-graph`, every file statement the traces witnessed is resolved to the dataset it
+reads or writes, and writers and readers of one dataset are linked through it.
+
+| Site | Resolved through |
+|---|---|
+| batch | its SELECT's DD name (`PROGRAM -READS/WRITES{select_name}-> COBOL_FILE`), then each JCL step that runs the program, directly or through `CALL`s: that step's DD statement of the same name gives the DSN |
+| CICS | the `kind: file` row of `--targets` for the same program and node: each candidate file name, then the CSD's `DEFINE FILE ... DSNAME` |
+
+A dataset is its DSN; a CICS file the CSD gives no DSN is its file name, so CICS programs sharing it
+still link but no batch program reaches it. Each dataset's record is cut at every field boundary
+any of its sites uses, offsets measured from the start of the bytes read into or written from, and
+each piece is a `dataset` node, `<DSN>[start:end]`, of no program. A write site's fields link to
+the slots their bytes cover and the slots link to a read site's fields, with byte alignments like
+any field edge. A writer's `ACCT-ID [0:11]` and a reader's `GRP [0:5]` and `SEQ [5:11]` meet in
+`[0:5]` and `[5:11]`.
+
+Every dataset edge has a `certainty`:
+
+| `certainty` | `reasons` | When |
+|---|---|---|
+| `exact` | none | one candidate or DD binding, no doubt from the dataflow, an exact record extent, one layout over the slot's bytes |
+| `possible` | `candidates` | a CICS site with several candidate files: one link per candidate |
+| `possible` | the target's reasons, e.g. `incomplete-walk` | the dataflow could not vouch for the file name |
+| `possible` | `call-candidate` | the program runs in a step only through a dynamic call it may not make |
+| `possible` | `clamped` | the record extent is clamped |
+| `possible` | `overlapping-layouts` | the field overlaps another field of the same site in that slot (`REDEFINES`, several record types) |
+
+A `possible` edge has no alignments. A site that resolves to no dataset keeps a slot of its own,
+`<program>/<node>|?<name>`, and links nothing else: `uninitialised` (no candidate file name),
+`no-step` (no JCL step runs the program), `dd-unbound` (the step has no such DD), or
+`unresolved-file` (neither a file target nor a SELECT). Dataset edges are never clustered, so
+clusters stay inside one program.
+
 ### Barriers
 
 A barrier judges the field pairs one statement links. A blocked statement's edges stay in the
@@ -124,19 +163,33 @@ cobble-experimental-partition-render --graph GRAPH --clusters CLUSTERS --out OUT
 ```
 
 One self-contained WebGL page, using the sigma.js and graphology builds cobble vendors, dark on
-light. Only clustered edges between two fields place nodes, cross-program ones included. Each
-connected group of fields they link is a disc, laid out by a seeded networkx `spring_layout`
-over its own edges. Discs are packed in a spiral, largest first, and pushed apart until none
-overlap; where two discs sit says nothing. Unclustered fields, then origins and sinks, fill
-rings around them. The page folds a run of consecutive occurrences of one table element that
+light. Each program is laid out on its own: each of its clusters is a group laid out by a seeded
+networkx `spring_layout` over the edges among its members, and every field in no cluster, origin
+and sink is a group of one; the groups start at seeded random places and are pushed apart until
+none overlap, so a cluster's colour reads as one patch. Programs are then placed by a seeded `spring_layout` over what links them, call handovers
+and datasets they share, and pushed apart the same way, so programs that exchange bytes tend to
+sit near each other. A dataset slot sits at the mean of the fields it links, jittered. The page folds a run of consecutive occurrences of one table element that
 share a cluster and have exactly the same edges into one drawn node, `LK-COMMAREA(9:16)`, whose
 edges carry the largest site count among the edges they stand for; selecting it lists the
 occurrences. Only the page folds: `graph.jsonl` and `clusters.jsonl` keep every occurrence. Dot sizes are in layout units, so they keep their spacing when zoomed out.
 Labels show only for a hovered node and its neighbours, or the selected cluster. Colour shows the
 cluster. The side panel lists
 clusters or components. Clicking one zooms to it and lists its fields and terminals. Hovering a
-node shows its edges. Edges are grey when clustered, orange when they cross programs, and red
-when a barrier blocked them.
+node shows its edges. Edges are grey when clustered, pale orange when they cross programs, and red
+when a barrier blocked them. Dataset slots are blue dots in the outer rings. Dataset edges are not drawn until a dataset is
+followed: pick it in the `datasets` list (largest first, with its field and program counts), click
+one of its slots, or type its name in search and press Enter. Following a dataset fades every other
+node to light grey with no edges, draws its own edges (blue when `exact`, pale blue when `possible`) and opens its record layout
+over the graph: one row per slot in byte order, one column per program, each cell the fields that
+write (`→`) or read (`←`) those bytes, a `possible` one in grey with its reasons on hover. The side
+panel lists the fields by program and every dataset edge with its certainty and reasons. In the `datasets`
+view, clicking a field follows a dataset it touches; clicking a field no dataset touches switches
+to `clusters` and selects its cluster.
+
+`tests/experimental/partition/page_driver.py` drives a rendered page in headless Chromium
+(Playwright): it loads it, checks for script errors, lists the datasets, follows the first and
+searches for it, and reports what each step showed. The render tests run it on a small graph; it
+can be pointed at any rendered page.
 
 ## Limits
 

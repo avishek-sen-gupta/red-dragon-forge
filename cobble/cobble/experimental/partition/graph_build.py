@@ -27,7 +27,7 @@ _Pair = tuple[FieldLeaf, FieldLeaf]
 _Rows = Mapping[str, tuple[DepRow, ...]]
 
 
-def _field(leaf: FieldLeaf) -> GraphNode:
+def field_node(leaf: FieldLeaf) -> GraphNode:
     return GraphNode(
         id=leaf.node,
         kind=NodeKind.FIELD,
@@ -153,7 +153,7 @@ def _copied(barrier: Barrier, target: Span, source: Span, site: str) -> _Moved:
     pairs = _pairs(target, source)
     clustered = not barrier.blocks(set(pairs))
     return (
-        tuple(_field(leaf) for pair in pairs for leaf in pair),
+        tuple(field_node(leaf) for pair in pairs for leaf in pair),
         tuple(
             Flow(s.node, t.node, site, clustered, _placed(target, source, (s, t)))
             for s, t in pairs
@@ -165,7 +165,7 @@ def _fanned(
     terminal: GraphNode, leaves: tuple[FieldLeaf, ...], site: str, *, inward: bool
 ) -> _Moved:
     return (
-        (terminal, *(_field(leaf) for leaf in leaves)),
+        (terminal, *(field_node(leaf) for leaf in leaves)),
         tuple(
             (
                 Flow(terminal.id, leaf.node, site, True)
