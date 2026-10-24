@@ -9,8 +9,11 @@ from cobble.experimental.partition.cluster import Cluster
 from cobble.experimental.partition.cluster_set import ClusterSet
 from cobble.experimental.partition.field_graph import FieldGraph
 from cobble.experimental.partition.node_kind import NodeKind
+from cobble.experimental.partition.progress import counted
+from cobble.experimental.partition.tally import CLUSTERS, Tally
 
 LOUVAIN_SEED = 7
+STEP = 100
 
 _Members = tuple[str, ...]
 
@@ -51,7 +54,13 @@ def cluster_set(graph: FieldGraph, split_at: int) -> ClusterSet:
     components = _ordered(nx.connected_components(clustered))
     found = tuple(
         (index, members)
-        for index, component in enumerate(components)
+        for index, component in enumerate(
+            counted(
+                components,
+                Tally(CLUSTERS, "components clustered", STEP),
+                len(components),
+            )
+        )
         for members in _communities(clustered, component, split_at)
     )
     grouped = {member for _, members in found for member in members}

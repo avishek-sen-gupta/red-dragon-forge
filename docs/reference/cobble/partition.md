@@ -52,8 +52,11 @@ cobble-experimental-partition-graph --extents EXTENTS --traces DIR --out OUT
 | `--barrier`, `--fanout-limit` | which crossings clustering does not cross (default `fanout`, 8) |
 | `--out` | the graph JSONL |
 
-It logs a progress line every 1000 trace files, extent rows, dep rows and links it works through,
-and one when each pass is done.
+It reads only the extents rows of the programs the dep rows and links name, streaming the file and
+logging how many rows it kept, so tracing a few programs of a large corpus indexes only those. It
+logs a progress line every 1000 trace files, dep rows and links it works through, and one when each
+run over them is done; with a knowledge graph, it also logs the dataset sites by certainty and the slots and
+dataset edges added.
 
 A node is an elementary field: one with nothing declared under it, so every variant of a
 `REDEFINES` has its own fields, named `<program>:<record>.<field>`. Each occurrence of an `OCCURS`

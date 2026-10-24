@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import logging
+
+import pytest
+
 from cobble.experimental.partition.cluster_report import cluster_report
 from cobble.experimental.partition.clustering import cluster_set
 from cobble.experimental.partition.field_graph import FieldGraph
@@ -70,8 +74,15 @@ def _two_cliques() -> FieldGraph:
     )
 
 
-def test_components_are_bounded_by_program_and_by_blocked_edges() -> None:
-    clusters = cluster_set(GRAPH, split_at=30)
+def test_components_are_bounded_by_program_and_by_blocked_edges(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.INFO):
+        clusters = cluster_set(GRAPH, split_at=30)
+
+    assert [record.getMessage() for record in caplog.records] == [
+        "partition clusters: components clustered 1/1 done"
+    ]
 
     assert [(c.id, c.component, c.program, c.members) for c in clusters.clusters] == [
         (0, 0, "P", ("P:OUT.C", "P:REC.A", "P:REC.B")),

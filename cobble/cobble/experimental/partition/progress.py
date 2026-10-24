@@ -1,4 +1,4 @@
-"""Progress lines for the graph stage's long passes over rows."""
+"""Progress lines for long runs over rows."""
 
 from __future__ import annotations
 
@@ -6,20 +6,20 @@ import logging
 from collections.abc import Iterable, Iterator
 from typing import TypeVar
 
-logger = logging.getLogger(__name__)
+from cobble.experimental.partition.tally import Tally
 
-PROGRESS_EVERY = 1000
+logger = logging.getLogger(__name__)
 
 _T = TypeVar("_T")
 
 
-def _noted(label: str, total: int, numbered: tuple[int, _T]) -> _T:
+def _noted(tally: Tally, total: int, numbered: tuple[int, _T]) -> _T:
     number, item = numbered
-    if number % PROGRESS_EVERY == 0:
-        logger.info("partition graph: %s %d/%d", label, number, total)
+    if number % tally.every == 0:
+        logger.info("%s: %s %d/%d", tally.stage, tally.label, number, total)
     return item
 
 
-def counted(items: Iterable[_T], label: str, total: int) -> Iterator[_T]:
-    yield from (_noted(label, total, numbered) for numbered in enumerate(items, 1))
-    logger.info("partition graph: %s %d/%d done", label, total, total)
+def counted(items: Iterable[_T], tally: Tally, total: int) -> Iterator[_T]:
+    yield from (_noted(tally, total, numbered) for numbered in enumerate(items, 1))
+    logger.info("%s: %s %d/%d done", tally.stage, tally.label, total, total)
