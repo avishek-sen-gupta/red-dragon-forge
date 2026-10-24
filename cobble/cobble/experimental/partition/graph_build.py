@@ -21,6 +21,7 @@ from cobble.experimental.partition.link_row import LinkRow
 from cobble.experimental.partition.node_kind import NodeKind
 from cobble.experimental.partition.progress import counted
 from cobble.experimental.partition.span import Span
+from cobble.experimental.partition.tally import GRAPH, Tally
 
 _Moved = tuple[tuple[GraphNode, ...], tuple[Flow, ...]]
 _Pair = tuple[FieldLeaf, FieldLeaf]
@@ -255,12 +256,12 @@ def field_graph(
     moved = (
         *(
             _moved(index, rows, barrier, dep)
-            for dep in counted(deps, "dep rows mapped", len(deps))
+            for dep in counted(deps, Tally(GRAPH, "dep rows mapped"), len(deps))
             if dep.sink or dep.target.known
         ),
         *(
             step
-            for link in counted(links, "links mapped", len(links))
+            for link in counted(links, Tally(GRAPH, "links mapped"), len(links))
             for step in _linked(index, barrier, link)
         ),
     )

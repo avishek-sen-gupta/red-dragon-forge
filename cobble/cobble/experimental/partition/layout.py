@@ -12,6 +12,8 @@ import networkx as nx
 import numpy as np
 from cobble.experimental.partition.field_graph import FieldGraph
 from cobble.experimental.partition.node_kind import NodeKind
+from cobble.experimental.partition.progress import counted
+from cobble.experimental.partition.tally import RENDER, Tally
 from numpy.typing import NDArray
 
 LAYOUT_SEED = 7
@@ -211,7 +213,10 @@ def layout(graph: FieldGraph, cluster_of: Mapping[str, int]) -> dict[str, _Point
     programs = _programs(graph)
     names = tuple(programs)
     owner = {node: name for name, members in programs.items() for node in members}
-    regions = {name: _region(graph, programs[name], cluster_of) for name in names}
+    regions = {
+        name: _region(graph, programs[name], cluster_of)
+        for name in counted(names, Tally(RENDER, "programs laid out", 1), len(names))
+    }
     radii = np.array(
         [
             max(math.hypot(x, y) for x, y in regions[name].values()) + DOT

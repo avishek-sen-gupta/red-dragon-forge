@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 from pathlib import Path
 
@@ -158,10 +159,12 @@ def test_each_cluster_sits_together_apart_from_the_others_in_its_program() -> No
     assert math.dist(first[0], second[0]) > first[1] + second[1]
 
 
-def test_each_program_keeps_to_its_own_region_and_slots_sit_among_their_fields() -> (
-    None
-):
-    points = layout(SPREAD_OUT, CLUSTER_OF)
+def test_each_program_keeps_to_its_own_region_and_slots_sit_among_their_fields(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.INFO):
+        points = layout(SPREAD_OUT, CLUSTER_OF)
+    logged = [record.getMessage() for record in caplog.records]
     clouds = {
         program: [
             points[node.id] for node in SPREAD_OUT.nodes if node.program == program
@@ -192,6 +195,12 @@ def test_each_program_keeps_to_its_own_region_and_slots_sit_among_their_fields()
         for pair in (("P", "Q"), ("P", "S"), ("Q", "S"))
     } == {("P", "Q"): True, ("P", "S"): True, ("Q", "S"): True}
     assert math.dist(points["DS[0:4]"], middle) <= 3 * JITTER
+    assert logged == [
+        "partition render: programs laid out 1/3",
+        "partition render: programs laid out 2/3",
+        "partition render: programs laid out 3/3",
+        "partition render: programs laid out 3/3 done",
+    ]
 
 
 def test_the_page_embeds_the_graph_with_each_field_s_component_and_cluster() -> None:

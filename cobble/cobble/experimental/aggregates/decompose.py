@@ -83,37 +83,64 @@ def _lifted(rebuilt: _Loadings, keep: NDArray[np.int64], size: int) -> _Loadings
     )
 
 
+def _opening(number: int, total: int, step: RoundStep, fields: int) -> None:
+    logger.info(
+        "decompose: round %d of %d: min-occurrences %d, %d fields, k=%d",
+        number,
+        total,
+        step.min_occurrences,
+        fields,
+        step.k,
+    )
+
+
+def _share(covered: float, mass: float) -> float:
+    return covered / mass if mass else 0.0
+
+
+def _closing(number: int, total: int, share: float) -> None:
+    logger.info(
+        "decompose: round %d of %d: %.1f%% of its matrix explained by earlier rounds",
+        number,
+        total,
+        100 * share,
+    )
+
+
+def _sliced(matrix: _Loadings, keep: NDArray[np.int64]) -> _Loadings:
+    return matrix[np.ix_(keep, keep)]
+
+
 def _round(
     state: tuple[tuple[RoundResult, ...], _Loadings],
     step: RoundStep,
-    plan: tuple[_Loadings, PpmiMatrix, NmfSettings],
+    plan: tuple[_Loadings, PpmiMatrix, NmfSettings, int],
 ) -> tuple[tuple[RoundResult, ...], _Loadings]:
     done, explained = state
-    whole, found, settings = plan
+    whole, found, settings, total = plan
     keep = np.array(
         [i for i, n in enumerate(found.occurrences) if n >= step.min_occurrences]
     )
-    block = np.ix_(keep, keep)
-    target = whole[block]
-    covered = float(np.minimum(target, explained[block]).sum())
+    _opening(len(done) + 1, total, step, len(keep))
+    target, before = _sliced(whole, keep), _sliced(explained, keep)
     fit, rebuilt = _fit(
-        np.clip(target - explained[block], 0, None),
+        np.clip(target - before, 0, None),
         [found.fields[i] for i in keep],
         step.k,
         settings,
     )
-    grown = explained + _lifted(rebuilt, keep, explained.shape[0])
-    mass = float(target.sum())
+    share = _share(float(np.minimum(target, before).sum()), float(target.sum()))
+    _closing(len(done) + 1, total, share)
     return (
         (
             *done,
             RoundResult(
                 min_occurrences=step.min_occurrences,
-                explained_by_earlier=covered / mass if mass else 0.0,
+                explained_by_earlier=share,
                 fit=fit,
             ),
         ),
-        grown,
+        explained + _lifted(rebuilt, keep, explained.shape[0]),
     )
 
 
@@ -122,7 +149,7 @@ def rounds(
 ) -> tuple[RoundResult, ...]:
     """Each step factors the fields written in at least its threshold of paragraphs, after subtracting what earlier rounds explain."""
     whole: _Loadings = np.asarray(found.matrix.toarray(), dtype=np.float64)
-    plan = (whole, found, settings)
+    plan = (whole, found, settings, len(steps))
     done, _ = reduce(
         lambda state, step: _round(state, step, plan),
         steps,

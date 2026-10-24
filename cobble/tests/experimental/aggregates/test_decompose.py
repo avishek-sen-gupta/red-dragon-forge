@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -56,14 +57,17 @@ def test_one_round_recovers_the_planted_blocks_of_the_strict_fields() -> None:
     ) == [(0,), (1,)]
 
 
-def test_a_later_round_factors_what_the_strict_round_leaves_in_the_looser_fields() -> (
-    None
-):
-    first, second = rounds(
-        _planted(),
-        (RoundStep(min_occurrences=4, k=2), RoundStep(min_occurrences=2, k=1)),
-        SETTINGS,
-    )
+def test_a_later_round_factors_what_the_strict_round_leaves_in_the_looser_fields(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(
+        logging.INFO, logger="cobble.experimental.aggregates.decompose"
+    ):
+        first, second = rounds(
+            _planted(),
+            (RoundStep(min_occurrences=4, k=2), RoundStep(min_occurrences=2, k=1)),
+            SETTINGS,
+        )
 
     (left,) = second.fit.factors
     assert (first.min_occurrences, second.min_occurrences) == (4, 2)
@@ -71,6 +75,16 @@ def test_a_later_round_factors_what_the_strict_round_leaves_in_the_looser_fields
         f"FIELD-{i}" for i in range(10, 14)
     }
     assert 0.5 < second.explained_by_earlier < 1.0
+    assert [
+        record.getMessage()
+        for record in caplog.records
+        if record.getMessage().startswith("decompose: round")
+    ] == [
+        "decompose: round 1 of 2: min-occurrences 4, 10 fields, k=2",
+        "decompose: round 1 of 2: 0.0% of its matrix explained by earlier rounds",
+        "decompose: round 2 of 2: min-occurrences 2, 14 fields, k=1",
+        f"decompose: round 2 of 2: {second.explained_by_earlier:.1%} of its matrix explained by earlier rounds",
+    ]
 
 
 def test_a_round_below_the_matrix_s_own_threshold_is_refused(

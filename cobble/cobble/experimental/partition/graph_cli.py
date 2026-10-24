@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import argparse
 import logging
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
 from cobble.dataflow.fields.trace_query import DepRow, load
 from cobble.dataflow.fixpoint.target_site import TargetSite
 from cobble.experimental.partition.barrier_kind import BarrierKind
+from cobble.experimental.partition.certainty import Certainty
 from cobble.experimental.partition.dataset_links import with_datasets
 from cobble.experimental.partition.dataset_resolution import dataset_sites, file_sites
 from cobble.experimental.partition.extent_row import ExtentRow
@@ -22,6 +23,7 @@ from cobble.experimental.partition.leaf_index import LeafIndex, leaf_index
 from cobble.experimental.partition.link_row import LinkRow
 from cobble.experimental.partition.node_kind import NodeKind
 from cobble.experimental.partition.progress import counted
+from cobble.experimental.partition.tally import GRAPH, Tally
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +89,7 @@ def _parser() -> argparse.ArgumentParser:
 def _deps(traces: Sequence[Path]) -> tuple[DepRow, ...]:
     return tuple(
         dep
-        for trace in counted(traces, "traces read", len(traces))
+        for trace in counted(traces, Tally(GRAPH, "traces read"), len(traces))
         for dep in load(trace)
     )
 
@@ -119,16 +121,59 @@ def _linked(
         knowledge_graph(arguments.knowledge_graph),
         _targets(arguments.targets),
     )
-    logger.info("partition graph: %d dataset sites resolved", len(sites))
-    return with_datasets(graph, index, sites)
-
-
-def _index(path: Path) -> LeafIndex:
-    extents = _lines(path)
-    return leaf_index(
-        ExtentRow.model_validate_json(line)
-        for line in counted(extents, "extent rows indexed", len(extents))
+    logger.info(
+        "partition graph: dataset sites %d exact, %d possible, %d unresolved",
+        sum(1 for site in sites if site.certainty is Certainty.EXACT),
+        sum(
+            1
+            for site in sites
+            if site.resolved and site.certainty is Certainty.POSSIBLE
+        ),
+        sum(1 for site in sites if not site.resolved),
     )
+    linked = with_datasets(graph, index, sites)
+    slots = {node.id for node in linked.nodes if node.kind is NodeKind.DATASET}
+    logger.info(
+        "partition graph: %d slots, %d dataset edges",
+        len(slots),
+        sum(1 for edge in linked.edges if edge.source in slots or edge.target in slots),
+    )
+    return linked
+
+
+def _named(deps: Sequence[DepRow], links: Sequence[LinkRow]) -> frozenset[str]:
+    return frozenset(
+        {
+            *(dep.program for dep in deps),
+            *(dep.target.program for dep in deps if dep.target.known),
+            *(dep.source.program for dep in deps if dep.source.known),
+            *(link.caller for link in links),
+            *(link.callee for link in links),
+        }
+    )
+
+
+def _rows(path: Path) -> Iterator[ExtentRow]:
+    with path.open(encoding="utf-8") as lines:
+        yield from (
+            ExtentRow.model_validate_json(line) for line in lines if line.strip()
+        )
+
+
+def _count(path: Path) -> int:
+    with path.open(encoding="utf-8") as lines:
+        return sum(1 for line in lines if line.strip())
+
+
+def _index(path: Path, programs: frozenset[str]) -> LeafIndex:
+    kept = tuple(row for row in _rows(path) if row.program in programs)
+    logger.info(
+        "partition graph: extent rows kept %d of %d, for %d programs",
+        len(kept),
+        _count(path),
+        len(programs),
+    )
+    return leaf_index(kept)
 
 
 def _blocked(graph: FieldGraph) -> int:
@@ -144,7 +189,7 @@ def _built(arguments: argparse.Namespace, deps: Sequence[DepRow]) -> FieldGraph:
     links = _links(arguments.links)
     logger.info("partition graph: %d links", len(links))
     barrier = arguments.barrier.barrier(arguments.fanout_limit)
-    index = _index(arguments.extents)
+    index = _index(arguments.extents, _named(deps, links))
     return _linked(field_graph(index, deps, links, barrier), index, deps, arguments)
 
 

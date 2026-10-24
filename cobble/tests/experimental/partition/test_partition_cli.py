@@ -119,7 +119,7 @@ def _jsonl(path: Path, lines: Sequence[str]) -> Path:
 
 
 def test_the_commands_turn_traces_into_a_graph_clusters_a_report_and_a_page(
-    tmp_path: Path,
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     extents = _jsonl(
         tmp_path / "extents.jsonl",
@@ -131,6 +131,7 @@ def test_the_commands_turn_traces_into_a_graph_clusters_a_report_and_a_page(
             _extent("P", ("OUT", "C"), "working_storage[8:12]"),
             _extent("P", ("OUT", "D"), "working_storage[12:16]"),
             _extent("Q", ("LK",), "linkage[0:8]"),
+            _extent("UNTRACED", ("REC",), "working_storage[0:8]"),
         ],
     )
     traces = tmp_path / "traces"
@@ -161,21 +162,27 @@ def test_the_commands_turn_traces_into_a_graph_clusters_a_report_and_a_page(
     graph_path, clusters_path = tmp_path / "graph.jsonl", tmp_path / "clusters.jsonl"
     report_path, page_path = tmp_path / "clusters.md", tmp_path / "page.html"
 
-    assert (
-        graph_cli.main(
-            [
-                "--extents",
-                str(extents),
-                "--traces",
-                str(traces),
-                "--links",
-                str(links),
-                "--out",
-                str(graph_path),
-            ]
+    with caplog.at_level(logging.INFO):
+        assert (
+            graph_cli.main(
+                [
+                    "--extents",
+                    str(extents),
+                    "--traces",
+                    str(traces),
+                    "--links",
+                    str(links),
+                    "--out",
+                    str(graph_path),
+                ]
+            )
+            == 0
         )
-        == 0
-    )
+    assert [
+        record.getMessage()
+        for record in caplog.records
+        if "extent rows" in record.getMessage()
+    ] == ["partition graph: extent rows kept 7 of 8, for 2 programs"]
     assert (
         clusters_cli.main(
             [
@@ -458,3 +465,15 @@ def test_with_a_knowledge_graph_file_sites_become_dataset_links(
         )
         == 1
     )
+    assert [
+        record.getMessage()
+        for record in caplog.records
+        if record.getMessage().startswith(
+            ("partition graph: dataset", "partition graph: 3 slots")
+        )
+    ] == [
+        "partition graph: dataset sites 3 exact, 0 possible, 0 unresolved",
+        "partition graph: 3 slots, 5 dataset edges",
+        "partition graph: dataset sites 2 exact, 0 possible, 1 unresolved",
+        "partition graph: 3 slots, 5 dataset edges",
+    ]
