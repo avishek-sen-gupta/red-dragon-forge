@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass, field
+from functools import cache, partial
 from itertools import groupby
 from operator import itemgetter
 
@@ -17,15 +18,24 @@ _Area = tuple[str, str]
 
 @dataclass(frozen=True)
 class LeafIndex:
-    """Leaves by program and region; a field is a leaf when nothing is declared under it."""
+    """Leaves by program and region, a field being a leaf when nothing is declared under it, and a remembered lookup of the fields a byte range names."""
 
     areas: Mapping[_Area, LeafArea]
+    found: Callable[[ByteRange], tuple[FieldLeaf, ...]] = field(
+        compare=False, repr=False
+    )
 
     def fields_in(self, extent: ByteRange) -> tuple[FieldLeaf, ...]:
-        area = self.areas.get((extent.program, extent.region))
-        hits = area.overlapping(extent.start, extent.end) if area else ()
-        named = tuple(leaf for leaf in hits if extent.name in leaf.path)
-        return named or hits or (_undeclared(extent),)
+        return self.found(extent)
+
+
+def _lookup(
+    areas: Mapping[_Area, LeafArea], extent: ByteRange
+) -> tuple[FieldLeaf, ...]:
+    area = areas.get((extent.program, extent.region))
+    hits = area.overlapping(extent.start, extent.end) if area else ()
+    named = tuple(leaf for leaf in hits if extent.name in leaf.path)
+    return named or hits or (_undeclared(extent),)
 
 
 def _undeclared(extent: ByteRange) -> FieldLeaf:
@@ -79,9 +89,8 @@ def leaf_index(rows: Iterable[ExtentRow]) -> LeafIndex:
         if (leaf.program, leaf.record, leaf.path) not in parents
     )
     ranked = sorted((_area_of(leaf), i) for i, leaf in enumerate(leaves))
-    return LeafIndex(
-        areas={
-            area: leaf_area(tuple(leaves[i] for _, i in members))
-            for area, members in groupby(ranked, itemgetter(0))
-        }
-    )
+    areas = {
+        area: leaf_area(tuple(leaves[i] for _, i in members))
+        for area, members in groupby(ranked, itemgetter(0))
+    }
+    return LeafIndex(areas=areas, found=cache(partial(_lookup, areas)))

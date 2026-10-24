@@ -182,7 +182,11 @@ def test_the_commands_turn_traces_into_a_graph_clusters_a_report_and_a_page(
         record.getMessage()
         for record in caplog.records
         if "extent rows" in record.getMessage()
-    ] == ["partition graph: extent rows kept 7 of 8, for 2 programs"]
+    ] == [
+        *(f"partition graph: extent rows read {n}/8" for n in range(1, 9)),
+        "partition graph: extent rows read 8/8 done",
+        "partition graph: extent rows kept 7 of 8, for 2 programs",
+    ]
     assert (
         clusters_cli.main(
             [
