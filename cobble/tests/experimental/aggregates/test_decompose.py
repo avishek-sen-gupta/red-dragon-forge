@@ -12,49 +12,56 @@ from scipy.sparse import csr_matrix
 
 from cobble.experimental.aggregates import decompose_cli
 from cobble.experimental.aggregates.decompose import rounds
-from cobble.experimental.aggregates.matrix import PpmiMatrix, save_matrix
+from cobble.experimental.aggregates.factor import Factor
+from cobble.experimental.aggregates.matrix import IncidenceMatrix, save_matrix
 from cobble.experimental.aggregates.nmf_settings import NmfSettings
 from cobble.experimental.aggregates.round_step import RoundStep
 
 SETTINGS = NmfSettings(max_iter=500, seed=42)
+BLOCKS = (
+    (range(0, 5), range(0, 6)),
+    (range(5, 10), range(6, 12)),
+    (range(10, 14), range(12, 14)),
+)
 
 
-def _block(mat: np.ndarray, members: range, weight: float) -> None:
-    rng = np.random.default_rng(len(members))
-    for i in members:
-        for j in members:
-            if i != j:
-                mat[i, j] = weight + rng.uniform(0, 0.5)
-
-
-def _planted() -> PpmiMatrix:
+def _planted() -> IncidenceMatrix:
     mat = np.zeros((14, 14), dtype=np.float64)
-    _block(mat, range(0, 5), 3.0)
-    _block(mat, range(5, 10), 3.0)
-    _block(mat, range(10, 14), 2.0)
-    fields = tuple(f"FIELD-{i}" for i in range(14))
-    occurrences = (*(6 for _ in range(10)), *(2 for _ in range(4)))
-    return PpmiMatrix(
+    for fields, paragraphs in BLOCKS:
+        mat[np.ix_(list(paragraphs), list(fields))] = 1.0
+    return IncidenceMatrix(
         matrix=csr_matrix(mat),
-        fields=fields,
-        paragraphs=(),
-        occurrences=occurrences,
+        fields=tuple(f"FIELD-{i}" for i in range(14)),
+        paragraphs=tuple(("P", f"PARA-{i}") for i in range(14)),
+        occurrences=(*(6 for _ in range(10)), *(2 for _ in range(4))),
         min_occurrences=2,
     )
 
 
-def _members(factor_fields: list[str]) -> set[int]:
-    return {int(name.split("-")[1]) for name in factor_fields[:4]}
+def _block(factor: Factor) -> tuple[frozenset[int], frozenset[int]]:
+    fields = frozenset(int(found.field.split("-")[1]) for found in factor.top_fields)
+    paragraphs = frozenset(
+        int(found.paragraph.split("-")[1]) for found in factor.top_paragraphs
+    )
+    return fields, paragraphs
+
+
+def _planted_block(number: int) -> tuple[frozenset[int], frozenset[int]]:
+    fields, paragraphs = BLOCKS[number]
+    return frozenset(fields), frozenset(paragraphs)
 
 
 def test_one_round_recovers_the_planted_blocks_of_the_strict_fields() -> None:
     (only,) = rounds(_planted(), (RoundStep(min_occurrences=4, k=2),), SETTINGS)
 
     assert (only.min_occurrences, only.explained_by_earlier, only.fit.k) == (4, 0.0, 2)
-    assert sorted(
-        tuple(sorted({i // 5 for i in _members([f.field for f in factor.top_fields])}))
-        for factor in only.fit.factors
-    ) == [(0,), (1,)]
+    assert {_block(factor) for factor in only.fit.factors} == {
+        _planted_block(0),
+        _planted_block(1),
+    }
+    assert {found.program for f in only.fit.factors for found in f.top_paragraphs} == {
+        "P"
+    }
 
 
 def test_a_later_round_factors_what_the_strict_round_leaves_in_the_looser_fields(
@@ -71,10 +78,8 @@ def test_a_later_round_factors_what_the_strict_round_leaves_in_the_looser_fields
 
     (left,) = second.fit.factors
     assert (first.min_occurrences, second.min_occurrences) == (4, 2)
-    assert {f.field for f in left.top_fields[:4]} == {
-        f"FIELD-{i}" for i in range(10, 14)
-    }
-    assert 0.5 < second.explained_by_earlier < 1.0
+    assert _block(left) == _planted_block(2)
+    assert second.explained_by_earlier == pytest.approx(60 / 68, abs=0.01)
     assert [
         record.getMessage()
         for record in caplog.records

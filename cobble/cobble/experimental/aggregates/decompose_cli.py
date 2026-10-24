@@ -1,4 +1,4 @@
-"""cobble-experimental-aggregate-decompose: rounds of NMF over a field PPMI matrix."""
+"""cobble-experimental-aggregate-decompose: rounds of NMF over a paragraph x field matrix."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
 from cobble.experimental.aggregates.decompose import rounds, write_rounds
-from cobble.experimental.aggregates.matrix import PpmiMatrix, load_matrix
+from cobble.experimental.aggregates.matrix import IncidenceMatrix, load_matrix
 from cobble.experimental.aggregates.nmf_settings import NmfSettings
 from cobble.experimental.aggregates.round_step import RoundStep
 
@@ -21,8 +21,9 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="cobble-experimental-aggregate-decompose",
         description=(
-            "Experimental: rounds of non-negative matrix factorization over a field x "
-            "field PPMI matrix; each round factors what earlier rounds leave unexplained."
+            "Experimental: rounds of non-negative matrix factorization over a "
+            "paragraph x field matrix; each round factors what earlier rounds leave "
+            "unexplained."
         ),
     )
     parser.add_argument(
@@ -65,7 +66,7 @@ def _steps(
 
 
 def _covered(
-    parser: argparse.ArgumentParser, found: PpmiMatrix, steps: Sequence[RoundStep]
+    parser: argparse.ArgumentParser, found: IncidenceMatrix, steps: Sequence[RoundStep]
 ) -> None:
     lowest = steps[-1].min_occurrences
     if lowest < found.min_occurrences:

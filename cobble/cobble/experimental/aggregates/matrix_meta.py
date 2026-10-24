@@ -1,4 +1,4 @@
-"""meta.json: what the matrix's rows and columns are, and the paragraphs they were counted over."""
+"""meta.json: what the matrix's rows and columns stand for, and how often each field occurs."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class MatrixMeta(BaseModel):
-    """The field each row and column stands for, in order, the paragraphs counted, how many of them each field is written in, and the fewest a field needed to be kept."""
+    """The field each column stands for, in order, the paragraph each row stands for, how many paragraphs each field is written in, and the fewest a field needed to be kept."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 

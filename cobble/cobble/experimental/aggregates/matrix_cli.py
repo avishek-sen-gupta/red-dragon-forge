@@ -1,18 +1,18 @@
-"""cobble-experimental-aggregate-matrix: field x field PPMI matrix from paragraph co-occurrences."""
+"""cobble-experimental-aggregate-matrix: the paragraph x field matrix of which fields each paragraph touches."""
 
 from __future__ import annotations
 
 import argparse
 import logging
+import re
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
 from cobble.experimental.aggregates.def_line import DefLine
 from cobble.experimental.aggregates.matrix import (
-    MatrixLimits,
+    incidence_matrix,
     paragraph_fields,
-    ppmi_matrix,
     save_matrix,
 )
 from cobble.experimental.aggregates.unify import read_unified
@@ -30,9 +30,8 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="cobble-experimental-aggregate-matrix",
         description=(
-            "Experimental: a field x field positive PMI matrix over the paragraphs "
-            "each partition-graph field is read or written in, one column per "
-            "unified class."
+            "Experimental: a paragraph x field matrix marking which partition-graph "
+            "fields each paragraph reads or writes, one column per unified class."
         ),
     )
     parser.add_argument(
@@ -51,22 +50,18 @@ def _parser() -> argparse.ArgumentParser:
         help="unified.jsonl from cobble-experimental-aggregate-unify",
     )
     parser.add_argument(
-        "--min-fields",
-        type=int,
-        default=3,
-        help="fewest distinct fields a paragraph keeps (default 3)",
-    )
-    parser.add_argument(
         "--min-occurrences",
         type=int,
         default=4,
         help="fewest paragraphs a field appears in (default 4)",
     )
     parser.add_argument(
-        "--min-cooccurrences",
-        type=int,
-        default=3,
-        help="fewest paragraphs a pair shares (default 3)",
+        "--exclude",
+        type=re.compile,
+        nargs="+",
+        default=[],
+        metavar="REGEX",
+        help="leave out every field whose PROGRAM:RECORD.PATH name any of these match",
     )
     parser.add_argument(
         "--out-matrix", type=Path, required=True, help="output matrix.npz"
@@ -113,17 +108,18 @@ def main(argv: Sequence[str] = ()) -> int:
     index = _index(arguments.extents)
     unified = read_unified(arguments.unified)
     logger.info("aggregate matrix: %d unified fields", len(unified))
-    paragraphs = paragraph_fields(_defs(arguments.defs), index, unified)
+    excluded: list[re.Pattern[str]] = arguments.exclude
     logger.info(
-        "aggregate matrix: %d paragraphs touched; scoring pairs", len(paragraphs)
+        "aggregate matrix: excluding fields matching %d patterns", len(excluded)
     )
-    found = ppmi_matrix(
+    paragraphs = paragraph_fields(_defs(arguments.defs), index, unified, excluded)
+    logger.info(
+        "aggregate matrix: %d paragraphs touched; marking their fields",
+        len(paragraphs),
+    )
+    found = incidence_matrix(
         paragraphs,
-        MatrixLimits(
-            fields_per_paragraph=arguments.min_fields,
-            occurrences=arguments.min_occurrences,
-            cooccurrences=arguments.min_cooccurrences,
-        ),
+        arguments.min_occurrences,
     )
     save_matrix(found, arguments.out_matrix, arguments.out_meta)
     logger.info("aggregate matrix: -> %s, %s", arguments.out_matrix, arguments.out_meta)

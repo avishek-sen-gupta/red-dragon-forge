@@ -1,17 +1,15 @@
-"""The PPMI matrix over the paragraphs each graph field is read or written in."""
+"""The paragraph x field matrix over the paragraphs each graph field is read or written in."""
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
-
-import pytest
 
 from cobble.experimental.aggregates.def_line import DefLine
 from cobble.experimental.aggregates.matrix import (
-    MatrixLimits,
+    incidence_matrix,
     load_matrix,
     paragraph_fields,
-    ppmi_matrix,
     save_matrix,
 )
 from cobble.experimental.partition.extent_row import ExtentRow
@@ -54,13 +52,14 @@ DEFS = (
 )
 
 
-def test_paragraphs_count_their_unified_fields_and_pairs_score_by_positive_pmi(
-    tmp_path: Path,
-) -> None:
-    paragraphs = paragraph_fields(DEFS, INDEX, {"P:REC.W": "Q:REC.W"})
-    every = ppmi_matrix(paragraphs, MatrixLimits(1, 1, 1))
-    wide = ppmi_matrix(paragraphs, MatrixLimits(2, 1, 1))
-    save_matrix(wide, tmp_path / "m.npz", tmp_path / "meta.json")
+def test_paragraphs_mark_the_unified_fields_they_touch(tmp_path: Path) -> None:
+    paragraphs = paragraph_fields(DEFS, INDEX, {"P:REC.W": "Q:REC.W"}, ())
+    trimmed = paragraph_fields(
+        DEFS, INDEX, {"P:REC.W": "Q:REC.W"}, (re.compile(r"REC\.[YW]$"),)
+    )
+    every = incidence_matrix(paragraphs, 1)
+    repeated = incidence_matrix(paragraphs, 2)
+    save_matrix(every, tmp_path / "m.npz", tmp_path / "meta.json")
     loaded = load_matrix(tmp_path / "m.npz", tmp_path / "meta.json")
 
     assert paragraphs == {
@@ -69,20 +68,32 @@ def test_paragraphs_count_their_unified_fields_and_pairs_score_by_positive_pmi(
         ("P", "P3"): frozenset({"P:REC.Z", "Q:REC.W"}),
         ("P", "P4"): frozenset({"P:REC.Z"}),
     }
-    assert every.fields == ("P:REC.X", "P:REC.Y", "P:REC.Z", "Q:REC.W")
+    assert trimmed == {
+        ("P", "P1"): frozenset({"P:REC.X"}),
+        ("P", "P2"): frozenset({"P:REC.X"}),
+        ("P", "P3"): frozenset({"P:REC.Z"}),
+        ("P", "P4"): frozenset({"P:REC.Z"}),
+    }
+    assert (every.fields, every.paragraphs) == (
+        ("P:REC.X", "P:REC.Y", "P:REC.Z", "Q:REC.W"),
+        (("P", "P1"), ("P", "P2"), ("P", "P3"), ("P", "P4")),
+    )
     assert every.matrix.toarray().tolist() == [
-        [0, 1, 0, 0],
-        [1, 0, 0, 0],
-        [0, 0, 0, 1],
+        [1, 1, 0, 0],
+        [1, 1, 0, 0],
+        [0, 0, 1, 1],
         [0, 0, 1, 0],
     ]
-    assert wide.paragraphs == (("P", "P1"), ("P", "P2"), ("P", "P3"))
-    assert loaded.matrix.toarray().ravel().tolist() == pytest.approx(
-        [0, 0.5849625, 0, 0]
-        + [0.5849625, 0, 0, 0]
-        + [0, 0, 0, 1.5849625]
-        + [0, 0, 1.5849625, 0]
+    assert (repeated.fields, repeated.matrix.toarray().tolist()) == (
+        ("P:REC.X", "P:REC.Y", "P:REC.Z"),
+        [[1, 1, 0], [1, 1, 0], [0, 0, 1], [0, 0, 1]],
     )
+    assert loaded.matrix.toarray().tolist() == [
+        [1, 1, 0, 0],
+        [1, 1, 0, 0],
+        [0, 0, 1, 1],
+        [0, 0, 1, 0],
+    ]
     assert (
         loaded.fields,
         loaded.paragraphs,
@@ -90,8 +101,8 @@ def test_paragraphs_count_their_unified_fields_and_pairs_score_by_positive_pmi(
         loaded.min_occurrences,
     ) == (
         ("P:REC.X", "P:REC.Y", "P:REC.Z", "Q:REC.W"),
-        (("P", "P1"), ("P", "P2"), ("P", "P3")),
-        (2, 2, 1, 1),
+        (("P", "P1"), ("P", "P2"), ("P", "P3"), ("P", "P4")),
+        (2, 2, 2, 1),
         1,
     )
 
@@ -122,6 +133,7 @@ def test_table_occurrences_count_as_their_declared_field() -> None:
         ),
         table,
         {},
+        (),
     ) == {
         ("P", "P1"): frozenset({"P:TAB.T"}),
         ("P", "P2"): frozenset({"P:TAB.T"}),
