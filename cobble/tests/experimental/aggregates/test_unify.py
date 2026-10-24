@@ -122,6 +122,9 @@ def test_fields_holding_the_same_dataset_bytes_in_two_programs_are_one_class(
         assert exact_classes(graph) == (("Q:R.ID", "R:R.ID", "W:R.ID"),)
 
     assert [record.getMessage() for record in caplog.records] == [
+        "aggregate unify: 6 placed edges; moving their bytes",
+        "aggregate unify: 38 bytes move; linking bytes through 2 relays",
+        "aggregate unify: 16 relayed byte links",
         *(f"aggregate unify: fields matched {n}/4" for n in range(1, 5)),
         "aggregate unify: fields matched 4/4 done",
         "aggregate unify: 2 exact pairs across programs, 1 classes",

@@ -82,20 +82,30 @@ def _bytes(graph: FieldGraph) -> _Bytes:
         and edge.target in ends
         and edge.target not in unplaced
     )
+    logger.info("%s: %d placed edges; moving their bytes", UNIFY, len(placed))
     moves = _byte_moves(
         (*placed, *(_read_back(edge) for edge in placed if edge.source in slots))
     )
-    relays = slots | {node for node, field in fields.items() if field.subscripts}
+    relays = (
+        slots | {node for node, field in fields.items() if field.subscripts}
+    ) - unplaced
+    logger.info(
+        "%s: %d bytes move; linking bytes through %d relays",
+        UNIFY,
+        len(moves),
+        len(relays),
+    )
     relayed: nx.DiGraph[_Byte] = nx.DiGraph()
     relayed.add_edges_from(
         (start, end)
         for start, ends in moves.items()
-        if start[0] in relays - unplaced
+        if start[0] in relays
         for end in ends
     )
+    logger.info("%s: %d relayed byte links", UNIFY, relayed.number_of_edges())
     return _Bytes(
         moves=moves,
-        relays=relays - unplaced,
+        relays=relays,
         relayed=relayed,
         fields={node: field for node, field in fields.items() if node not in unplaced},
     )
