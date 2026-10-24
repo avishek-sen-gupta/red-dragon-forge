@@ -80,7 +80,14 @@ def main(argv: Sequence[str] = ()) -> int:
     parser = _parser()
     arguments = parser.parse_args(tuple(argv) if argv else None)
     steps = _steps(parser, arguments)
+    logger.info("decompose: loading %s", arguments.matrix)
     loaded = load_matrix(arguments.matrix, arguments.meta)
+    logger.info(
+        "decompose: %d fields, %d non-zeros, built at --min-occurrences %d",
+        len(loaded.fields),
+        loaded.matrix.nnz,
+        loaded.min_occurrences,
+    )
     _covered(parser, loaded, steps)
     found = rounds(
         loaded,

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import math
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 
@@ -24,11 +23,10 @@ from cobble.experimental.partition.leaf_index import LeafIndex, leaf_index
 from cobble.experimental.partition.link_row import LinkRow
 from cobble.experimental.partition.node_kind import NodeKind
 from cobble.experimental.partition.progress import counted
-from cobble.experimental.partition.tally import GRAPH, Tally
+from cobble.experimental.partition.tally import GRAPH, Tally, tenths
 
 logger = logging.getLogger(__name__)
 
-TENTHS = 10
 
 DEFAULT_FANOUT_LIMIT = 8
 
@@ -119,11 +117,14 @@ def _linked(
     if arguments.knowledge_graph == Path():
         logger.info("partition graph: no knowledge graph given, dataset links off")
         return graph
-    sites = dataset_sites(
-        file_sites(deps),
-        knowledge_graph(arguments.knowledge_graph),
-        _targets(arguments.targets),
+    logger.info(
+        "partition graph: reading knowledge graph %s", arguments.knowledge_graph
     )
+    graph_view = knowledge_graph(arguments.knowledge_graph)
+    logger.info("partition graph: knowledge graph has %d edges", len(graph_view.edges))
+    found = file_sites(deps)
+    logger.info("partition graph: resolving %d file sites to datasets", len(found))
+    sites = dataset_sites(found, graph_view, _targets(arguments.targets))
     logger.info(
         "partition graph: dataset sites %d exact, %d possible, %d unresolved",
         sum(1 for site in sites if site.certainty is Certainty.EXACT),
@@ -134,6 +135,7 @@ def _linked(
         ),
         sum(1 for site in sites if not site.resolved),
     )
+    logger.info("partition graph: cutting dataset slots and linking fields")
     linked = with_datasets(graph, index, sites)
     slots = {node.id for node in linked.nodes if node.kind is NodeKind.DATASET}
     logger.info(
@@ -170,7 +172,7 @@ def _count(path: Path) -> int:
 
 def _index(path: Path, programs: frozenset[str]) -> LeafIndex:
     total = _count(path)
-    step = Tally(GRAPH, "extent rows read", max(1, math.ceil(total / TENTHS)))
+    step = tenths(GRAPH, "extent rows read", total)
     kept = tuple(
         row for row in counted(_rows(path), step, total) if row.program in programs
     )

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
@@ -17,9 +17,13 @@ from cobble.experimental.aggregates.matrix import (
 )
 from cobble.experimental.aggregates.unify import read_unified
 from cobble.experimental.partition.extent_row import ExtentRow
-from cobble.experimental.partition.leaf_index import leaf_index
+from cobble.experimental.partition.leaf_index import LeafIndex, leaf_index
+from cobble.experimental.partition.progress import counted
+from cobble.experimental.partition.tally import tenths
 
 logger = logging.getLogger(__name__)
+
+MATRIX = "aggregate matrix"
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -71,20 +75,47 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _lines(path: Path) -> tuple[DefLine, ...]:
+def _count(path: Path) -> int:
     with path.open(encoding="utf-8") as lines:
-        return tuple(
-            DefLine.model_validate_json(line) for line in lines if line.strip()
+        return sum(1 for line in lines if line.strip())
+
+
+def _rows(path: Path) -> Iterator[str]:
+    with path.open(encoding="utf-8") as lines:
+        yield from (line for line in lines if line.strip())
+
+
+def _index(path: Path) -> LeafIndex:
+    total = _count(path)
+    logger.info("aggregate matrix: reading %d extent rows from %s", total, path)
+    return leaf_index(
+        ExtentRow.model_validate_json(line)
+        for line in counted(
+            _rows(path), tenths(MATRIX, "extent rows read", total), total
         )
+    )
+
+
+def _defs(path: Path) -> Iterator[DefLine]:
+    total = _count(path)
+    logger.info("aggregate matrix: reading %d def rows from %s", total, path)
+    return (
+        DefLine.model_validate_json(line)
+        for line in counted(
+            _rows(path), tenths(MATRIX, "def rows mapped", total), total
+        )
+    )
 
 
 def main(argv: Sequence[str] = ()) -> int:
     configure_cli_logging()
     arguments = _parser().parse_args(tuple(argv) if argv else None)
-    with arguments.extents.open(encoding="utf-8") as lines:
-        index = leaf_index(ExtentRow.model_validate_json(line) for line in lines)
-    paragraphs = paragraph_fields(
-        _lines(arguments.defs), index, read_unified(arguments.unified)
+    index = _index(arguments.extents)
+    unified = read_unified(arguments.unified)
+    logger.info("aggregate matrix: %d unified fields", len(unified))
+    paragraphs = paragraph_fields(_defs(arguments.defs), index, unified)
+    logger.info(
+        "aggregate matrix: %d paragraphs touched; scoring pairs", len(paragraphs)
     )
     found = ppmi_matrix(
         paragraphs,

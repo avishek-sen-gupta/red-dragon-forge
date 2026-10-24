@@ -47,7 +47,11 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] = ()) -> int:
     configure_cli_logging()
     arguments = _parser().parse_args(tuple(argv) if argv else None)
+    logger.info("partition clusters: reading %s", arguments.graph)
     graph = read_graph(arguments.graph)
+    logger.info(
+        "partition clusters: %d nodes, %d edges", len(graph.nodes), len(graph.edges)
+    )
     clusters = cluster_set(graph, arguments.split_at)
     write_clusters(arguments.out, clusters)
     arguments.report.write_text(cluster_report(graph, clusters), encoding="utf-8")

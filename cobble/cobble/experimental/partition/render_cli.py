@@ -45,9 +45,16 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] = ()) -> int:
     configure_cli_logging()
     arguments = _parser().parse_args(tuple(argv) if argv else None)
+    logger.info("partition render: reading %s", arguments.graph)
     graph = read_graph(arguments.graph)
+    logger.info(
+        "partition render: %d nodes, %d edges", len(graph.nodes), len(graph.edges)
+    )
     clusters = read_clusters(arguments.clusters)
+    logger.info("partition render: %d clusters", len(clusters.clusters))
     scripts = tuple(script.read_text(encoding="utf-8") for script in SCRIPTS)
-    arguments.out.write_text(page(graph, clusters, scripts), encoding="utf-8")
+    built = page(graph, clusters, scripts)
+    logger.info("partition render: writing %d characters", len(built))
+    arguments.out.write_text(built, encoding="utf-8")
     logger.info("partition render: %d nodes -> %s", len(graph.nodes), arguments.out)
     return 0

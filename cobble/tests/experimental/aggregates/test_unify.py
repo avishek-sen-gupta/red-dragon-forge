@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
+
+import pytest
 
 from cobble.experimental.aggregates.exact_merge import exact_classes
 from cobble.experimental.aggregates.unify import read_unified, write_unified
@@ -92,7 +95,9 @@ def _slot(node: str, size: int) -> GraphNode:
     return GraphNode(id=node, kind=NodeKind.DATASET, label=node, program="", size=size)
 
 
-def test_fields_holding_the_same_dataset_bytes_in_two_programs_are_one_class() -> None:
+def test_fields_holding_the_same_dataset_bytes_in_two_programs_are_one_class(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     graph = FieldGraph(
         nodes=(
             _field("W:R.ID", 11),
@@ -113,7 +118,14 @@ def test_fields_holding_the_same_dataset_bytes_in_two_programs_are_one_class() -
         ),
     )
 
-    assert exact_classes(graph) == (("Q:R.ID", "R:R.ID", "W:R.ID"),)
+    with caplog.at_level(logging.INFO):
+        assert exact_classes(graph) == (("Q:R.ID", "R:R.ID", "W:R.ID"),)
+
+    assert [record.getMessage() for record in caplog.records] == [
+        *(f"aggregate unify: fields matched {n}/4" for n in range(1, 5)),
+        "aggregate unify: fields matched 4/4 done",
+        "aggregate unify: 2 exact pairs across programs, 1 classes",
+    ]
 
 
 def test_fields_reading_the_same_dataset_bytes_with_no_writer_are_one_class() -> None:

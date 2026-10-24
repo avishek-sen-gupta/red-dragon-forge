@@ -13,8 +13,12 @@ from cobble.experimental.partition.field_graph import FieldGraph
 from cobble.experimental.partition.graph_edge import GraphEdge
 from cobble.experimental.partition.graph_node import GraphNode
 from cobble.experimental.partition.node_kind import NodeKind
+from cobble.experimental.partition.progress import counted
+from cobble.experimental.partition.tally import tenths
 
 logger = logging.getLogger(__name__)
+
+UNIFY = "aggregate unify"
 
 _Byte = tuple[str, int]
 
@@ -143,7 +147,12 @@ def exact_classes(graph: FieldGraph) -> tuple[tuple[str, ...], ...]:
         for node, field in sorted(found.fields.items())
         if node not in found.relays and field.size > 0
     )
-    pairs = tuple(pair for source in sources for pair in _partners(found, source))
+    step = tenths(UNIFY, "fields matched", len(sources))
+    pairs = tuple(
+        pair
+        for source in counted(sources, step, len(sources))
+        for pair in _partners(found, source)
+    )
     joined: nx.Graph[str] = nx.Graph()
     joined.add_edges_from(pairs)
     classes = tuple(

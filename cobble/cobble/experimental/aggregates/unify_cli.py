@@ -41,7 +41,12 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] = ()) -> int:
     configure_cli_logging()
     arguments = _parser().parse_args(tuple(argv) if argv else None)
-    classes = exact_classes(read_graph(arguments.graph))
+    logger.info("aggregate unify: reading %s", arguments.graph)
+    graph = read_graph(arguments.graph)
+    logger.info(
+        "aggregate unify: %d nodes, %d edges", len(graph.nodes), len(graph.edges)
+    )
+    classes = exact_classes(graph)
     write_unified(arguments.out, classes)
     logger.info("aggregate unify: %d classes -> %s", len(classes), arguments.out)
     return 0

@@ -36,11 +36,12 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from functools import lru_cache, reduce
+from functools import lru_cache, partial, reduce
 from itertools import pairwise
 from types import MappingProxyType
 from typing import TypeVar
 
+from cobble.dataflow.fields.extent_index import ExtentIndex, extent_index
 from cobble.dataflow.fields.spans import EVERY_BYTE, Spans, overlaps, union, without
 from cobble.dataflow.fields.values import (
     EMPTY as VALUES_EMPTY,
@@ -125,6 +126,8 @@ class State:
 
 
 EMPTY = State()
+
+_Indexed = tuple[State, ExtentIndex, ExtentIndex]
 
 # Every state the walk holds shares most of its sets, values and keys with its
 # neighbours; built anew per join they ran to 200x their distinct count. Each of
@@ -276,6 +279,32 @@ def _extended(spans: tuple[_Span, ...], span: _Span) -> tuple[_Span, ...]:
     return (*spans, span)
 
 
+def _indexed(state: State) -> _Indexed:
+    return (state, extent_index(state.values), extent_index(state.sources))
+
+
+def _indexed_written(indexed: _Indexed, read: FieldExtent) -> bool:
+    state, _, sources = indexed
+    if read in state.sources:
+        return True
+    if read.length <= 0:
+        return False
+    return sources.overlapped(read)
+
+
+def _indexed_values_at(indexed: _Indexed, read: FieldExtent) -> ValueSet:
+    """``values_at`` through the join's index: the same entries, found without
+    scanning every one."""
+    state, values, _ = indexed
+    found = tuple(
+        _sliced(state.values[extent], extent, read)
+        for extent in values.containing(read)
+    )
+    if not found:
+        return _missing_given(state, read, partial(_indexed_written, indexed))
+    return reduce(merged, found, VALUES_EMPTY)
+
+
 def _joined_values(left: State, right: State) -> Mapping[FieldExtent, ValueSet]:
     """Every extent from either side, merged with what the other side holds there.
 
@@ -288,11 +317,11 @@ def _joined_values(left: State, right: State) -> Mapping[FieldExtent, ValueSet]:
     """
     if left.values is right.values:
         return left.values
-    grown = {**_doubted(left, right), **_arrived(left, right)}
+    grown = {**_doubted(left, _indexed(right)), **_arrived(_indexed(left), right)}
     return MappingProxyType({**left.values, **grown}) if grown else left.values
 
 
-def _arrived(left: State, right: State) -> Mapping[FieldExtent, ValueSet]:
+def _arrived(left: _Indexed, right: State) -> Mapping[FieldExtent, ValueSet]:
     """``right``'s entries that add to what ``left`` holds for the same bytes.
 
     One lookup per entry, and the identity test first: most of a join is the same
@@ -301,26 +330,26 @@ def _arrived(left: State, right: State) -> Mapping[FieldExtent, ValueSet]:
     return {
         extent: _arriving_value(left, extent, prior, held)
         for extent, held in right.values.items()
-        for prior in (left.values.get(extent, _UNHELD),)
+        for prior in (left[0].values.get(extent, _UNHELD),)
         if prior is not held and (prior is _UNHELD or not _covers(prior, held))
     }
 
 
 def _arriving_value(
-    left: State, extent: FieldExtent, prior: ValueSet, held: ValueSet
+    left: _Indexed, extent: FieldExtent, prior: ValueSet, held: ValueSet
 ) -> ValueSet:
     if prior is _UNHELD:
-        return _shared_value(merged(values_at(left, extent), held))
+        return _shared_value(merged(_indexed_values_at(left, extent), held))
     return _shared_value(merged(prior, held))
 
 
-def _doubted(left: State, right: State) -> Mapping[FieldExtent, ValueSet]:
+def _doubted(left: State, right: _Indexed) -> Mapping[FieldExtent, ValueSet]:
     """``left``'s entries ``right`` has none for, with ``right``'s view added."""
     return {
         extent: _shared_value(merged(held, other))
         for extent, held in left.values.items()
-        if extent not in right.values
-        for other in (values_at(right, extent),)
+        if extent not in right[0].values
+        for other in (_indexed_values_at(right, extent),)
         if not _covers(held, other)
     }
 
@@ -705,6 +734,12 @@ def _missing(state: State, read: FieldExtent) -> ValueSet:
     ``state.values`` for every byte range any statement reads, which is the
     redundancy ``_UNINFORMATIVE`` exists to keep out of the map.
     """
+    return _missing_given(state, read, partial(_written, state))
+
+
+def _missing_given(
+    state: State, read: FieldExtent, written: Callable[[FieldExtent], bool]
+) -> ValueSet:
     if read.region is RegionId.LINKAGE:
         return because(UnresolvedReason.INBOUND_LINKAGE)
     return _shared_value(
@@ -712,7 +747,7 @@ def _missing(state: State, read: FieldExtent) -> ValueSet:
             reasons=frozenset(
                 reason
                 for reason, holds in (
-                    (UnresolvedReason.NOT_A_LITERAL, _written(state, read)),
+                    (UnresolvedReason.NOT_A_LITERAL, written(read)),
                     (UnresolvedReason.UNINITIALISED, overlaps(state.unwritten, read)),
                 )
                 if holds

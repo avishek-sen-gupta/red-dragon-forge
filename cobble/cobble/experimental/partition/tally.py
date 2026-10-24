@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 PROGRESS_EVERY = 1000
 GRAPH = "partition graph"
 RENDER = "partition render"
 CLUSTERS = "partition clusters"
+TENTHS = 10
 
 
 @dataclass(frozen=True)
@@ -17,3 +19,7 @@ class Tally:
     stage: str
     label: str
     every: int = PROGRESS_EVERY
+
+
+def tenths(stage: str, label: str, total: int) -> Tally:
+    return Tally(stage, label, max(1, math.ceil(total / TENTHS)))
