@@ -106,11 +106,19 @@ repos:
         types: []
 
       - id: tests-forge
-        name: red-dragon-forge test suite (root and cobble)
-        entry: bash -c 'make db2-restart && make test PYTEST_ARGS="-x -q" && cd cobble && uv run --no-sync python -m pytest -x -q'
+        name: red-dragon-forge root test suite
+        entry: bash -c 'make db2-restart && make test PYTEST_ARGS="-x -q"'
         language: system
         pass_filenames: false
-        files: ^(red_dragon_forge/|cicada/|squall/|cobble/|catnip/|litter/|jackal/|tests/|config/|vendor/|\.gitmodules$)
+        files: ^(red_dragon_forge/|cicada/|squall/|catnip/|litter/|jackal/|tests/|config/|vendor/|\.gitmodules$)
+        types: []
+
+      - id: tests-cobble
+        name: cobble test suite
+        entry: bash -c 'cd cobble && uv run --no-sync python -m pytest -x -q'
+        language: system
+        pass_filenames: false
+        files: ^(cobble/|cicada/|squall/|vendor/|\.gitmodules$)
         types: []
 
   # Talisman was installed as a bare git hook, which pre-commit demoted to

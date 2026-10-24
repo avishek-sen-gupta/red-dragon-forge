@@ -115,7 +115,9 @@ report changed files, validation run, and the commands you would have run.
 
 `.pre-commit-config.yaml` runs, blocking: python-fp-lint, Black (auto-fix and re-stage),
 Pyright, import-linter, the test suites (cicada, squall and jackal on their own changes; the
-root suite and cobble's together, on changes to either), the terminology guard on both the diff
+root suite, after a Db2 restart, on root and runtime changes; cobble's on changes to `cobble/` or
+the `cicada/`, `squall/` and `vendor/` code it reads, never the root suite for a cobble-only
+change), the terminology guard on both the diff
 and the commit message, and Talisman.
 
 **`--no-verify` is never used** unless the user explicitly instructs it. When a hook fails: fix
