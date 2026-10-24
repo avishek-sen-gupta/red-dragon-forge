@@ -6,8 +6,7 @@ import logging
 from collections import Counter
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from itertools import combinations, groupby
-from math import log2
+from itertools import groupby
 from operator import itemgetter
 from pathlib import Path
 
@@ -17,7 +16,7 @@ from cobble.experimental.aggregates.def_line import DefLine
 from cobble.experimental.aggregates.matrix_meta import MatrixMeta
 from cobble.experimental.aggregates.paragraph_ref import ParagraphRef
 from cobble.experimental.partition.leaf_index import LeafIndex
-from scipy.sparse import coo_matrix, csr_matrix, load_npz, save_npz
+from scipy.sparse import coo_matrix, csr_matrix, load_npz, save_npz, triu
 
 logger = logging.getLogger(__name__)
 
@@ -73,28 +72,50 @@ def paragraph_fields(
     }
 
 
-def _pmi(together: int, first: int, second: int, total: int) -> float:
-    return log2(together * total / (first * second))
+def _incidence(
+    kept: Mapping[_Paragraph, frozenset[str]], place: Mapping[str, int]
+) -> csr_matrix:
+    hits = tuple(
+        (row, place[field])
+        for row, fields in enumerate(kept.values())
+        for field in fields
+        if field in place
+    )
+    return csr_matrix(
+        coo_matrix(
+            (
+                np.ones(len(hits), dtype=np.int64),
+                (
+                    np.array([hit[0] for hit in hits], dtype=np.int64),
+                    np.array([hit[1] for hit in hits], dtype=np.int64),
+                ),
+            ),
+            shape=(len(kept), len(place)),
+        )
+    )
 
 
 def _cells(
     kept: Mapping[_Paragraph, frozenset[str]],
     place: Mapping[str, int],
     limits: MatrixLimits,
-) -> tuple[tuple[int, int, float], ...]:
-    freq = Counter(field for fields in kept.values() for field in fields)
-    pairs = Counter(
-        pair
-        for fields in kept.values()
-        for pair in combinations(sorted(fields & place.keys()), 2)
+) -> coo_matrix:
+    incidence = _incidence(kept, place)
+    freq = np.asarray(incidence.sum(axis=0), dtype=np.float64).ravel()
+    pairs = coo_matrix(triu(incidence.T @ incidence, k=1))
+    shared = pairs.data >= limits.cooccurrences
+    first, second = pairs.row[shared], pairs.col[shared]
+    weights = np.log2(
+        pairs.data[shared] * float(len(kept)) / (freq[first] * freq[second])
     )
-    return tuple(
-        cell
-        for (a, b), together in sorted(pairs.items())
-        if together >= limits.cooccurrences
-        for weight in (_pmi(together, freq[a], freq[b], len(kept)),)
-        if weight > 0
-        for cell in ((place[a], place[b], weight), (place[b], place[a], weight))
+    positive = weights > 0
+    rows, cols = first[positive], second[positive]
+    return coo_matrix(
+        (
+            np.concatenate((weights[positive], weights[positive])).astype(np.float32),
+            (np.concatenate((rows, cols)), np.concatenate((cols, rows))),
+        ),
+        shape=(len(place), len(place)),
     )
 
 
@@ -109,19 +130,7 @@ def ppmi_matrix(
     freq = Counter(field for fields in kept.values() for field in fields)
     fields = tuple(sorted(f for f, seen in freq.items() if seen >= limits.occurrences))
     place = {field: i for i, field in enumerate(fields)}
-    cells = _cells(kept, place, limits)
-    matrix = csr_matrix(
-        coo_matrix(
-            (
-                np.array([cell[2] for cell in cells], dtype=np.float32),
-                (
-                    np.array([cell[0] for cell in cells], dtype=np.int64),
-                    np.array([cell[1] for cell in cells], dtype=np.int64),
-                ),
-            ),
-            shape=(len(fields), len(fields)),
-        )
-    )
+    matrix = csr_matrix(_cells(kept, place, limits))
     logger.info(
         "aggregate matrix: %d paragraphs, %d fields, %d non-zeros",
         len(kept),
