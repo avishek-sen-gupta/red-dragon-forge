@@ -86,3 +86,49 @@ def test_only_fields_whose_every_byte_lands_in_place_in_another_program_are_one_
         "R:CA.A": "R:CA.A",
         "S:WS.B": "R:CA.A",
     }
+
+
+def _slot(node: str, size: int) -> GraphNode:
+    return GraphNode(id=node, kind=NodeKind.DATASET, label=node, program="", size=size)
+
+
+def test_fields_holding_the_same_dataset_bytes_in_two_programs_are_one_class() -> None:
+    graph = FieldGraph(
+        nodes=(
+            _field("W:R.ID", 11),
+            _field("R:R.ID", 11),
+            _field("R:R.GRP", 5),
+            _field("Q:R.ID", 11),
+            _slot("DS[0:5]", 5),
+            _slot("DS[5:11]", 6),
+        ),
+        edges=(
+            _moved(("W:R.ID", "DS[0:5]"), (0, 0, 5)),
+            _moved(("W:R.ID", "DS[5:11]"), (5, 0, 6)),
+            _moved(("DS[0:5]", "R:R.ID"), (0, 0, 5)),
+            _moved(("DS[5:11]", "R:R.ID"), (0, 5, 6)),
+            _moved(("DS[0:5]", "R:R.GRP"), (0, 0, 5)),
+            _moved(("DS[0:5]", "Q:R.ID")),
+            _moved(("W:R.ID", "Q:R.ID"), (0, 0, 11)),
+        ),
+    )
+
+    assert exact_classes(graph) == (("Q:R.ID", "R:R.ID", "W:R.ID"),)
+
+
+def test_fields_reading_the_same_dataset_bytes_with_no_writer_are_one_class() -> None:
+    graph = FieldGraph(
+        nodes=(
+            _field("A:R.ID", 5),
+            _field("B:R.ID", 5),
+            _field("B:R.LONG", 6),
+            _slot("DS[0:5]", 5),
+        ),
+        edges=(
+            _moved(("DS[0:5]", "A:R.ID"), (0, 0, 5)),
+            _moved(("DS[0:5]", "B:R.ID"), (0, 0, 5)),
+            _moved(("DS[0:5]", "B:R.LONG"), (0, 1, 5)),
+        ),
+    )
+
+    assert exact_classes(graph) == (("A:R.ID", "B:R.ID"),)

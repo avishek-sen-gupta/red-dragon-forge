@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class PageNode(BaseModel):
-    """A drawn node with its position, its component and cluster (-1 for none), its degree, and the occurrences it folds."""
+    """A drawn node with its position, its component and cluster (-1 for none), its degree, the occurrences it folds, and a dataset slot's offset and length in its record."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -23,3 +23,5 @@ class PageNode(BaseModel):
     cluster: int
     degree: int
     occurrences: tuple[str, ...]
+    offset: int
+    length: int

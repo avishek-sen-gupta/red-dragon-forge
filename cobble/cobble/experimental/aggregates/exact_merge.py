@@ -21,7 +21,7 @@ _Byte = tuple[str, int]
 
 @dataclass(frozen=True)
 class _Bytes:
-    """Where each byte moves, the moves out of relaying table occurrences, and every field's program and size."""
+    """Where each byte moves, the moves out of relaying table occurrences and dataset slots, and every field's program and size."""
 
     moves: Mapping[_Byte, tuple[_Byte, ...]]
     relays: Set[str]
@@ -42,6 +42,21 @@ def _byte_moves(edges: Iterable[GraphEdge]) -> Mapping[_Byte, tuple[_Byte, ...]]
     }
 
 
+def _read_back(edge: GraphEdge) -> GraphEdge:
+    return edge.model_copy(
+        update={
+            "source": edge.target,
+            "target": edge.source,
+            "alignments": tuple(
+                placed.model_copy(
+                    update={"source": placed.target, "target": placed.source}
+                )
+                for placed in edge.alignments
+            ),
+        }
+    )
+
+
 def _unplaced(graph: FieldGraph, fields: Mapping[str, GraphNode]) -> frozenset[str]:
     return frozenset(
         edge.target
@@ -52,17 +67,21 @@ def _unplaced(graph: FieldGraph, fields: Mapping[str, GraphNode]) -> frozenset[s
 
 def _bytes(graph: FieldGraph) -> _Bytes:
     fields = {node.id: node for node in graph.nodes if node.kind is NodeKind.FIELD}
+    slots = frozenset(node.id for node in graph.nodes if node.kind is NodeKind.DATASET)
+    ends = fields.keys() | slots
     unplaced = _unplaced(graph, fields)
     placed = tuple(
         edge
         for edge in graph.edges
         if edge.aligned
-        and edge.source in fields
-        and edge.target in fields
+        and edge.source in ends
+        and edge.target in ends
         and edge.target not in unplaced
     )
-    moves = _byte_moves(placed)
-    relays = frozenset(node for node, field in fields.items() if field.subscripts)
+    moves = _byte_moves(
+        (*placed, *(_read_back(edge) for edge in placed if edge.source in slots))
+    )
+    relays = slots | {node for node, field in fields.items() if field.subscripts}
     relayed: nx.DiGraph[_Byte] = nx.DiGraph()
     relayed.add_edges_from(
         (start, end)

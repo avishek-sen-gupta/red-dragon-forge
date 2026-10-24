@@ -19,13 +19,20 @@ TEMPLATE = Path(__file__).with_name("partition_page.html")
 def _data(full: FieldGraph, clusters: ClusterSet) -> PageData:
     drawn = folded(full, clusters)
     graph = drawn.graph
-    points = layout(graph)
     placed = {
         member: (cluster.component, cluster.id)
         for cluster in clusters.clusters
         for member in cluster.members
     }
     stands = {node: run[0].id for node, run in drawn.occurrences.items()}
+    points = layout(
+        graph,
+        {
+            node.id: placed[stands.get(node.id, node.id)][1]
+            for node in graph.nodes
+            if stands.get(node.id, node.id) in placed
+        },
+    )
     degree = Counter(end for edge in graph.edges for end in (edge.source, edge.target))
     return PageData(
         barrier=graph.barrier,
@@ -45,6 +52,8 @@ def _data(full: FieldGraph, clusters: ClusterSet) -> PageData:
                 occurrences=tuple(
                     member.label for member in drawn.occurrences.get(node.id, ())
                 ),
+                offset=node.offset,
+                length=node.size,
             )
             for node in graph.nodes
         ),

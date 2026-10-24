@@ -186,3 +186,42 @@ def test_a_site_with_no_binding_is_unresolved_not_dropped() -> None:
     assert dataset_sites((lost,), BATCH, ()) == (
         DatasetSite(lost, "?NOWHERE", Certainty.POSSIBLE, ("unresolved-file",), False),
     )
+
+
+def test_a_call_site_s_write_back_and_a_write_with_no_source_are_not_file_sites() -> (
+    None
+):
+    callee = DepRow(
+        program="K",
+        via="C/CALL/0",
+        target=_record("K"),
+        origin="FILE:X",
+        source=NO_RANGE,
+        site="K/P/0",
+        definers=(),
+        sink="",
+    )
+    write_back = DepRow(
+        program="C",
+        via="",
+        target=_record("C"),
+        origin="FILE:X",
+        source=NO_RANGE,
+        site="C/CALL/0",
+        definers=(),
+        sink="",
+    )
+    sourceless = DepRow(
+        program="C",
+        via="",
+        target=NO_RANGE,
+        origin="",
+        source=NO_RANGE,
+        site="C/W/0",
+        definers=(),
+        sink="FILE:Y",
+    )
+
+    assert file_sites((write_back, callee, sourceless)) == (
+        FileSite("K", "K/P/0", "X", _record("K"), False),
+    )

@@ -59,7 +59,6 @@ class KnowledgeGraph:
 
     @cached_property
     def selects(self) -> Mapping[tuple[str, str], str]:
-        """(program, SELECT name) to the DD name it is assigned to."""
         return {
             (edge.source, str(edge.attrs.get("select_name", ""))): edge.target
             for edge in self._of(USES, NodeKind.PROGRAM, NodeKind.COBOL_FILE)
@@ -67,7 +66,6 @@ class KnowledgeGraph:
 
     @cached_property
     def bindings(self) -> Mapping[tuple[str, str], str]:
-        """(step, DD name) to the DSN that step's DD statement allocates."""
         return {
             (edge.source, str(edge.attrs.get("ddname", ""))): edge.target
             for edge in self._of(USES, NodeKind.STEP, NodeKind.DATASET)
@@ -75,7 +73,6 @@ class KnowledgeGraph:
 
     @cached_property
     def runs(self) -> Mapping[str, tuple[str, ...]]:
-        """Program to the steps that run it."""
         return _grouped(
             tuple(
                 (edge.target, edge.source)
@@ -85,7 +82,6 @@ class KnowledgeGraph:
 
     @cached_property
     def callers(self) -> Mapping[str, tuple[_Caller, ...]]:
-        """Program to the programs that call it, each with the reasons the call is only possible."""
         return _grouped(
             tuple(
                 (edge.target, (edge.source, CALLS[edge.kind]))
@@ -97,7 +93,6 @@ class KnowledgeGraph:
 
     @cached_property
     def csd(self) -> Mapping[str, str]:
-        """CICS file name, trailing blanks dropped, to the DSN the CSD defines for it."""
         return {
             edge.source.rstrip(): edge.target
             for edge in self._of(

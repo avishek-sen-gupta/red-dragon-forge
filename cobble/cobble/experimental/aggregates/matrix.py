@@ -35,11 +35,13 @@ class MatrixLimits:
 
 @dataclass(frozen=True)
 class PpmiMatrix:
-    """The symmetric matrix, the field each row stands for, and the paragraphs it was counted over."""
+    """The symmetric matrix, the field each row stands for, the paragraphs it was counted over, how many of them each field is written in, and the fewest a field needed to be kept."""
 
     matrix: csr_matrix
     fields: tuple[str, ...]
     paragraphs: tuple[_Paragraph, ...]
+    occurrences: tuple[int, ...]
+    min_occurrences: int
 
 
 def _paragraph(node: str) -> str:
@@ -50,7 +52,7 @@ def _touches(
     row: DefLine, index: LeafIndex, canonical: Mapping[str, str]
 ) -> Iterable[tuple[_Paragraph, str]]:
     fields = {
-        canonical.get(leaf.node, leaf.node)
+        canonical.get(leaf.node, leaf.declared)
         for leaf in index.fields_in(byte_range(row.extent, row.program))
     }
     places = {_paragraph(node) for node in (row.node, *row.definers)}
@@ -126,13 +128,21 @@ def ppmi_matrix(
         len(fields),
         matrix.nnz,
     )
-    return PpmiMatrix(matrix=matrix, fields=fields, paragraphs=tuple(sorted(kept)))
+    return PpmiMatrix(
+        matrix=matrix,
+        fields=fields,
+        paragraphs=tuple(sorted(kept)),
+        occurrences=tuple(freq[field] for field in fields),
+        min_occurrences=limits.occurrences,
+    )
 
 
 def save_matrix(found: PpmiMatrix, matrix_path: Path, meta_path: Path) -> None:
     save_npz(matrix_path, found.matrix)
     meta = MatrixMeta(
         fields=found.fields,
+        occurrences=found.occurrences,
+        min_occurrences=found.min_occurrences,
         paragraphs=tuple(
             ParagraphRef(program=program, paragraph=paragraph)
             for program, paragraph in found.paragraphs
@@ -141,8 +151,12 @@ def save_matrix(found: PpmiMatrix, matrix_path: Path, meta_path: Path) -> None:
     meta_path.write_text(meta.model_dump_json(indent=2), encoding="utf-8")
 
 
-def load_matrix(
-    matrix_path: Path, meta_path: Path
-) -> tuple[csr_matrix, list[str], MatrixMeta]:
+def load_matrix(matrix_path: Path, meta_path: Path) -> PpmiMatrix:
     meta = MatrixMeta.model_validate_json(meta_path.read_text(encoding="utf-8"))
-    return csr_matrix(load_npz(matrix_path)), list(meta.fields), meta
+    return PpmiMatrix(
+        matrix=csr_matrix(load_npz(matrix_path)),
+        fields=meta.fields,
+        paragraphs=tuple((ref.program, ref.paragraph) for ref in meta.paragraphs),
+        occurrences=meta.occurrences,
+        min_occurrences=meta.min_occurrences,
+    )

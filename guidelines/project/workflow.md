@@ -10,7 +10,7 @@ Only the root has a Makefile; `cicada`, `squall`, `jackal` and `cobble` delibera
 ```bash
 make setup     # init submodules + build hlasm_export + rebuild ProLeap and JCL bridge JARs + uv sync
 make jar       # both bridge JARs; skipped if already built (jar-force rebuilds)
-make python    # uv sync --all-packages
+make python    # uv sync --all-packages, then Playwright's Chromium (cobble's page tests drive it)
 make fmt       # Black over BLACK_PATHS
 make hlasm     # the native hlasm_export binary alone (needs cmake, ninja, a C++ toolchain)
 ```
