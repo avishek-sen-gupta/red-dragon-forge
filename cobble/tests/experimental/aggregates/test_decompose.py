@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 import logging
-from pathlib import Path
 
 import numpy as np
 import pytest
 from scipy.sparse import csr_matrix
 
-from cobble.experimental.aggregates import decompose_cli
 from cobble.experimental.aggregates.decompose import rounds
 from cobble.experimental.aggregates.factor import Factor
-from cobble.experimental.aggregates.matrix import IncidenceMatrix, save_matrix
+from cobble.experimental.aggregates.matrix import IncidenceMatrix
 from cobble.experimental.aggregates.nmf_settings import NmfSettings
 from cobble.experimental.aggregates.round_step import RoundStep
 
@@ -34,7 +31,6 @@ def _planted() -> IncidenceMatrix:
         fields=tuple(f"FIELD-{i}" for i in range(14)),
         paragraphs=tuple(("P", f"PARA-{i}") for i in range(14)),
         occurrences=(*(6 for _ in range(10)), *(2 for _ in range(4))),
-        min_occurrences=2,
     )
 
 
@@ -90,34 +86,3 @@ def test_a_later_round_factors_what_the_strict_round_leaves_in_the_looser_fields
         "decompose: round 2 of 2: min-occurrences 2, 14 fields, k=1",
         f"decompose: round 2 of 2: {second.explained_by_earlier:.1%} of its matrix explained by earlier rounds",
     ]
-
-
-def test_a_round_below_the_matrix_s_own_threshold_is_refused(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    built = replace(_planted(), min_occurrences=4)
-    save_matrix(built, tmp_path / "m.npz", tmp_path / "meta.json")
-
-    with pytest.raises(SystemExit) as refused:
-        decompose_cli.main(
-            [
-                "--matrix",
-                str(tmp_path / "m.npz"),
-                "--meta",
-                str(tmp_path / "meta.json"),
-                "--min-occurrences",
-                "4",
-                "2",
-                "--k",
-                "2",
-                "1",
-                "--out-dir",
-                str(tmp_path / "out"),
-            ]
-        )
-
-    assert refused.value.code == 2
-    assert capsys.readouterr().err.splitlines()[-1] == (
-        "cobble-experimental-aggregate-decompose: error: the matrix was built at "
-        "--min-occurrences 4, so a round at 2 sees no more fields; rebuild it at 2"
-    )

@@ -57,8 +57,7 @@ def test_paragraphs_mark_the_unified_fields_they_touch(tmp_path: Path) -> None:
     trimmed = paragraph_fields(
         DEFS, INDEX, {"P:REC.W": "Q:REC.W"}, (re.compile(r"REC\.[YW]$"),)
     )
-    every = incidence_matrix(paragraphs, 1)
-    repeated = incidence_matrix(paragraphs, 2)
+    every = incidence_matrix(paragraphs)
     save_matrix(every, tmp_path / "m.npz", tmp_path / "meta.json")
     loaded = load_matrix(tmp_path / "m.npz", tmp_path / "meta.json")
 
@@ -84,10 +83,6 @@ def test_paragraphs_mark_the_unified_fields_they_touch(tmp_path: Path) -> None:
         [0, 0, 1, 1],
         [0, 0, 1, 0],
     ]
-    assert (repeated.fields, repeated.matrix.toarray().tolist()) == (
-        ("P:REC.X", "P:REC.Y", "P:REC.Z"),
-        [[1, 1, 0], [1, 1, 0], [0, 0, 1], [0, 0, 1]],
-    )
     assert loaded.matrix.toarray().tolist() == [
         [1, 1, 0, 0],
         [1, 1, 0, 0],
@@ -98,12 +93,10 @@ def test_paragraphs_mark_the_unified_fields_they_touch(tmp_path: Path) -> None:
         loaded.fields,
         loaded.paragraphs,
         loaded.occurrences,
-        loaded.min_occurrences,
     ) == (
         ("P:REC.X", "P:REC.Y", "P:REC.Z", "Q:REC.W"),
         (("P", "P1"), ("P", "P2"), ("P", "P3"), ("P", "P4")),
         (2, 2, 2, 1),
-        1,
     )
 
 

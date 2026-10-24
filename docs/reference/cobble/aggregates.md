@@ -8,7 +8,7 @@ run.
 ```text
 cobble-experimental-aggregate-unify     --graph graph.jsonl --out unified.jsonl
 cobble-experimental-aggregate-matrix    --defs defs.jsonl --extents extents.jsonl --unified unified.jsonl
-                                        [--min-occurrences 4] [--exclude REGEX ...]
+                                        [--exclude REGEX ...]
                                         --out-matrix matrix.npz --out-meta meta.json
 cobble-experimental-aggregate-decompose --matrix matrix.npz --meta meta.json
                                         --min-occurrences N [N ...] --k K [K ...]
@@ -39,9 +39,9 @@ its node and of every definer. A field whose own `PROGRAM:RECORD.PATH` name any 
 matches is left out there, before unify's classes apply, so a class loses only its matching members.
 Each remaining field is replaced by its class, and a table element's occurrences that unify left
 apart count as the one declared field, `WS-TRAN-NUM` for every `WS-TRAN-NUM(i,j)`. Every paragraph
-that touches a field is a row, and a field with at least `--min-occurrences` paragraphs is a
-column, 1 where the paragraph touches the field; nothing
-is counted in pairs, so a field seen in two paragraphs has a column like any other. `meta.json`
+that touches a field is a row and every field a paragraph touches is a column, 1 where the
+paragraph touches the field; nothing is counted in pairs, so a field seen in one paragraph has a
+column like any other. `meta.json`
 lists the paragraph of each row, the field of each column and each field's paragraph count.
 
 ## Decompose
@@ -51,11 +51,9 @@ thresholds must strictly decrease. Round 1 factors the matrix's columns for the 
 least its threshold of paragraphs into its `k` factors. Each factor has a loading per field, what the
 candidate aggregate is made of, and a loading per paragraph, where it is used. Each later round takes the
 fields its own threshold admits, subtracts what all earlier rounds' factors rebuild of that part of
-the matrix, clips at zero, and factors what is left. Cutting columns gives exactly the
-matrix the matrix stage would have built at that threshold, since the threshold only drops fields;
-so the matrix stage runs once, at the lowest threshold, and `meta.json` records each field's
-paragraph count and the threshold it was built at. A round below that threshold is refused: it
-would see no more fields. Matrices saved before these fields existed do not load; rebuild them.
+the matrix, clips at zero, and factors what is left. The matrix holds every field, so the
+thresholds live in decompose alone: each round cuts the columns of the fields `meta.json` counts in
+at least its threshold of paragraphs. Matrices saved before this layout do not load; rebuild them.
 
 `rounds.json` holds one entry per round: its threshold, the share of its part of the matrix that
 earlier rounds already explained (`explained_by_earlier`), and its fit: `k`, reconstruction error,
@@ -65,8 +63,8 @@ its twenty highest-loading paragraphs.
 ## On CardDemo
 
 With dataset links in the graph (see [partition](partition.md)), unify joins each record's fields
-across the programs that read and write its file, batch and online alike. Built at
-`--min-occurrences 2` and decomposed with `--min-occurrences 4 2 --k 30 10`, round 1 gives the
+across the programs that read and write its file, batch and online alike. Decomposed with
+`--min-occurrences 4 2 --k 30 10`, round 1 gives the
 account, customer, transaction, card, user, transaction-category balance, daily transaction and
 statement transaction records, each with the paragraphs that read or write it, and the card
 cross-reference record appears for the first time; about a third of its factors are one program's

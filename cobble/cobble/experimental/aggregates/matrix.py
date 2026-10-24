@@ -26,13 +26,12 @@ _Paragraph = tuple[str, str]
 
 @dataclass(frozen=True)
 class IncidenceMatrix:
-    """A 1 where a paragraph touches a field, the paragraph each row and the field each column stands for, how many paragraphs each field is written in, and the fewest a field needed to be kept."""
+    """A 1 where a paragraph touches a field, the paragraph each row and the field each column stands for, and how many paragraphs each field is written in."""
 
     matrix: csr_matrix
     fields: tuple[str, ...]
     paragraphs: tuple[_Paragraph, ...]
     occurrences: tuple[int, ...]
-    min_occurrences: int
 
 
 def _paragraph(node: str) -> str:
@@ -95,11 +94,11 @@ def _incidence(kept: Sequence[frozenset[str]], place: Mapping[str, int]) -> csr_
 
 
 def incidence_matrix(
-    paragraphs: Mapping[_Paragraph, frozenset[str]], min_occurrences: int
+    paragraphs: Mapping[_Paragraph, frozenset[str]],
 ) -> IncidenceMatrix:
     kept = sorted(paragraphs.items())
     freq = Counter(field for _, fields in kept for field in fields)
-    fields = tuple(sorted(f for f, seen in freq.items() if seen >= min_occurrences))
+    fields = tuple(sorted(freq))
     matrix = _incidence(
         [found for _, found in kept], {field: i for i, field in enumerate(fields)}
     )
@@ -114,7 +113,6 @@ def incidence_matrix(
         fields=fields,
         paragraphs=tuple(paragraph for paragraph, _ in kept),
         occurrences=tuple(freq[field] for field in fields),
-        min_occurrences=min_occurrences,
     )
 
 
@@ -123,7 +121,6 @@ def save_matrix(found: IncidenceMatrix, matrix_path: Path, meta_path: Path) -> N
     meta = MatrixMeta(
         fields=found.fields,
         occurrences=found.occurrences,
-        min_occurrences=found.min_occurrences,
         paragraphs=tuple(
             ParagraphRef(program=program, paragraph=paragraph)
             for program, paragraph in found.paragraphs
@@ -139,5 +136,4 @@ def load_matrix(matrix_path: Path, meta_path: Path) -> IncidenceMatrix:
         fields=meta.fields,
         paragraphs=tuple((ref.program, ref.paragraph) for ref in meta.paragraphs),
         occurrences=meta.occurrences,
-        min_occurrences=meta.min_occurrences,
     )

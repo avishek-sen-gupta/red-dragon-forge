@@ -10,7 +10,7 @@ from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
 from cobble.experimental.aggregates.decompose import rounds, write_rounds
-from cobble.experimental.aggregates.matrix import IncidenceMatrix, load_matrix
+from cobble.experimental.aggregates.matrix import load_matrix
 from cobble.experimental.aggregates.nmf_settings import NmfSettings
 from cobble.experimental.aggregates.round_step import RoundStep
 
@@ -65,17 +65,6 @@ def _steps(
     )
 
 
-def _covered(
-    parser: argparse.ArgumentParser, found: IncidenceMatrix, steps: Sequence[RoundStep]
-) -> None:
-    lowest = steps[-1].min_occurrences
-    if lowest < found.min_occurrences:
-        parser.error(
-            f"the matrix was built at --min-occurrences {found.min_occurrences}, so a "
-            f"round at {lowest} sees no more fields; rebuild it at {lowest}"
-        )
-
-
 def main(argv: Sequence[str] = ()) -> int:
     configure_cli_logging()
     parser = _parser()
@@ -84,12 +73,8 @@ def main(argv: Sequence[str] = ()) -> int:
     logger.info("decompose: loading %s", arguments.matrix)
     loaded = load_matrix(arguments.matrix, arguments.meta)
     logger.info(
-        "decompose: %d fields, %d non-zeros, built at --min-occurrences %d",
-        len(loaded.fields),
-        loaded.matrix.nnz,
-        loaded.min_occurrences,
+        "decompose: %d fields, %d non-zeros", len(loaded.fields), loaded.matrix.nnz
     )
-    _covered(parser, loaded, steps)
     found = rounds(
         loaded,
         steps,

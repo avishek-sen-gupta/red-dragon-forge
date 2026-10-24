@@ -50,12 +50,6 @@ def _parser() -> argparse.ArgumentParser:
         help="unified.jsonl from cobble-experimental-aggregate-unify",
     )
     parser.add_argument(
-        "--min-occurrences",
-        type=int,
-        default=4,
-        help="fewest paragraphs a field appears in (default 4)",
-    )
-    parser.add_argument(
         "--exclude",
         type=re.compile,
         nargs="+",
@@ -119,7 +113,6 @@ def main(argv: Sequence[str] = ()) -> int:
     )
     found = incidence_matrix(
         paragraphs,
-        arguments.min_occurrences,
     )
     save_matrix(found, arguments.out_matrix, arguments.out_meta)
     logger.info("aggregate matrix: -> %s, %s", arguments.out_matrix, arguments.out_meta)

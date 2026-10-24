@@ -7,11 +7,10 @@ from pydantic import BaseModel, ConfigDict
 
 
 class MatrixMeta(BaseModel):
-    """The field each column stands for, in order, the paragraph each row stands for, how many paragraphs each field is written in, and the fewest a field needed to be kept."""
+    """The field each column stands for, in order, the paragraph each row stands for, and how many paragraphs each field is written in."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     fields: tuple[str, ...]
     paragraphs: tuple[ParagraphRef, ...]
     occurrences: tuple[int, ...]
-    min_occurrences: int
