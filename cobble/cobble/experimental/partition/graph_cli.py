@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import math
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 
@@ -26,6 +27,8 @@ from cobble.experimental.partition.progress import counted
 from cobble.experimental.partition.tally import GRAPH, Tally
 
 logger = logging.getLogger(__name__)
+
+TENTHS = 10
 
 DEFAULT_FANOUT_LIMIT = 8
 
@@ -166,11 +169,15 @@ def _count(path: Path) -> int:
 
 
 def _index(path: Path, programs: frozenset[str]) -> LeafIndex:
-    kept = tuple(row for row in _rows(path) if row.program in programs)
+    total = _count(path)
+    step = Tally(GRAPH, "extent rows read", max(1, math.ceil(total / TENTHS)))
+    kept = tuple(
+        row for row in counted(_rows(path), step, total) if row.program in programs
+    )
     logger.info(
         "partition graph: extent rows kept %d of %d, for %d programs",
         len(kept),
-        _count(path),
+        total,
         len(programs),
     )
     return leaf_index(kept)

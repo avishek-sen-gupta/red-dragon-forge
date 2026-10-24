@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+import sys
+from bisect import bisect_right
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import replace
+from functools import cache, reduce
 from itertools import groupby, product
 from operator import itemgetter
 
@@ -26,6 +29,8 @@ from cobble.experimental.partition.tally import GRAPH, Tally
 _Moved = tuple[tuple[GraphNode, ...], tuple[Flow, ...]]
 _Pair = tuple[FieldLeaf, FieldLeaf]
 _Rows = Mapping[str, tuple[DepRow, ...]]
+_Query = tuple[ByteRange, tuple[str, ...], frozenset[str]]
+_Traced = Callable[[ByteRange, tuple[str, ...], frozenset[str]], tuple[FieldLeaf, ...]]
 
 
 def field_node(leaf: FieldLeaf) -> GraphNode:
@@ -76,42 +81,37 @@ def _within(extent: ByteRange, start: int, end: int) -> ByteRange:
     return replace(extent, start=start, end=end)
 
 
-def _covered(leaf: FieldLeaf, pieces: Sequence[FieldLeaf]) -> bool:
-    return all(
-        any(piece.start <= byte < piece.end for piece in pieces)
-        for byte in range(leaf.start, leaf.end)
-    )
+def _joined(
+    runs: tuple[tuple[int, int], ...], piece: tuple[int, int]
+) -> tuple[tuple[int, int], ...]:
+    if runs and piece[0] <= runs[-1][1]:
+        return (*runs[:-1], (runs[-1][0], max(runs[-1][1], piece[1])))
+    return (*runs, piece)
+
+
+def _runs(pieces: Sequence[FieldLeaf]) -> tuple[tuple[int, int], ...]:
+    return reduce(_joined, sorted((piece.start, piece.end) for piece in pieces), ())
+
+
+def _covered(leaf: FieldLeaf, runs: tuple[tuple[int, int], ...]) -> bool:
+    if leaf.start >= leaf.end:
+        return True
+    place = bisect_right(runs, (leaf.start, sys.maxsize)) - 1
+    return place >= 0 and runs[place][0] <= leaf.start and leaf.end <= runs[place][1]
 
 
 def _distinct(leaves: Iterable[FieldLeaf]) -> tuple[FieldLeaf, ...]:
     return tuple({leaf: None for leaf in leaves})
 
 
-def _traced(
-    index: LeafIndex, rows: _Rows, extent: ByteRange, definers: Iterable[str]
-) -> tuple[FieldLeaf, ...]:
-    pieces = _distinct(
-        piece
-        for definer in definers
-        for row in rows.get(definer, ())
-        if (row.target.program, row.target.region) == (extent.program, extent.region)
-        and extent.start <= row.target.start
-        and row.target.end <= extent.end
-        for piece in _through(index, rows, row)
-    )
-    kept = tuple(leaf for leaf in index.fields_in(extent) if not _covered(leaf, pieces))
-    return _distinct((*kept, *pieces))
-
-
 def _finer(
-    index: LeafIndex, rows: _Rows, row: DepRow, leaf: FieldLeaf
+    row: DepRow, leaf: FieldLeaf, excluded: frozenset[str], traced: _Traced
 ) -> tuple[FieldLeaf, ...]:
     shift = row.source.start - row.target.start
-    inner = _traced(
-        index,
-        {site: found for site, found in rows.items() if site != row.site},
+    inner = traced(
         _within(row.source, leaf.start + shift, leaf.end + shift),
         row.definers,
+        excluded | {row.site},
     )
     if len(inner) < 2:
         return (leaf,)
@@ -123,15 +123,54 @@ def _finer(
     )
 
 
-def _through(index: LeafIndex, rows: _Rows, row: DepRow) -> tuple[FieldLeaf, ...]:
+def _through(
+    index: LeafIndex, row: DepRow, excluded: frozenset[str], traced: _Traced
+) -> tuple[FieldLeaf, ...]:
     written = index.fields_in(row.target)
     if not row.source.known:
         return written
-    return tuple(piece for leaf in written for piece in _finer(index, rows, row, leaf))
+    return tuple(
+        piece for leaf in written for piece in _finer(row, leaf, excluded, traced)
+    )
 
 
-def _read(index: LeafIndex, rows: _Rows, dep: DepRow) -> Span:
-    return Span(dep.source, _traced(index, rows, dep.source, dep.definers))
+def _inside(row: DepRow, extent: ByteRange) -> bool:
+    return (
+        (row.target.program, row.target.region) == (extent.program, extent.region)
+        and extent.start <= row.target.start
+        and row.target.end <= extent.end
+    )
+
+
+def _traced_once(
+    index: LeafIndex, rows: _Rows, query: _Query, traced: _Traced
+) -> tuple[FieldLeaf, ...]:
+    extent, definers, excluded = query
+    pieces = _distinct(
+        piece
+        for definer in definers
+        if definer not in excluded
+        for row in rows.get(definer, ())
+        if _inside(row, extent)
+        for piece in _through(index, row, excluded, traced)
+    )
+    runs = _runs(pieces)
+    kept = tuple(leaf for leaf in index.fields_in(extent) if not _covered(leaf, runs))
+    return _distinct((*kept, *pieces))
+
+
+def _tracing(index: LeafIndex, rows: _Rows) -> _Traced:
+    @cache
+    def traced(
+        extent: ByteRange, definers: tuple[str, ...], excluded: frozenset[str]
+    ) -> tuple[FieldLeaf, ...]:
+        return _traced_once(index, rows, (extent, definers, excluded), traced)
+
+    return traced
+
+
+def _read(traced: _Traced, dep: DepRow) -> Span:
+    return Span(dep.source, traced(dep.source, dep.definers, frozenset()))
 
 
 def _placed(target: Span, source: Span, pair: _Pair) -> tuple[ByteAlignment, ...]:
@@ -182,14 +221,14 @@ def _origin_name(dep: DepRow) -> str:
     return f"{dep.origin} {dep.literal}" if dep.literal else dep.origin
 
 
-def _moved(index: LeafIndex, rows: _Rows, barrier: Barrier, dep: DepRow) -> _Moved:
+def _moved(index: LeafIndex, traced: _Traced, barrier: Barrier, dep: DepRow) -> _Moved:
     if dep.sink:
         sink = _terminal(NodeKind.SINK, dep.source.program, dep.sink)
-        return _fanned(sink, _read(index, rows, dep).fields, dep.site, inward=False)
+        return _fanned(sink, _read(traced, dep).fields, dep.site, inward=False)
     if not dep.source.known:
         origin = _terminal(NodeKind.ORIGIN, dep.target.program, _origin_name(dep))
         return _fanned(origin, index.fields_in(dep.target), dep.site, inward=True)
-    return _copied(barrier, _span(index, dep.target), _read(index, rows, dep), dep.site)
+    return _copied(barrier, _span(index, dep.target), _read(traced, dep), dep.site)
 
 
 def _linked(index: LeafIndex, barrier: Barrier, link: LinkRow) -> tuple[_Moved, ...]:
@@ -252,10 +291,10 @@ def field_graph(
     links: Sequence[LinkRow],
     barrier: Barrier,
 ) -> FieldGraph:
-    rows = _rows(deps)
+    traced = _tracing(index, _rows(deps))
     moved = (
         *(
-            _moved(index, rows, barrier, dep)
+            _moved(index, traced, barrier, dep)
             for dep in counted(deps, Tally(GRAPH, "dep rows mapped"), len(deps))
             if dep.sink or dep.target.known
         ),
