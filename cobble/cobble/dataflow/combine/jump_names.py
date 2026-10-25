@@ -10,7 +10,6 @@ from pydantic import BaseModel, ConfigDict
 class JumpNames(BaseModel):
     model_config = ConfigDict(frozen=True, extra="ignore")
 
-    program: str
     kind: JumpKind
     target: JumpFactRow = JumpFactRow()
     transid: JumpFactRow = JumpFactRow()

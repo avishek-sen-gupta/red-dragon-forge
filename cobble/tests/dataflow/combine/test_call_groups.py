@@ -15,6 +15,7 @@ def _member(
     name: str,
     jumps: tuple[Jump, ...] = (),
     candidates: tuple[tuple[str, tuple[str, ...]], ...] = (),
+    program: str = "",
 ) -> None:
     member = fixpoint / "members" / name
     member.mkdir(parents=True)
@@ -25,7 +26,7 @@ def _member(
         "".join(
             json.dumps(
                 {
-                    "caller": name,
+                    "caller": program or name,
                     "node": f"{name}/{n}",
                     "kind": kind,
                     "candidates": list(names),
@@ -42,6 +43,8 @@ def _member(
 def test_programs_group_by_literal_targets_candidates_and_transactions(
     tmp_path: Path,
 ) -> None:
+    """A member is grouped under its directory's name even when its PROGRAM-ID,
+    which its rows carry, differs."""
     _member(
         tmp_path,
         "A",
@@ -51,8 +54,9 @@ def test_programs_group_by_literal_targets_candidates_and_transactions(
     _member(
         tmp_path,
         "C",
-        (Jump("C", "C/0", 1, JumpKind.XCTL, False),),
+        (Jump("PROGC", "C/0", 1, JumpKind.XCTL, False),),
         (("program", ("D",)),),
+        program="PROGC",
     )
     _member(tmp_path, "D")
     _member(

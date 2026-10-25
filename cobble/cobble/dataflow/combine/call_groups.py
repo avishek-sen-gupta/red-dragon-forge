@@ -36,7 +36,7 @@ def _named(jump: JumpNames, transactions: Mapping[str, str]) -> tuple[str, ...]:
 
 def _jumped(member: Path, transactions: Mapping[str, str]) -> Iterator[_Pair]:
     return (
-        (jump.program, callee)
+        (member.name, callee)
         for jump in map(JumpNames.model_validate_json, _lines(member / "jumps.jsonl"))
         for callee in _named(jump, transactions)
     )
@@ -44,7 +44,7 @@ def _jumped(member: Path, transactions: Mapping[str, str]) -> Iterator[_Pair]:
 
 def _candidates(member: Path) -> Iterator[_Pair]:
     return (
-        (site.caller, callee)
+        (member.name, callee)
         for site in map(
             TargetSite.model_validate_json, _lines(member / "targets.jsonl")
         )
@@ -56,7 +56,8 @@ def _candidates(member: Path) -> Iterator[_Pair]:
 def call_groups(
     fixpoint_dir: Path, programs: frozenset[str], transactions: Mapping[str, str]
 ) -> tuple[frozenset[str], ...]:
-    """Connected components of ``programs`` over literal and locally resolved jump
+    """Connected components of the members ``programs`` names, each joined under
+    its directory's name, over literal and locally resolved jump
     targets, every program candidate in targets.jsonl whatever its reasons, and
     every transaction the CSD maps to a program. Largest first, then by name."""
     members = (fixpoint_dir / "members" / program for program in sorted(programs))
