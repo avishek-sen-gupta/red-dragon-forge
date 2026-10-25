@@ -97,6 +97,9 @@ Statement = CobolStatementType | ExecCicsStatement | UnmodelledWrite
 _CICS_FILE_VERBS = frozenset({"READ", "READNEXT", "READPREV"})
 _CICS_CALL_VERBS = frozenset({"LINK", "XCTL"})
 _CICS_RECEIVERS = ("INTO", "SET")
+_RECEIVE_MAP = "RECEIVE MAP"
+_MAP_ORIGIN = "MAP:"
+_MAP_INPUT_SUFFIX = "I"
 
 
 @dataclass(frozen=True)
@@ -634,9 +637,15 @@ def _receiver_options(statement: ExecCicsStatement) -> tuple[str, ...]:
     return named[:1]
 
 
+def _map_name(statement: ExecCicsStatement) -> str:
+    return _option(statement, "MAP") or _option(statement, "MAPNAME")
+
+
 def _cics_origin(statement: ExecCicsStatement) -> str:
     if statement.verb.upper() in _CICS_FILE_VERBS:
         return f"FILE:{_option(statement, 'FILE') or _option(statement, 'DATASET')}"
+    if statement.verb.upper() == _RECEIVE_MAP:
+        return _MAP_ORIGIN + _map_name(statement)
     return CICS_STATE
 
 
@@ -648,12 +657,17 @@ def _cics_values(statement: ExecCicsStatement) -> ValueSet:
 
 
 def _cics_targets(statement: ExecCicsStatement) -> tuple[RefModOperand, ...]:
-    """LINK and XCTL write through the COMMAREA; everything else through a receiver."""
+    """LINK and XCTL write through the COMMAREA; everything else through a receiver.
+
+    A RECEIVE MAP without INTO fills the map's symbolic input record, as a SEND
+    MAP without FROM sends its output record.
+    """
     if statement.verb.upper() in _CICS_CALL_VERBS:
         return (_option_reference(statement, "COMMAREA"),)
-    return tuple(
-        _option_reference(statement, name) for name in _receiver_options(statement)
-    )
+    receivers = _receiver_options(statement)
+    if not receivers and statement.verb.upper() == _RECEIVE_MAP:
+        return (RefModOperand(name=_map_name(statement) + _MAP_INPUT_SUFFIX),)
+    return tuple(_option_reference(statement, name) for name in receivers)
 
 
 def _cics_writes(

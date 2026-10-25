@@ -22,9 +22,11 @@ targets, query), `dataflow/combine/`, `dataflow/depgraph/`.
 
 An extent reads `NAME@region[start:end]`. A trailing `~` marks a clamped range: a computed
 subscript lands somewhere inside it. A field id is `<program>.<field>`. Synthetic origins
-(`<program>.LITERAL`, `FILE:<name>`, `%CICS-STATE`, `%CALL:<target>`, `FUNCTION`) are not
-storage. A `MOVE FUNCTION f(...)` reads the fields its arguments name, as a `COMPUTE` does;
-a function reading no field, such as `CURRENT-DATE`, is the `FUNCTION` origin.
+(`<program>.LITERAL`, `FILE:<name>`, `MAP:<map>`, `%CICS-STATE`, `%CALL:<target>`, `FUNCTION`)
+are not storage. A `RECEIVE MAP` writes its `INTO` field, or the map's input record `<map>I`
+when `INTO` is absent, from `MAP:<map>`. A `MOVE FUNCTION f(...)` reads the fields its
+arguments name, as a `COMPUTE` does; a function reading no field, such as `CURRENT-DATE`, is
+the `FUNCTION` origin.
 
 ## cobble-extents
 

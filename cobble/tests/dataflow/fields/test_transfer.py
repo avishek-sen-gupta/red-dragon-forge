@@ -494,24 +494,49 @@ def test_exec_cics_read_into_marks_the_target_as_coming_from_the_file_or_dataset
     assert names_reaching(state, index, "WS-USER") == {"FILE:WS-USRSEC-FILE"}
 
 
-def test_exec_cics_receive_map_marks_the_target_as_cics_state(
+def test_exec_cics_receive_map_writes_the_screen_into_its_map_record(
     program_of, field, after, names_reaching
 ):
+    """RECEIVE MAP writes INTO's field, or the map's symbolic input record
+    <map>I when INTO is absent, from the screen; a plain terminal RECEIVE stays
+    CICS state."""
     asg = program_of(
         [
             {
                 "type": "EXEC_CICS",
-                "verb": "RECEIVE",
+                "verb": "RECEIVE MAP",
                 "options": {
-                    "MAP": {"text": "'MAPA'", "is_literal": True},
+                    "MAP": {"text": "MAPA", "is_literal": True},
                     "INTO": {"text": "WS-MAP", "is_literal": False},
                 },
-            }
+            },
+            {
+                "type": "EXEC_CICS",
+                "verb": "RECEIVE MAP",
+                "options": {"MAP": {"text": "MAPB", "is_literal": True}},
+            },
+            {
+                "type": "EXEC_CICS",
+                "verb": "RECEIVE",
+                "options": {"INTO": {"text": "WS-TERM", "is_literal": False}},
+            },
         ],
-        data_fields=[field(1, "REC", children=[field(5, "WS-MAP", "X(8)", offset=0)])],
+        data_fields=[
+            field(
+                1,
+                "REC",
+                children=[
+                    field(5, "WS-MAP", "X(8)", offset=0),
+                    field(5, "MAPBI", "X(8)", offset=8),
+                    field(5, "WS-TERM", "X(8)", offset=16),
+                ],
+            )
+        ],
     )
     state, index = after(asg)
-    assert names_reaching(state, index, "WS-MAP") == {"%CICS-STATE"}
+    assert [
+        names_reaching(state, index, name) for name in ("WS-MAP", "MAPBI", "WS-TERM")
+    ] == [{"MAP:MAPA"}, {"MAP:MAPB"}, {"%CICS-STATE"}]
 
 
 def test_exec_cics_link_marks_the_commarea_as_written_by_the_callee(
