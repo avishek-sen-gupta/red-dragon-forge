@@ -62,17 +62,47 @@ def sink_row(
     )
 
 
+def defs_row(
+    program: str,
+    node: str,
+    extent: str,
+    definers: Sequence[str] = (),
+    reasons: Sequence[str] = (),
+) -> Row:
+    return (
+        program,
+        json.dumps(
+            {
+                "program": program,
+                "node": node,
+                "extent": extent,
+                "definers": list(definers),
+                "values": [],
+                "reasons": list(reasons),
+            }
+        ),
+    )
+
+
 def _lines(path: Path, rows: Sequence[str]) -> None:
     path.write_text("".join(f"{row}\n" for row in rows), encoding="utf-8")
 
 
-def fixpoint_dir(root: Path, flows: Sequence[Row], sinks: Sequence[Row]) -> Path:
-    for program in sorted({program for program, _ in (*flows, *sinks)}):
+def fixpoint_dir(
+    root: Path,
+    flows: Sequence[Row],
+    sinks: Sequence[Row],
+    defs: Sequence[Row] = (),
+    jumps: Sequence[Row] = (),
+) -> Path:
+    """``jumps`` rows are jump_row text, keyed by program like the rest."""
+    for program in sorted({program for program, _ in (*flows, *sinks, *jumps)}):
         member = root / "members" / program
         member.mkdir(parents=True)
         _lines(member / "graph.jsonl", [row for at, row in flows if at == program])
         _lines(member / "sinks.jsonl", [row for at, row in sinks if at == program])
-        _lines(member / "defs.jsonl", [])
+        _lines(member / "defs.jsonl", [row for at, row in defs if at == program])
+        _lines(member / "jumps.jsonl", [row for at, row in jumps if at == program])
         (member / "counts.json").write_text(
             MemberCounts(member=program, program=program).model_dump_json(),
             encoding="utf-8",

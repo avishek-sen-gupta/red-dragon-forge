@@ -8,7 +8,8 @@ from itertools import chain
 from pathlib import Path
 
 from cobble.dataflow.fields.dep_row import DepRow
-from cobble.dataflow.fields.extent_text import NO_RANGE, byte_range
+from cobble.dataflow.fields.extent_text import NO_RANGE, ByteRange, byte_range
+from cobble.dataflow.fields.values import UnresolvedReason
 from cobble.dataflow.fixpoint import rows
 from cobble.dataflow.fixpoint.build_corpus import (
     COUNTS_FILE,
@@ -23,6 +24,7 @@ from cobble.dataflow.fixpoint.reaching_row import ReachingRow
 from cobble.dataflow.fixpoint.sink_row import SinkRow
 from cobble.knowledge_graph.graph_file import read_graph_rows
 from cobble.knowledge_graph.graph_types import EdgeKind, GraphEdge
+from cobol_memory.region_id import RegionId
 from pydantic import ValidationError
 
 logger = logging.getLogger(__name__)
@@ -48,11 +50,25 @@ def _stale(directory: Path, why: str) -> MissingProvenance:
     )
 
 
-def _definers(directory: Path) -> Mapping[tuple[str, str], tuple[str, ...]]:
+_Reaching = Mapping[tuple[str, str], ReachingRow]
+_UNREACHED = ReachingRow(
+    program="", node="", extent="", definers=(), values=(), reasons=()
+)
+
+
+def _definers(directory: Path) -> _Reaching:
     found = (
         ReachingRow.model_validate(row) for row in rows.stream(directory / DEFS_FILE)
     )
-    return {(row.node, row.extent): row.definers for row in found}
+    return {(row.node, row.extent): row for row in found}
+
+
+def _from_entry(source: ByteRange, reaching: ReachingRow) -> bool:
+    """Linkage bytes that may still hold what the program was entered with."""
+    return (
+        source.region == RegionId.LINKAGE.value
+        and UnresolvedReason.INBOUND_LINKAGE.value in reaching.reasons
+    )
 
 
 def _attrs(directory: Path, edge: GraphEdge) -> FlowAttrs:
@@ -62,37 +78,36 @@ def _attrs(directory: Path, edge: GraphEdge) -> FlowAttrs:
         raise _stale(directory, "an edge lacks its origin") from error
 
 
-def _flow(
-    program: str, attrs: FlowAttrs, definers: Mapping[tuple[str, str], tuple[str, ...]]
-) -> DepRow:
+def _flow(program: str, attrs: FlowAttrs, definers: _Reaching) -> DepRow:
+    source = byte_range(attrs.source_extent, program) if not attrs.origin else NO_RANGE
+    reaching = definers.get((attrs.node, attrs.source_extent), _UNREACHED)
     return DepRow(
         program=program,
         via="",
         target=byte_range(attrs.target_extent, program),
         origin=attrs.origin,
-        source=(
-            byte_range(attrs.source_extent, program) if not attrs.origin else NO_RANGE
-        ),
+        source=source,
         site=f"{program}/{attrs.node}",
-        definers=tuple(
-            f"{program}/{definer}"
-            for definer in definers.get((attrs.node, attrs.source_extent), ())
-        ),
+        definers=tuple(f"{program}/{definer}" for definer in reaching.definers),
         sink="",
         literal=attrs.literal,
+        entry=_from_entry(source, reaching),
     )
 
 
-def _sunk(program: str, row: SinkRow) -> DepRow:
+def _sunk(program: str, row: SinkRow, definers: _Reaching) -> DepRow:
+    source = byte_range(row.source_extent, program)
+    reaching = definers.get((row.node, row.source_extent), _UNREACHED)
     return DepRow(
         program=program,
         via="",
         target=NO_RANGE,
         origin="",
-        source=byte_range(row.source_extent, program),
+        source=source,
         site=f"{program}/{row.node}",
         definers=tuple(f"{program}/{definer}" for definer in row.definers),
         sink=row.sink,
+        entry=_from_entry(source, reaching),
     )
 
 
@@ -110,7 +125,7 @@ def _member_rows(directory: Path, number: int, total: int) -> Iterator[DepRow]:
         if isinstance(row, GraphEdge) and row.kind is EdgeKind.FLOWS_TO
     )
     yield from (
-        _sunk(counts.program, SinkRow.model_validate(row))
+        _sunk(counts.program, SinkRow.model_validate(row), definers)
         for row in rows.stream(directory / SINKS_FILE)
     )
 

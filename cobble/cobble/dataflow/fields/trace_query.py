@@ -26,43 +26,13 @@ from cobble.dataflow.combine.link_row import LinkRow
 from cobble.dataflow.fields.crossing import Crossing
 from cobble.dataflow.fields.dep_row import DepRow
 from cobble.dataflow.fields.extent_text import ByteRange, byte_range
+from cobble.dataflow.fields.link_crossings import crossing_rows
 from cobble.dataflow.fixpoint.build_corpus import MEMBERS_DIR
 from cobble.dataflow.fixpoint.provenance import provenance
 
 logger = logging.getLogger(__name__)
 
 _RangeId = tuple[str, str, int, int]
-
-
-def _crossings(link: LinkRow) -> tuple[DepRow, ...]:
-    caller = byte_range(link.caller_extent, link.caller)
-    callee = byte_range(link.callee_extent, link.callee)
-    site = f"{link.caller}/{link.node}"
-    entered = DepRow(
-        program=link.callee,
-        via="",
-        target=callee,
-        origin="",
-        source=caller,
-        site=site,
-        definers=(),
-        sink="",
-        crossing=Crossing.ENTERED,
-    )
-    if not link.returns:
-        return (entered,)
-    returned = DepRow(
-        program=link.caller,
-        via="",
-        target=caller,
-        origin="",
-        source=callee,
-        site=site,
-        definers=(),
-        sink="",
-        crossing=Crossing.RETURNED,
-    )
-    return (entered, returned)
 
 
 def _links(path: Path) -> tuple[LinkRow, ...]:
@@ -76,12 +46,16 @@ def _links(path: Path) -> tuple[LinkRow, ...]:
 
 
 def provenance_rows(fixpoint_dir: Path, links_path: Path) -> tuple[DepRow, ...]:
-    """The fixpoint's flow and sink rows, then a crossing per combine link window."""
+    """The fixpoint's flow and sink rows, then each combine link window's fields."""
     return tuple(
         dict.fromkeys(
             (
                 *provenance(fixpoint_dir),
-                *(row for link in _links(links_path) for row in _crossings(link)),
+                *(
+                    row
+                    for link in _links(links_path)
+                    for row in crossing_rows(fixpoint_dir, link)
+                ),
             )
         )
     )
@@ -191,10 +165,9 @@ class _Index:
 
 
 def _index(deps: Sequence[DepRow]) -> _Index:
-    own = tuple(dep for dep in deps if dep.crossing is Crossing.NONE)
     return _Index(
         at_site=_grouped((dep.site, dep) for dep in deps if dep.target.known),
-        reached_by=_grouped((definer, dep) for dep in own for definer in dep.definers),
+        reached_by=_grouped((definer, dep) for dep in deps for definer in dep.definers),
         written_in=_grouped(
             (dep.target.program, dep) for dep in deps if dep.target.known
         ),
@@ -249,16 +222,14 @@ def _left(dep: DepRow, calls: _Calls) -> tuple[_Calls, ...]:
 
 
 def _writers(index: _Index, dep: DepRow) -> tuple[DepRow, ...]:
-    """The writes that can have put a read's bytes there: its definers; a
-    window's far side, which has none, every write; no definer at all, the
-    windows that carried the bytes in."""
-    if dep.crossing is not Crossing.NONE:
-        return index.written_in.get(dep.source.program, ())
-    if dep.definers:
-        return tuple(
-            row for site in dep.definers for row in index.at_site.get(site, ())
-        )
-    return index.entered.get(dep.program, ())
+    """The writes that can have put a read's bytes there: its definers, and, when
+    the bytes may still be the ones the program was entered with, the windows that
+    carried them in."""
+    entered = index.entered.get(dep.source.program, ()) if dep.entry else ()
+    return (
+        *(row for site in dep.definers for row in index.at_site.get(site, ())),
+        *entered,
+    )
 
 
 def _backward_children(index: _Index, branch: _Branch) -> tuple[_Branch, ...]:
@@ -275,23 +246,15 @@ def _backward_children(index: _Index, branch: _Branch) -> tuple[_Branch, ...]:
 
 
 def _readers(index: _Index, dep: DepRow) -> tuple[DepRow, ...]:
-    """The reads a write's bytes can reach: those it is a definer of; the far
-    side of a window entering a program, the reads nothing in that program
-    wrote; and from either, every window carrying the program's bytes out."""
-    program = dep.target.program
-    out = tuple(
-        row
-        for row in index.read_in.get(program, ())
-        if row.crossing is not Crossing.NONE
+    """The reads a write's bytes can reach: those it is a definer of, and, past a
+    window into a program, the reads that may still see the bytes it was entered
+    with."""
+    entry = (
+        tuple(row for row in index.read_in.get(dep.target.program, ()) if row.entry)
+        if dep.crossing is Crossing.ENTERED
+        else ()
     )
-    if dep.crossing is Crossing.ENTERED:
-        unwritten = tuple(
-            row
-            for row in index.read_in.get(program, ())
-            if row.crossing is Crossing.NONE and not row.definers
-        )
-        return (*unwritten, *out)
-    return (*index.reached_by.get(dep.site, ()), *out)
+    return (*index.reached_by.get(dep.site, ()), *entry)
 
 
 def _written(row: DepRow, wanted: ByteRange) -> ByteRange:

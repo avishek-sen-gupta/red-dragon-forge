@@ -10,7 +10,8 @@ from cobble.dataflow.fields.extent_text import ByteRange
 
 @dataclass(frozen=True)
 class DepRow:
-    """One dep, with extents parsed into comparable ranges."""
+    """One dep, with extents parsed into comparable ranges. ``entry`` says the
+    source's bytes may still hold what the program was entered with."""
 
     program: str
     via: str
@@ -21,4 +22,5 @@ class DepRow:
     definers: tuple[str, ...]
     sink: str
     literal: str = ""
+    entry: bool = False
     crossing: Crossing = Crossing.NONE

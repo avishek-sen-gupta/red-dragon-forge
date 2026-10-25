@@ -17,6 +17,7 @@ from dataclasses import replace
 from itertools import pairwise
 from types import MappingProxyType
 
+from cobble.asg_walk import procedure_statements
 from cobble.dataflow.depgraph.flows import program_context
 from cobble.dataflow.srccfg.cfg import (
     Cfg,
@@ -39,6 +40,7 @@ from cobble.dataflow.srccfg.paragraphs import (
 )
 from cobble.dataflow.srccfg.section_span import SectionSpan
 from cobble.dataflow.srccfg.whenever import Governing, governing_directives
+from cobol_asg.cobol_statements import AlterStatement
 
 __all__ = [
     "ParagraphRef",
@@ -71,7 +73,30 @@ def build_program(asg, source_file: str = "") -> Cfg:
             *_perform_edges(nodes, body, order),
             *(edge for edge in body if not _skips_range(edge, resumes)),
             *resolve_targets(nodes, frozenset(node.id for node in nodes)),
+            *_altered(asg, nodes, frozenset(node.id for node in nodes)),
         ),
+    )
+
+
+def _altered(asg, nodes: Sequence[Node], known: frozenset[str]) -> tuple[Edge, ...]:
+    """ALTER P TO PROCEED TO Q retargets the GO TO that is P's only statement at run
+    time, so that GO TO also reaches every paragraph an ALTER sends it to -- the
+    written target alone is only where it starts."""
+    proceeds = sorted(
+        {
+            (proceed.source.upper(), proceed.target)
+            for alter in procedure_statements(asg, (AlterStatement,))
+            for proceed in alter.proceed_tos
+        }
+    )
+    return tuple(
+        Edge(source=node.id, target=label_id(target), kind=EdgeKind.GOTO)
+        for node in nodes
+        if node.transfer == GOTO_TRANSFER
+        for source, target in proceeds
+        if node.paragraph.upper() == source
+        and target != node.target
+        and label_id(target) in known
     )
 
 

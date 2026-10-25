@@ -180,6 +180,55 @@ def test_a_goto_becomes_an_edge_to_the_targets_label(asg_of) -> None:
     ]
 
 
+def _goto(target: str) -> dict:
+    return {"type": "GOTO", "form": "simple", "target": {"paragraph": target}}
+
+
+def _alter(source: str, target: str) -> dict:
+    return {"type": "ALTER", "proceed_tos": [{"source": source, "target": target}]}
+
+
+def test_an_altered_goto_reaches_every_paragraph_an_alter_proceeds_to(asg_of) -> None:
+    """ALTER P TO PROCEED TO Q retargets the GO TO that is P's only statement, at
+    run time. That GO TO can go to its written target or to any ALTER's, and a bare
+    GO TO. has no written target at all, so only the ALTERs say where it goes."""
+    cfg = build_program(
+        asg_of(
+            {
+                "program_id": "PROGA",
+                "paragraphs": [
+                    {
+                        "name": "0000-MAIN",
+                        "statements": [
+                            _alter("8100-OPEN", "8300-CUST"),
+                            _alter("9100-SWITCH", "8300-CUST"),
+                            _goto("8100-OPEN"),
+                        ],
+                    },
+                    {"name": "8100-OPEN", "statements": [_goto("8200-TRNX")]},
+                    {"name": "8200-TRNX", "statements": [_move("'T'", "WS-A")]},
+                    {"name": "8300-CUST", "statements": [_move("'C'", "WS-A")]},
+                    {
+                        "name": "9100-SWITCH",
+                        "statements": [{"type": "GOTO", "form": "altered"}],
+                    },
+                ],
+            }
+        )
+    )
+
+    assert [
+        [(e.target, e.kind) for e in cfg.successors(node)]
+        for node in ("8100-OPEN/0", "9100-SWITCH/0")
+    ] == [
+        [
+            (label_id("8200-TRNX"), EdgeKind.GOTO),
+            (label_id("8300-CUST"), EdgeKind.GOTO),
+        ],
+        [(label_id("8300-CUST"), EdgeKind.GOTO)],
+    ]
+
+
 def test_a_goto_to_a_paragraph_the_program_does_not_declare_gets_no_edge(
     asg_of,
 ) -> None:

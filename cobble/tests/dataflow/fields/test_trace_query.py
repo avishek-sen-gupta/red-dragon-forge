@@ -7,11 +7,23 @@ from pathlib import Path
 
 import pytest
 
-from tests.dataflow.fixpoint.fixpoint_dir import fixpoint_dir, flow_row, sink_row
+from tests.dataflow.fixpoint.fixpoint_dir import (
+    Row,
+    defs_row,
+    fixpoint_dir,
+    flow_row,
+    sink_row,
+)
 
 from cobble.dataflow.combine.link_row import LinkRow
 from cobble.dataflow.fields.dep_row import DepRow
 from cobble.dataflow.fields.extent_text import ByteRange
+from cobble.dataflow.fields.values import UnresolvedReason
+from cobble.dataflow.jumps.fact import Fact
+from cobble.dataflow.jumps.jump import Jump
+from cobble.dataflow.jumps.jump_area import JumpArea
+from cobble.dataflow.jumps.jump_kind import JumpKind
+from cobble.dataflow.jumps.rows import jump_row
 from cobble.dataflow.fields.trace_query import (
     BACKWARD,
     FORWARD,
@@ -227,6 +239,21 @@ def _range(program: str, name: str, start: int, end: int) -> ByteRange:
     )
 
 
+def _call(program: str, node: str, area: str, *fields: Fact) -> Row:
+    jump = Jump(
+        program, node, 1, JumpKind.CALL, True, areas=(JumpArea(0, area, fields),)
+    )
+    return (program, jump_row(jump))
+
+
+def _exit(*fields: Fact) -> Row:
+    area = JumpArea(0, "LS-REC@linkage[0:8]", fields)
+    return (
+        "CALLEE",
+        jump_row(Jump("CALLEE", "X", 2, JumpKind.EXIT, False, areas=(area,))),
+    )
+
+
 def _link(caller: str, node: str, area: str) -> str:
     return (
         LinkRow(
@@ -234,60 +261,90 @@ def _link(caller: str, node: str, area: str) -> str:
             node=node,
             callee="CALLEE",
             caller_extent=area,
-            callee_extent="SUB-RESULT@working_storage[4:8]",
+            callee_extent="LS-REC@linkage[0:8]",
             returns=True,
         ).model_dump_json()
         + "\n"
     )
 
 
-def test_a_walk_crosses_a_link_and_returns_only_through_the_call_it_came_in_by(
+def test_a_walk_crosses_a_link_through_the_writes_that_reach_each_side(
     tmp_path: Path,
 ):
-    """Each program's rows stay in that program; a combine link window carries the
-    walk across, both ways when the call returns. A window holds no definers, so
-    every write to its bytes on the far side is followed -- the callee's own, and
-    the bytes the caller handed in, which the callee may hand back unchanged. Once
-    in the callee through CALLER's call, the walk leaves only by that call, never
-    into OTHER; a walk that starts in the callee may leave to either caller."""
-    out = _out_dir(
-        [_dep("CALLEE", "SUB-RESULT", 4, 8, "SUB-CODE", 0, 4, site="CALLEE/CALC/0")],
-        tmp_path,
+    """CALLER writes WS-AREA at S1, CALLs CALLEE with WS-REC at S2, and writes
+    WS-AREA again at S9, after the call. CALLEE copies LS-AREA, which it never
+    wrote, into LS-OUT. The call's own jump row says S1 is the write that reaches
+    it, and CALLEE's exit says R1 is the one that reaches the exit, so the walk
+    crosses only through those: never S9, and never into OTHER, which calls
+    CALLEE too, because the walk leaves CALLEE only by the call it came in by."""
+    reaches = (UnresolvedReason.INBOUND_LINKAGE,)
+    out = fixpoint_dir(
+        tmp_path / "fixpoint",
+        [
+            flow_row("CALLER", "S1", "WS-AREA@working_storage[0:4]", "", "LITERAL"),
+            flow_row("CALLER", "S9", "WS-AREA@working_storage[0:4]", "", "LITERAL"),
+            flow_row("CALLER", "S2", "WS-REC@working_storage[0:8]", "", "%CALL:CALLEE"),
+            flow_row(
+                "CALLER",
+                "C3",
+                "WS-RESULT@working_storage[20:24]",
+                "WS-OUT@working_storage[4:8]",
+            ),
+            flow_row("OTHER", "O1", "OT-REC@working_storage[0:4]", "", "LITERAL"),
+            flow_row("CALLEE", "R1", "LS-OUT@linkage[4:8]", "LS-AREA@linkage[0:4]"),
+        ],
+        [],
+        defs=[
+            defs_row("CALLER", "C3", "WS-OUT@working_storage[4:8]", ["S2"]),
+            defs_row(
+                "CALLEE", "R1", "LS-AREA@linkage[0:4]", reasons=["inbound-linkage"]
+            ),
+        ],
+        jumps=[
+            _call(
+                "CALLER",
+                "S2",
+                "WS-REC@working_storage[0:8]",
+                Fact("WS-AREA@working_storage[0:4]", writers=("S1",)),
+                Fact("WS-OUT@working_storage[4:8]"),
+            ),
+            _call(
+                "OTHER",
+                "T5",
+                "OT-REC@working_storage[0:8]",
+                Fact("OT-REC@working_storage[0:8]", writers=("O1",)),
+            ),
+            _exit(
+                Fact("LS-AREA@linkage[0:4]", reasons=reaches),
+                Fact("LS-OUT@linkage[4:8]", writers=("R1",)),
+            ),
+        ],
     )
     links = tmp_path / "links.jsonl"
     links.write_text(
-        _link("CALLER", "LINK/0", "WS-AREA@working_storage[4:8]")
-        + _link("OTHER", "CALL/0", "OT-AREA@working_storage[0:4]"),
+        _link("CALLER", "S2", "WS-REC@working_storage[0:8]")
+        + _link("OTHER", "T5", "OT-REC@working_storage[0:8]"),
         encoding="utf-8",
     )
 
     crossed = provenance_rows(out, links)
 
-    assert query(crossed, BACKWARD, "CALLER.WS-AREA") == (
-        "WS-AREA@working_storage[4:8]",
-        "  <- SUB-RESULT@working_storage[4:8]  at CALLER/LINK/0",
-        "    <- SUB-CODE@working_storage[0:4]  at CALLEE/CALC/0",
-        "    <- WS-AREA@working_storage[4:8]  at CALLER/LINK/0",
-        "      <- SUB-RESULT@working_storage[4:8]  at CALLER/LINK/0  (see above)",
+    assert query(crossed, BACKWARD, "CALLER.WS-RESULT") == (
+        "WS-RESULT@working_storage[20:24]",
+        "  <- WS-OUT@working_storage[4:8]  at CALLER/C3",
+        "    <- %CALL:CALLEE  at CALLER/S2",
+        "    <- LS-OUT@linkage[4:8]  at CALLER/S2",
+        "      <- LS-AREA@linkage[0:4]  at CALLEE/R1",
+        "        <- WS-AREA@working_storage[0:4]  at CALLER/S2",
+        "          <- LITERAL  at CALLER/S1",
     )
     assert query(crossed, FORWARD, "CALLER.WS-AREA") == (
-        "WS-AREA@working_storage[4:8]",
-        "  -> SUB-RESULT@working_storage[4:8]  at CALLER/LINK/0",
-        "    -> WS-AREA@working_storage[4:8]  at CALLER/LINK/0",
-        "      -> SUB-RESULT@working_storage[4:8]  at CALLER/LINK/0  (see above)",
-    )
-    assert query(crossed, FORWARD, "CALLEE.SUB-CODE") == (
-        "SUB-CODE@working_storage[0:4]",
-        "  -> SUB-RESULT@working_storage[4:8]  at CALLEE/CALC/0",
-        "    -> WS-AREA@working_storage[4:8]  at CALLER/LINK/0",
-        "      -> SUB-RESULT@working_storage[4:8]  at CALLER/LINK/0",
-        "        -> WS-AREA@working_storage[4:8]  at CALLER/LINK/0  (see above)",
-        "    -> OT-AREA@working_storage[0:4]  at OTHER/CALL/0",
-        "      -> SUB-RESULT@working_storage[4:8]  at OTHER/CALL/0",
-        "        -> OT-AREA@working_storage[0:4]  at OTHER/CALL/0  (see above)",
-    )
-    assert query(provenance_rows(out, Path()), BACKWARD, "CALLER.WS-AREA") == (
-        "field 'CALLER.WS-AREA' not found in the provenance or extents",
+        "WS-AREA@working_storage[0:4]",
+        "  -> LS-REC@linkage[0:4]  at CALLER/S2",
+        "    -> LS-OUT@linkage[4:8]  at CALLEE/R1",
+        "      -> WS-REC@working_storage[4:8]  at CALLER/S2",
+        "        -> WS-RESULT@working_storage[20:24]  at CALLER/C3",
+        "    -> WS-REC@working_storage[0:4]  at CALLER/S2",
     )
 
 

@@ -366,12 +366,14 @@ cobble-trace-query {forward,backward} FIELD --fixpoint DIR [--links LINKS] [--de
 | `--extents` | an extents table, for a field no row names |
 
 Backward starts at every write to FIELD's bytes and, from each read, follows only the writes
-that reach it (its reaching definitions); a read nothing in its program wrote came in by a link.
-Forward starts at every read of FIELD's bytes and follows a write only into the reads it reaches.
-Each hop narrows to the bytes that correspond when source and target are the same length. A link
-window holds no reaching definitions, so on its far side every write to (or read of) its bytes is
-followed. The walk remembers the calls it went into: it leaves a callee only by the call it came in
-by, and goes to every caller only when it started inside the callee.
+that reach it (its reaching definitions), and, when a linkage read may still hold the bytes the
+program was entered with (`inbound-linkage`), the link that carried them in. Forward starts at
+every read of FIELD's bytes and follows a write only into the reads it reaches. Each hop narrows to
+the bytes that correspond when source and target are the same length. A link window crosses one
+field at a time: going into a callee, with the caller's writes that reach the call; coming back,
+with the callee's writes that reach any of its exits (both from `jumps.jsonl`). The walk remembers
+the calls it went into: it leaves a callee only by the call it came in by, and goes to every caller
+only when it started inside the callee.
 
 Output is a tree, one line per row, each source under the write that read it. A branch already
 shown is printed once more with `(see above)` and not expanded. Origins (`FILE:`, `MAP:`,
