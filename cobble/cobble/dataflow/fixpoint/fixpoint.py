@@ -111,7 +111,8 @@ class FlowEdge:
     """One value reaching one extent at one statement.
 
     ``origin`` names a value that is not storage -- a literal, a file, a callee --
-    and is empty exactly when ``source`` is a real range.
+    and is empty exactly when ``source`` is a real range; ``literal`` is the
+    literal as written when the origin is one.
 
     Where the value was last defined is deliberately absent. One source extent at
     one node can have many reaching definers, so carrying the definer here made
@@ -123,6 +124,7 @@ class FlowEdge:
     source: FieldExtent
     target: FieldExtent
     node: str
+    literal: str = ""
 
 
 @dataclass(frozen=True)
@@ -692,6 +694,7 @@ def _at(
                 source=source.extent,
                 target=target,
                 node=node_id,
+                literal=source.literal,
             )
             for target, source in moved
         ),

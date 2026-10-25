@@ -262,3 +262,27 @@ def test_a_synthetic_origin_has_no_entry_rather_than_an_empty_range(records_of, 
     )
     assert "PROGA.LITERAL" in {node.id for node in records.nodes}
     assert "PROGA.LITERAL" not in _owned(records)
+
+
+def test_a_synthetic_source_names_its_origin_and_literal_and_storage_names_neither(
+    records_of, two_fields
+):
+    """Two literals moved into one field stay two edges: the literal is part of
+    what the edge says, so a dedupe on the attrs cannot fold them together."""
+    records = records_of(
+        [
+            {"type": "MOVE", "operands": [{"name": "'A'"}, {"name": "WS-A"}]},
+            {"type": "MOVE", "operands": [{"name": "'B'"}, {"name": "WS-A"}]},
+            {"type": "MOVE", "operands": [{"name": "WS-A"}, {"name": "WS-B"}]},
+        ],
+        two_fields,
+    )
+
+    assert sorted(
+        (edge.attrs["node"], edge.attrs["origin"], edge.attrs["literal"])
+        for edge in _flows(records.edges)
+    ) == [
+        ("MAIN/0", "LITERAL", "'A'"),
+        ("MAIN/1", "LITERAL", "'B'"),
+        ("MAIN/2", "", ""),
+    ]
