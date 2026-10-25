@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from cobble.dataflow.fields.extent_text import NO_RANGE, ByteRange
-from cobble.dataflow.fields.trace_query import DepRow
+from cobble.dataflow.fields.dep_row import DepRow
 from cobble.dataflow.fixpoint.target_kind import TargetKind
 from cobble.dataflow.fixpoint.target_site import TargetSite
 from cobble.experimental.partition.certainty import Certainty

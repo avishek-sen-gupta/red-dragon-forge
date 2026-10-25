@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from cobble.dataflow.fields.extent_text import NO_RANGE, ByteRange
-from cobble.dataflow.fields.trace_query import DepRow
+from cobble.dataflow.fields.dep_row import DepRow
 from cobble.experimental.partition.byte_alignment import ByteAlignment
 from cobble.experimental.partition.extent_row import ExtentRow
 from cobble.experimental.partition.fanout_barrier import FanoutBarrier

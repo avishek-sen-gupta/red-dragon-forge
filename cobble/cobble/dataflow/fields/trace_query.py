@@ -17,6 +17,7 @@ from functools import partial, reduce
 from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
+from cobble.dataflow.fields.dep_row import DepRow
 from cobble.dataflow.fields.extent_text import (
     NO_RANGE,
     ByteRange,
@@ -29,21 +30,6 @@ logger = logging.getLogger(__name__)
 
 _RangeKey = tuple[str, str, int, int]
 _DEFINERS = TypeAdapter(tuple[str, ...])
-
-
-@dataclass(frozen=True)
-class DepRow:
-    """One dep from the JSONL, with extents parsed into comparable ranges."""
-
-    program: str
-    via: str
-    target: ByteRange
-    origin: str
-    source: ByteRange
-    site: str
-    definers: tuple[str, ...]
-    sink: str
-    literal: str = ""
 
 
 def _range_of(

@@ -10,8 +10,8 @@ from functools import cache, reduce
 from itertools import groupby, product
 from operator import itemgetter
 
+from cobble.dataflow.fields.dep_row import DepRow
 from cobble.dataflow.fields.extent_text import ByteRange, byte_range
-from cobble.dataflow.fields.trace_query import DepRow
 from cobble.experimental.partition.barrier import Barrier
 from cobble.experimental.partition.byte_alignment import ByteAlignment
 from cobble.experimental.partition.field_graph import FieldGraph

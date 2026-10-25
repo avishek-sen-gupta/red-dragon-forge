@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 
 from cobble.dataflow.depgraph.flows import FILE_PREFIX
-from cobble.dataflow.fields.trace_query import DepRow
+from cobble.dataflow.fields.dep_row import DepRow
 from cobble.dataflow.fixpoint.target_kind import TargetKind
 from cobble.dataflow.fixpoint.target_site import TargetSite
 from cobble.experimental.partition.certainty import Certainty

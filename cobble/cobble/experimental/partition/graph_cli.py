@@ -8,7 +8,8 @@ from collections.abc import Iterator, Sequence
 from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
-from cobble.dataflow.fields.trace_query import DepRow, load
+from cobble.dataflow.fields.dep_row import DepRow
+from cobble.dataflow.fields.trace_query import load
 from cobble.dataflow.fixpoint.target_site import TargetSite
 from cobble.experimental.partition.barrier_kind import BarrierKind
 from cobble.experimental.partition.certainty import Certainty
