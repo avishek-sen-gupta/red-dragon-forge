@@ -28,6 +28,7 @@ from cobble.dataflow.fixpoint.build_corpus import (
     ALIASES_FILE,
     DEFS_FILE,
     GRAPH_FILE,
+    SINKS_FILE,
     JUMPS_FILE,
     TARGETS_FILE,
     cli,
@@ -188,6 +189,50 @@ def test_a_run_writes_nodes_and_edges_and_exits_zero(corpus):
     (edge,) = _tagged(out_dir / GRAPH_FILE, RowType.EDGE)
     assert (edge["source"], edge["target"]) == ("PROGA.WS-A", "PROGA.WS-B")
     assert edge["kind"] == "FLOWS_TO"
+
+
+def _sending(program_id: str) -> dict:
+    program = _program(program_id)
+    send = {
+        "type": "EXEC_CICS",
+        "verb": "SEND MAP",
+        "options": {
+            "MAP": {"text": "MAP1", "is_literal": True},
+            "FROM": {"text": "WS-B", "is_literal": False},
+        },
+    }
+    (paragraph,) = program["paragraphs"]
+    return {
+        **program,
+        "paragraphs": [{**paragraph, "statements": [*paragraph["statements"], send]}],
+    }
+
+
+def test_each_member_and_the_corpus_write_the_sinks_its_bytes_leave_by(corpus):
+    argv, out_dir = corpus(
+        {
+            "MEMBERA": _member_json(_sending("PROGA")),
+            "MEMBERB": _member_json(_sending("PROGB")),
+        }
+    )
+
+    assert cli(argv) == 0
+
+    expected = [
+        {
+            "program": program,
+            "node": "MAIN/1",
+            "sink": "MAP:MAP1",
+            "source_extent": "WS-B@working_storage[4:8]",
+            "definers": ["MAIN/0"],
+        }
+        for program in ("PROGA", "PROGB")
+    ]
+    assert list(_rows(out_dir / SINKS_FILE)) == expected
+    assert [
+        list(_rows(out_dir / "members" / member / SINKS_FILE))
+        for member in ("MEMBERA", "MEMBERB")
+    ] == [[expected[0]], [expected[1]]]
 
 
 def test_one_flow_written_on_four_paths_is_one_edge_and_one_defs_row(corpus):
@@ -408,6 +453,7 @@ def test_the_run_writes_five_tables_and_no_layout_into_the_graph(corpus):
         GRAPH_FILE,
         JUMPS_FILE,
         "members",
+        SINKS_FILE,
         TARGETS_FILE,
     ]
     assert [node["attrs"] for node in _tagged(out_dir / GRAPH_FILE, RowType.NODE)] == [

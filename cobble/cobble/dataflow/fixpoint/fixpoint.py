@@ -66,6 +66,7 @@ from cobble.dataflow.depgraph.flows import IDENTITY_PREFIXES
 from cobble.dataflow.fields.extent import CellIndex, cell_index, operand_extents
 from cobble.dataflow.fields.image import initial_image
 from cobble.dataflow.fields.program_layout import NO_LAYOUT, ProgramLayout, layout_of
+from cobble.dataflow.fields.sinks import Sink, sinks_of
 from cobble.dataflow.fields.state import EMPTY, State, join, pruned, reaching, values_at
 from cobble.dataflow.fields.transfer import (
     HANDLED,
@@ -128,6 +129,17 @@ class FlowEdge:
 
 
 @dataclass(frozen=True)
+class FlowSink:
+    """Bytes leaving the program at one statement -- a record written, a map sent,
+    a queue written -- and the statements that last wrote them there."""
+
+    node: str
+    sink: str
+    source: FieldExtent
+    definers: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ReachingDef:
     """Which statements could have written ``extent`` by the time ``node`` runs."""
 
@@ -165,6 +177,7 @@ class ProgramFlow:
     program: str
     edges: tuple[FlowEdge, ...] = ()
     defs: tuple[ReachingDef, ...] = ()
+    sinks: tuple[FlowSink, ...] = ()
     targets: tuple[ResolvedTarget, ...] = ()
     jumps: tuple[Jump, ...] = ()
     writes: int = 0
@@ -796,6 +809,9 @@ def analyse(
         program=cfg.program,
         edges=extracted.edges,
         defs=extracted.defs,
+        sinks=_sunk(
+            found, walk.states, index, MappingProxyType(asg.file_record_to_select)
+        ),
         targets=resolved_targets(cfg, index, walk.states, walk.settled),
         jumps=jumps_of(asg, cfg, statements, index, walk.states, walk.settled, live),
         writes=tally.writes,
@@ -812,6 +828,40 @@ def analyse(
         relevant=len(
             {write.target for node, write in written if kept(node, write.target)}
         ),
+    )
+
+
+def _sinks_at(statement: Statement, files: Mapping[str, str]) -> tuple[Sink, ...]:
+    """A WRITE of a record no SELECT names has no file to name, so it is no sink."""
+    try:
+        return sinks_of(statement, files)
+    except KeyError:
+        return ()
+
+
+def _sunk(
+    found: tuple[tuple[str, Statement], ...],
+    states: Mapping[str, State],
+    index: CellIndex,
+    files: Mapping[str, str],
+) -> tuple[FlowSink, ...]:
+    """Each sink's bytes, with the definers the statement itself leaves on them."""
+    return tuple(
+        dict.fromkeys(
+            FlowSink(
+                node=node_id,
+                sink=sink.name,
+                source=extent,
+                definers=tuple(sorted(_definers(after, extent))),
+            )
+            for node_id, statement in found
+            if node_id in states
+            for sinks in (_sinks_at(statement, files),)
+            if sinks
+            for after in (transfer(statement, node_id, states[node_id], index),)
+            for sink in sinks
+            for extent in operand_extents(sink.operand, index).extents
+        )
     )
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from cobble.corpus_index import CorpusIndex
 from cobble.dataflow.fields.emit import field_id, graph_records
+from cobble.dataflow.fields.side_tables import ProgramSink
 from cobble.dataflow.fixpoint.fixpoint import analyse
 from cobble.file_location import FileLocationReason, NoFileLocation
 from cobble.knowledge_graph.graph_types import EdgeKind, NodeKind
@@ -286,3 +287,37 @@ def test_a_synthetic_source_names_its_origin_and_literal_and_storage_names_neith
         ("MAIN/1", "LITERAL", "'B'"),
         ("MAIN/2", "", ""),
     ]
+
+
+def test_bytes_leaving_by_a_sink_are_a_row_naming_the_sink_and_their_definers(
+    records_of, two_fields
+):
+    """A sink is not a FLOWS_TO edge, so nothing that reads flows mistakes it for
+    one. A WRITE of a record no SELECT names has no file to name, and costs only
+    its own sink, not the rest of the program."""
+    records = records_of(
+        [
+            {"type": "MOVE", "operands": [{"name": "WS-A"}, {"name": "WS-B"}]},
+            {
+                "type": "EXEC_CICS",
+                "verb": "SEND MAP",
+                "options": {
+                    "MAP": {"text": "MAP1", "is_literal": True},
+                    "FROM": {"text": "WS-B", "is_literal": False},
+                },
+            },
+            {"type": "WRITE", "record_name": "REC"},
+        ],
+        two_fields,
+    )
+
+    assert records.sinks == (
+        ProgramSink(
+            program="PROGA",
+            node="MAIN/1",
+            sink="MAP:MAP1",
+            source_extent="WS-B@working_storage[4:8]",
+            definers=("MAIN/0",),
+        ),
+    )
+    assert [edge.attrs["node"] for edge in _flows(records.edges)] == ["MAIN/0"]

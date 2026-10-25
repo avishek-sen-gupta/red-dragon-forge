@@ -34,6 +34,7 @@ from cobble.dataflow.fields.side_tables import (
     DeclaredCell,
     DeclaredRecord,
     FieldExtents,
+    ProgramSink,
     ReachingDefs,
 )
 from cobble.dataflow.fixpoint.fixpoint import FlowEdge, ProgramFlow
@@ -59,6 +60,7 @@ class ProgramRecords:
     edges: tuple[GraphEdge, ...]
     extents: tuple[FieldExtents, ...]
     defs: tuple[ReachingDefs, ...]
+    sinks: tuple[ProgramSink, ...] = ()
 
 
 def field_id(program: str, name: str) -> str:
@@ -139,6 +141,7 @@ def graph_records(
         edges=edges,
         extents=_declared_extents(layout, flow.program),
         defs=_reaching_defs(flow),
+        sinks=_sinks(flow),
     )
 
 
@@ -187,6 +190,19 @@ def _declared_extents(layout: ProgramLayout, program: str) -> tuple[FieldExtents
             ),
         )
         for name, cells in index.by_name.items()
+    )
+
+
+def _sinks(flow: ProgramFlow) -> tuple[ProgramSink, ...]:
+    return tuple(
+        ProgramSink(
+            program=flow.program,
+            node=sink.node,
+            sink=sink.sink,
+            source_extent=extent_text(sink.source),
+            definers=sink.definers,
+        )
+        for sink in flow.sinks
     )
 
 

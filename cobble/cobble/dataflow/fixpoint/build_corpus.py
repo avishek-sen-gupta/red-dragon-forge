@@ -123,12 +123,15 @@ from cobble.dataflow.fields.program_layout import ProgramLayout
 from cobble.dataflow.fields.side_tables import (
     CommareaAlias,
     JsonlWriter,
+    ProgramSink,
     ReachingDefs,
     alias_identity,
     alias_row,
     defs_identity,
     defs_row,
     jsonl_writer,
+    sink_identity,
+    sink_row,
     target_identity,
     target_row,
 )
@@ -155,6 +158,7 @@ logger = logging.getLogger(__name__)
 
 GRAPH_FILE = "graph.jsonl"
 DEFS_FILE = "defs.jsonl"
+SINKS_FILE = "sinks.jsonl"
 ALIASES_FILE = "aliases.jsonl"
 TARGETS_FILE = "targets.jsonl"
 JUMPS_FILE = "jumps.jsonl"
@@ -178,6 +182,7 @@ class MemberResult:
     nodes: tuple[GraphNode, ...] = ()
     edges: tuple[GraphEdge, ...] = ()
     defs: tuple[ReachingDefs, ...] = ()
+    sinks: tuple[ProgramSink, ...] = ()
     aliases: tuple[CommareaAlias, ...] = ()
     targets: tuple[ResolvedTarget, ...] = ()
     jumps: tuple[Jump, ...] = ()
@@ -294,6 +299,7 @@ def _tables(
         nodes=records.nodes,
         edges=records.edges,
         defs=records.defs,
+        sinks=records.sinks,
         targets=flow.targets,
         jumps=flow.jumps,
         writes=flow.writes,
@@ -550,6 +556,7 @@ class _Sinks:
 
     graph: GraphWriter
     defs: JsonlWriter
+    sinks: JsonlWriter
     aliases: JsonlWriter
     targets: JsonlWriter
     jumps: JsonlWriter
@@ -557,6 +564,7 @@ class _Sinks:
     def add_result(self, result: MemberResult) -> None:
         self.graph.add_all(result.nodes, result.edges)
         self.defs.add_rows(map(defs_row, result.defs))
+        self.sinks.add_rows(map(sink_row, result.sinks))
         self.aliases.add_rows(map(alias_row, result.aliases))
         self.targets.add_rows(map(target_row, result.targets))
         self.jumps.add_rows((jump_identity(j), jump_row(j)) for j in result.jumps)
@@ -566,6 +574,7 @@ class _Sinks:
         so the writers dedupe across members exactly as one uninterrupted run."""
         tuple(map(self._add_graph_row, read_graph_rows(directory / GRAPH_FILE)))
         self.defs.add_rows(_identified(directory / DEFS_FILE, _defs_identity))
+        self.sinks.add_rows(_identified(directory / SINKS_FILE, _sink_identity))
         self.aliases.add_rows(_identified(directory / ALIASES_FILE, _alias_identity))
         self.targets.add_rows(_identified(directory / TARGETS_FILE, _target_identity))
         self.jumps.add_rows(_identified(directory / JUMPS_FILE, _jump_identity))
@@ -580,6 +589,18 @@ class _Sinks:
 def _defs_identity(row: Row) -> str:
     return defs_identity(
         rows.text(row, "program"), rows.text(row, "node"), rows.text(row, "extent")
+    )
+
+
+def _sink_identity(row: Row) -> str:
+    return sink_identity(
+        ProgramSink(
+            program=rows.text(row, "program"),
+            node=rows.text(row, "node"),
+            sink=rows.text(row, "sink"),
+            source_extent=rows.text(row, "source_extent"),
+            definers=(),
+        )
     )
 
 
@@ -698,11 +719,12 @@ def _member_directory(result: MemberResult, members: Path) -> None:
     with (
         graph_writer(staging / GRAPH_FILE, CorpusIndex()) as graph,
         jsonl_writer(staging / DEFS_FILE) as defs,
+        jsonl_writer(staging / SINKS_FILE) as sinks,
         jsonl_writer(staging / ALIASES_FILE) as aliases,
         jsonl_writer(staging / TARGETS_FILE) as targets,
         jsonl_writer(staging / JUMPS_FILE) as jumps,
     ):
-        _Sinks(graph, defs, aliases, targets, jumps).add_result(result)
+        _Sinks(graph, defs, sinks, aliases, targets, jumps).add_result(result)
     (staging / COUNTS_FILE).write_text(
         counts_of(result).model_dump_json(), encoding="utf-8"
     )
@@ -1164,11 +1186,17 @@ def _publish(
     with (
         _writer(arguments, locations) as graph,
         _side_writer(arguments, DEFS_FILE) as defs,
+        _side_writer(arguments, SINKS_FILE) as sinks,
         _side_writer(arguments, ALIASES_FILE) as aliases,
         _side_writer(arguments, TARGETS_FILE) as targets,
         _side_writer(arguments, JUMPS_FILE) as jumps,
     ):
-        tuple(map(_Sinks(graph, defs, aliases, targets, jumps).add_member, finished))
+        tuple(
+            map(
+                _Sinks(graph, defs, sinks, aliases, targets, jumps).add_member,
+                finished,
+            )
+        )
 
 
 def _completed(arguments: argparse.Namespace) -> int:

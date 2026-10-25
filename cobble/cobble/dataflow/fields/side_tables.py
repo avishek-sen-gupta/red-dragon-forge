@@ -148,6 +148,17 @@ class CommareaAlias:
     reason: str = ""
 
 
+@dataclass(frozen=True)
+class ProgramSink:
+    """Bytes leaving ``program`` at ``node`` by ``sink``, and the statements that last wrote them."""
+
+    program: str
+    node: str
+    sink: str
+    source_extent: str
+    definers: tuple[str, ...]
+
+
 _Row = tuple[str, str]
 
 
@@ -219,6 +230,10 @@ def defs_identity(program: str, node: str, extent: str) -> str:
     return f"{program}\x00{node}\x00{extent}"
 
 
+def sink_identity(sink: ProgramSink) -> str:
+    return "\x00".join((sink.program, sink.node, sink.sink, sink.source_extent))
+
+
 def alias_identity(caller: str, node: str, caller_extent: str) -> str:
     return f"{caller}\x00{node}\x00{caller_extent}"
 
@@ -247,6 +262,21 @@ def defs_row(defs: ReachingDefs) -> _Row:
                     for value in defs.held.values
                 ),
                 "reasons": sorted(reason.value for reason in defs.held.reasons),
+            }
+        ),
+    )
+
+
+def sink_row(sink: ProgramSink) -> _Row:
+    return (
+        sink_identity(sink),
+        json.dumps(
+            {
+                "program": sink.program,
+                "node": sink.node,
+                "sink": sink.sink,
+                "source_extent": sink.source_extent,
+                "definers": list(sink.definers),
             }
         ),
     )
