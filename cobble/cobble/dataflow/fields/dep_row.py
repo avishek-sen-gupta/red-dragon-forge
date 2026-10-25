@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from cobble.dataflow.fields.crossing import Crossing
 from cobble.dataflow.fields.extent_text import ByteRange
 
 
@@ -20,3 +21,4 @@ class DepRow:
     definers: tuple[str, ...]
     sink: str
     literal: str = ""
+    crossing: Crossing = Crossing.NONE

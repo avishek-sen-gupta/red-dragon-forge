@@ -365,9 +365,16 @@ cobble-trace-query {forward,backward} FIELD --fixpoint DIR [--links LINKS] [--de
 | `--depth` | hops to follow (default 5) |
 | `--extents` | an extents table, for a field no row names |
 
-Matches by byte-extent containment within a program and deduplicates the rows. The backward walk
-narrows at each hop: when a row's target is a group wider than the range being traced, the source is
-clipped to the overlapping sub-range. Output is an indented tree, one line per provenance edge, with
-origins (`FILE:`, `LITERAL`, `%CALL:`) at the backward leaves and sinks at the forward ones. The rows
-are the fixpoint's, merged over paths, so the walk shows every flow the analysis found, not the paths
-that carried them; a run capped with `--sweeps` that did not settle shows a subset.
+Backward starts at every write to FIELD's bytes and, from each read, follows only the writes
+that reach it (its reaching definitions); a read nothing in its program wrote came in by a link.
+Forward starts at every read of FIELD's bytes and follows a write only into the reads it reaches.
+Each hop narrows to the bytes that correspond when source and target are the same length. A link
+window holds no reaching definitions, so on its far side every write to (or read of) its bytes is
+followed. The walk remembers the calls it went into: it leaves a callee only by the call it came in
+by, and goes to every caller only when it started inside the callee.
+
+Output is a tree, one line per row, each source under the write that read it. A branch already
+shown is printed once more with `(see above)` and not expanded. Origins (`FILE:`, `MAP:`,
+`LITERAL`, `%CALL:`, `FUNCTION`) are backward leaves, sinks forward ones. The rows are the
+fixpoint's, merged over paths; a run capped with `--sweeps` that did not settle has fewer reaching
+definitions, so its tree can be smaller.

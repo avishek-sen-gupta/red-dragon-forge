@@ -1,10 +1,11 @@
 """Forward and backward provenance queries over a fixpoint out-dir's provenance.
 
-The rows are flat -- one per write and source, each self-contained -- and the
-query is a BFS over byte-extent containment. Forward walks from a field to
-everything its bytes eventually reach; backward walks from a field to every origin
-that fed it. Each program's rows stay in that program; combine's link windows,
-when given, carry the walk across calls.
+Each row is one write and one source, with the writes that reach that source
+(its definers). Backward walks from a field through the writes that reach each
+read; forward walks from a field into the reads each write reaches. Each
+program's rows stay in that program; combine's link windows, when given, carry the
+walk across calls, and since a window holds no definers, every write to its bytes
+on the far side is followed. The answer is a tree, each branch shown once.
 """
 
 from __future__ import annotations
@@ -13,13 +14,16 @@ import argparse
 import json
 import logging
 import sys
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from functools import partial, reduce
+from functools import reduce
+from itertools import groupby
+from operator import itemgetter
 from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
 from cobble.dataflow.combine.link_row import LinkRow
+from cobble.dataflow.fields.crossing import Crossing
 from cobble.dataflow.fields.dep_row import DepRow
 from cobble.dataflow.fields.extent_text import ByteRange, byte_range
 from cobble.dataflow.fixpoint.build_corpus import MEMBERS_DIR
@@ -27,7 +31,7 @@ from cobble.dataflow.fixpoint.provenance import provenance
 
 logger = logging.getLogger(__name__)
 
-_RangeKey = tuple[str, str, int, int]
+_RangeId = tuple[str, str, int, int]
 
 
 def _crossings(link: LinkRow) -> tuple[DepRow, ...]:
@@ -43,6 +47,7 @@ def _crossings(link: LinkRow) -> tuple[DepRow, ...]:
         site=site,
         definers=(),
         sink="",
+        crossing=Crossing.ENTERED,
     )
     if not link.returns:
         return (entered,)
@@ -55,6 +60,7 @@ def _crossings(link: LinkRow) -> tuple[DepRow, ...]:
         site=site,
         definers=(),
         sink="",
+        crossing=Crossing.RETURNED,
     )
     return (entered, returned)
 
@@ -81,7 +87,7 @@ def provenance_rows(fixpoint_dir: Path, links_path: Path) -> tuple[DepRow, ...]:
     )
 
 
-def _range_key(extent: ByteRange) -> _RangeKey:
+def _range_id(extent: ByteRange) -> _RangeId:
     return (extent.program, extent.region, extent.start, extent.end)
 
 
@@ -99,7 +105,7 @@ def _parsed_name(name: str) -> tuple[str, str]:
 
 
 def _resolve(name: str, deps: Sequence[DepRow]) -> tuple[ByteRange, ...]:
-    """Distinct byte ranges matching a field name, deduplicated by key."""
+    """Distinct byte ranges matching a field name, deduplicated by extent."""
     program_filter, field = _parsed_name(name)
     candidates = tuple(
         extent
@@ -109,8 +115,8 @@ def _resolve(name: str, deps: Sequence[DepRow]) -> tuple[ByteRange, ...]:
     )
     return reduce(
         lambda pair, c: (
-            ((*pair[0], c), pair[1] | {_range_key(c)})
-            if _range_key(c) not in pair[1]
+            ((*pair[0], c), pair[1] | {_range_id(c)})
+            if _range_id(c) not in pair[1]
             else pair
         ),
         candidates,
@@ -158,59 +164,44 @@ def _extents_program(
     return parts[0] if len(parts) == 2 else ""
 
 
-def _overlaps_any(extent: ByteRange, frontier: Sequence[ByteRange]) -> bool:
-    return any(extent.overlaps(f) for f in frontier)
+_Grouped = Mapping[str, tuple[DepRow, ...]]
+_Calls = tuple[str, ...]
+_Branch = tuple[DepRow, ByteRange, _Calls]
+_Children = Callable[[_Branch], tuple[_Branch, ...]]
+_Seen = frozenset[tuple[DepRow, _RangeId, _Calls]]
+
+
+def _grouped(pairs: Iterable[tuple[str, DepRow]]) -> _Grouped:
+    ordered = sorted((name, n, row) for n, (name, row) in enumerate(pairs))
+    return {
+        name: tuple(row for _name, _n, row in group)
+        for name, group in groupby(ordered, itemgetter(0))
+    }
 
 
 @dataclass(frozen=True)
-class _Hit:
-    """One provenance edge found during the walk."""
+class _Index:
+    """The rows by what each step of a walk looks them up by."""
 
-    depth: int
-    source_text: str
-    target_text: str
-    site: str
-    origin: str
-    definers: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class _State:
-    """BFS accumulator: hits so far, current frontier, visited keys."""
-
-    hits: tuple[_Hit, ...]
-    frontier: tuple[ByteRange, ...]
-    seen: frozenset[_RangeKey]
+    at_site: _Grouped
+    reached_by: _Grouped
+    written_in: _Grouped
+    read_in: _Grouped
+    entered: _Grouped
 
 
-_Step = Callable[[Sequence[DepRow], _State, int], _State]
-
-
-def _hit_of(dep: DepRow, depth: int) -> _Hit:
-    return _Hit(
-        depth=depth,
-        source_text=str(dep.source) if dep.source.known else dep.origin,
-        target_text=dep.sink or str(dep.target),
-        site=dep.site,
-        origin=dep.origin,
-        definers=dep.definers,
-    )
-
-
-def _forward_step(deps: Sequence[DepRow], state: _State, depth: int) -> _State:
-    matched = tuple(dep for dep in deps if _overlaps_any(dep.source, state.frontier))
-    new_hits = tuple(_hit_of(dep, depth) for dep in matched)
-    new_targets = tuple(
-        dep.target
-        for dep in matched
-        if dep.target.known and _range_key(dep.target) not in state.seen
-    )
-    new_keys = frozenset(_range_key(t) for t in new_targets)
-    deduped = tuple(dict((_range_key(t), t) for t in new_targets).values())
-    return _State(
-        hits=(*state.hits, *new_hits),
-        frontier=deduped,
-        seen=state.seen | new_keys,
+def _index(deps: Sequence[DepRow]) -> _Index:
+    own = tuple(dep for dep in deps if dep.crossing is Crossing.NONE)
+    return _Index(
+        at_site=_grouped((dep.site, dep) for dep in deps if dep.target.known),
+        reached_by=_grouped((definer, dep) for dep in own for definer in dep.definers),
+        written_in=_grouped(
+            (dep.target.program, dep) for dep in deps if dep.target.known
+        ),
+        read_in=_grouped((dep.source.program, dep) for dep in deps if dep.source.known),
+        entered=_grouped(
+            (dep.program, dep) for dep in deps if dep.crossing is Crossing.ENTERED
+        ),
     )
 
 
@@ -221,9 +212,9 @@ def _narrowed(source: ByteRange, target: ByteRange, wanted: ByteRange) -> ByteRa
     returned as-is — narrowing a many-to-one conversion is not sound.
 
     It is the overlap of ``wanted`` and ``target`` that is 1:1, not ``wanted``
-    itself: a frontier range wider than the target is the ordinary case once a
-    group and one of its members are both being traced, and offsetting by its
-    start would slide the slice off the front of the source.
+    itself: a range wider than the target is the ordinary case once a group and
+    one of its members are both being traced, and offsetting by its start would
+    slide the slice off the front of the source.
     """
     if target.length != source.length:
         return source
@@ -240,102 +231,162 @@ def _narrowed(source: ByteRange, target: ByteRange, wanted: ByteRange) -> ByteRa
     )
 
 
-def _narrow_sources(
-    dep: DepRow, frontier: Sequence[ByteRange]
-) -> tuple[ByteRange, ...]:
-    """The source narrowed to each frontier range the target overlaps.
-
-    One slice per overlap rather than one for the first of them: the frontier is a
-    set, so "the first" is whatever order it was built in, and picking from it both
-    drops the other overlaps and makes the answer depend on iteration order.
-    """
-    matched = tuple(f for f in frontier if dep.target.overlaps(f))
-    if not matched:
-        return (dep.source,)
-    return tuple(_narrowed(dep.source, dep.target, one) for one in matched)
+def _stacked(dep: DepRow, calls: _Calls, inward: Crossing) -> tuple[_Calls, ...]:
+    """The calls the walk is inside after taking ``dep``: a window going into a
+    callee pushes its call; one coming out may only be the call on top, which it
+    pops, or any call when the walk started inside the callee."""
+    if dep.crossing is Crossing.NONE:
+        return (calls,)
+    if dep.crossing is inward:
+        return ((*calls, dep.site),)
+    return _left(dep, calls)
 
 
-def _backward_step(deps: Sequence[DepRow], state: _State, depth: int) -> _State:
-    matched = tuple(dep for dep in deps if _overlaps_any(dep.target, state.frontier))
-    new_hits = tuple(_hit_of(dep, depth) for dep in matched)
-    narrowed = tuple(
-        one
-        for dep in matched
-        if dep.source.known and _range_key(dep.source) not in state.seen
-        for one in _narrow_sources(dep, state.frontier)
+def _left(dep: DepRow, calls: _Calls) -> tuple[_Calls, ...]:
+    if not calls:
+        return (calls,)
+    return (calls[:-1],) if calls[-1] == dep.site else ()
+
+
+def _writers(index: _Index, dep: DepRow) -> tuple[DepRow, ...]:
+    """The writes that can have put a read's bytes there: its definers; a
+    window's far side, which has none, every write; no definer at all, the
+    windows that carried the bytes in."""
+    if dep.crossing is not Crossing.NONE:
+        return index.written_in.get(dep.source.program, ())
+    if dep.definers:
+        return tuple(
+            row for site in dep.definers for row in index.at_site.get(site, ())
+        )
+    return index.entered.get(dep.program, ())
+
+
+def _backward_children(index: _Index, branch: _Branch) -> tuple[_Branch, ...]:
+    dep, wanted, calls = branch
+    if not dep.source.known:
+        return ()
+    read = _narrowed(dep.source, dep.target, wanted)
+    return tuple(
+        (row, read, inside)
+        for row in _writers(index, dep)
+        if row.target.overlaps(read)
+        for inside in _stacked(row, calls, Crossing.RETURNED)
     )
-    new_keys = frozenset(_range_key(s) for s in narrowed)
-    deduped = tuple(dict((_range_key(s), s) for s in narrowed).values())
-    return _State(
-        hits=(*state.hits, *new_hits),
-        frontier=deduped,
-        seen=state.seen | new_keys,
+
+
+def _readers(index: _Index, dep: DepRow) -> tuple[DepRow, ...]:
+    """The reads a write's bytes can reach: those it is a definer of; the far
+    side of a window entering a program, the reads nothing in that program
+    wrote; and from either, every window carrying the program's bytes out."""
+    program = dep.target.program
+    out = tuple(
+        row
+        for row in index.read_in.get(program, ())
+        if row.crossing is not Crossing.NONE
+    )
+    if dep.crossing is Crossing.ENTERED:
+        unwritten = tuple(
+            row
+            for row in index.read_in.get(program, ())
+            if row.crossing is Crossing.NONE and not row.definers
+        )
+        return (*unwritten, *out)
+    return (*index.reached_by.get(dep.site, ()), *out)
+
+
+def _written(row: DepRow, wanted: ByteRange) -> ByteRange:
+    return _narrowed(row.target, row.source, wanted) if row.target.known else wanted
+
+
+def _forward_children(index: _Index, branch: _Branch) -> tuple[_Branch, ...]:
+    dep, wanted, calls = branch
+    if dep.sink or not dep.target.known:
+        return ()
+    return tuple(
+        (row, _written(row, wanted), inside)
+        for row in _readers(index, dep)
+        if row.source.overlaps(wanted)
+        for inside in _stacked(row, calls, Crossing.ENTERED)
     )
 
 
-def _bfs(
-    deps: Sequence[DepRow],
-    roots: Sequence[ByteRange],
-    max_depth: int,
-    step: _Step,
-) -> tuple[_Hit, ...]:
-    initial = _State(
-        hits=(),
-        frontier=tuple(roots),
-        seen=frozenset(_range_key(r) for r in roots),
+def _initial(
+    index: _Index, roots: Sequence[ByteRange], direction: str
+) -> tuple[_Branch, ...]:
+    if direction == FORWARD:
+        return tuple(
+            (row, _written(row, root), inside)
+            for root in roots
+            for row in index.read_in.get(root.program, ())
+            if row.source.overlaps(root)
+            for inside in _stacked(row, (), Crossing.ENTERED)
+        )
+    return tuple(
+        (row, root, inside)
+        for root in roots
+        for row in index.written_in.get(root.program, ())
+        if row.target.overlaps(root)
+        for inside in _stacked(row, (), Crossing.RETURNED)
     )
-    final = reduce(
-        partial(_deepened, deps=deps, step=step), range(1, max_depth + 1), initial
+
+
+def _line(direction: str, dep: DepRow, depth: int) -> str:
+    forward = direction == FORWARD
+    arrow = "->" if forward else "<-"
+    text = (dep.sink or str(dep.target)) if forward else (dep.origin or str(dep.source))
+    return f"{'  ' * depth}{arrow} {text}  at {dep.site}"
+
+
+def _ordered(branches: Iterable[_Branch]) -> tuple[_Branch, ...]:
+    unique = dict.fromkeys(branches)
+    ranked = sorted(
+        (branch[0].site, str(branch[0].target), str(branch[0].source), n, branch)
+        for n, branch in enumerate(unique)
     )
-    return final.hits
+    return tuple(branch for *_rank, branch in ranked)
 
 
-def _deepened(state: _State, depth: int, deps: Sequence[DepRow], step: _Step) -> _State:
-    return state if not state.frontier else step(deps, state, depth)
+@dataclass(frozen=True)
+class _Walk:
+    """The lines written so far, and every branch already shown."""
+
+    lines: tuple[str, ...] = ()
+    seen: _Seen = frozenset()
 
 
-def _forward(
-    deps: Sequence[DepRow], roots: Sequence[ByteRange], max_depth: int
-) -> tuple[_Hit, ...]:
-    return _bfs(deps, roots, max_depth, _forward_step)
+@dataclass(frozen=True)
+class _Tree:
+    """How to grow one tree: its direction, how a branch splits, and how deep."""
+
+    direction: str
+    children: _Children
+    max_depth: int
 
 
-def _backward(
-    deps: Sequence[DepRow], roots: Sequence[ByteRange], max_depth: int
-) -> tuple[_Hit, ...]:
-    return _bfs(deps, roots, max_depth, _backward_step)
+def _grown(tree: _Tree, walk: _Walk, branch: _Branch, depth: int) -> _Walk:
+    dep, wanted, calls = branch
+    shown_as = (dep, _range_id(wanted), calls)
+    line = _line(tree.direction, dep, depth)
+    if shown_as in walk.seen:
+        return _Walk((*walk.lines, f"{line}  (see above)"), walk.seen)
+    shown = _Walk((*walk.lines, line), walk.seen | {shown_as})
+    if depth >= tree.max_depth:
+        return shown
+    return _branches(tree, shown, tree.children(branch), depth + 1)
+
+
+def _branches(
+    tree: _Tree, walk: _Walk, branches: Iterable[_Branch], depth: int
+) -> _Walk:
+    return reduce(
+        lambda grown, branch: _grown(tree, grown, branch, depth),
+        _ordered(branches),
+        walk,
+    )
 
 
 FORWARD = "forward"
 BACKWARD = "backward"
-
-
-def _hit_sort_key(hit: _Hit) -> tuple[int, str]:
-    return (hit.depth, hit.target_text)
-
-
-def _display_text(hit: _Hit, direction: str) -> str:
-    """The extent or origin to show for the far end of this edge."""
-    if direction == FORWARD:
-        return hit.target_text
-    return hit.origin if hit.origin else hit.source_text
-
-
-def _format_hit(direction: str, hit: _Hit) -> str:
-    arrow = "->" if direction == FORWARD else "<-"
-    text = _display_text(hit, direction)
-    suffix = f"  [{hit.origin}]" if hit.origin and direction == FORWARD else ""
-    return f"{'  ' * hit.depth}{arrow} {text}  at {hit.site}{suffix}"
-
-
-def _format_hits(
-    direction: str, roots: Sequence[ByteRange], hits: Sequence[_Hit]
-) -> tuple[str, ...]:
-    formatted = tuple(
-        _format_hit(direction, hit) for hit in sorted(hits, key=_hit_sort_key)
-    )
-    deduped = tuple(dict.fromkeys(formatted))
-    return (*(str(r) for r in roots), *deduped)
 
 
 def _roots_of(
@@ -357,11 +408,13 @@ def query(
     roots = _roots_of(field, deps, extents_path)
     if not roots:
         return (f"field {field!r} not found in the provenance or extents",)
-    walk = _forward if direction == FORWARD else _backward
-    hits = walk(deps, roots, max_depth)
-    if not hits:
+    index = _index(deps)
+    step = _forward_children if direction == FORWARD else _backward_children
+    tree = _Tree(direction, lambda branch: step(index, branch), max_depth)
+    walk = _branches(tree, _Walk(), _initial(index, roots, direction), 1)
+    if not walk.lines:
         return (*(str(r) for r in roots), "  (no further provenance)")
-    return _format_hits(direction, roots, hits)
+    return (*(str(r) for r in roots), *walk.lines)
 
 
 def _parser() -> argparse.ArgumentParser:
