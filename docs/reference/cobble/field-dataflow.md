@@ -380,3 +380,8 @@ shown is printed once more with `(see above)` and not expanded. Origins (`FILE:`
 `LITERAL`, `%CALL:`, `FUNCTION`) are backward leaves, sinks forward ones. The rows are the
 fixpoint's, merged over paths; a run capped with `--sweeps` that did not settle has fewer reaching
 definitions, so its tree can be smaller.
+
+The fixpoint returns from a paragraph PERFORMed from several places to every one of its callers,
+so one caller's write can appear to reach another caller's read along a path no execution takes.
+A tree can show such a branch; it never misses a real one. On CardDemo these are 4.9% of the
+reaching definitions (432 of 8,882) and none of the provenance rows or call targets.
