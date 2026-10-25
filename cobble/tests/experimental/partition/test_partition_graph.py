@@ -347,3 +347,64 @@ def test_a_handover_through_a_byte_table_keeps_each_occurrence_apart_and_every_b
         "S:SA.SA-A": 2,
         "S:SA.SA-B": 2,
     }
+
+
+def _record(k: int) -> ByteRange:
+    return ByteRange(
+        program="P",
+        region="working_storage",
+        start=10 * k,
+        end=10 * k + 10,
+        name=f"R{k}",
+        known=True,
+    )
+
+
+def test_a_read_through_a_long_chain_of_branching_copies_and_a_loop_back_reaches_the_fields_that_filled_it() -> (
+    None
+):
+    depth = 40
+    extents = (
+        _layout("P", "working_storage", ("R0",), (0, 10)),
+        _layout("P", "working_storage", ("R0", "A"), (0, 4)),
+        _layout("P", "working_storage", ("R0", "B"), (4, 10)),
+        *(
+            _layout("P", "working_storage", (f"R{k}",), (10 * k, 10 * k + 10))
+            for k in range(1, depth + 1)
+        ),
+    )
+    reaching = {1: ()} | {k: (f"a{k - 1}", f"b{k - 1}") for k in range(2, depth + 1)}
+    copies = tuple(
+        _dep(
+            _record(k),
+            _record(k - 1),
+            f"{side}{k}",
+            definers=(*reaching[k], "loop") if k == 2 else reaching[k],
+        )
+        for k in range(1, depth + 1)
+        for side in "ab"
+    )
+    looped = _dep(
+        _record(1), _record(depth), "loop", definers=(f"a{depth}", f"b{depth}")
+    )
+    written = _dep(
+        NO_RANGE,
+        _record(depth),
+        "out",
+        sink="FILE:F",
+        definers=(f"a{depth}", f"b{depth}"),
+    )
+
+    graph = field_graph(
+        leaf_index(extents), (*copies, looped, written), (), NoBarrier()
+    )
+
+    assert _edges(graph) == {
+        *(
+            (f"P:R0.{part}", f"P:R{k}.R{k}", 3 if k == 1 else 2, True)
+            for k in range(1, depth + 1)
+            for part in "AB"
+        ),
+        ("P:R0.A", "P|sink|FILE:F", 1, True),
+        ("P:R0.B", "P|sink|FILE:F", 1, True),
+    }

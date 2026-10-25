@@ -75,7 +75,12 @@ overlap its bytes. A source range also takes the fields its definers wrote, when
 write lies inside the range: `SEND MAP FROM(COTRN0AO)` reads `TDATE03I`, which shares its bytes,
 when a `MOVE` to `TDATE03I` reached it. A definer that copied into one undivided field, such as a
 `PIC X(500)` record, is followed back through its own source and definers, so the read takes the
-fields that filled those bytes. A named field whose bytes such fields cover drops out. A write to
+fields that filled those bytes. A named field whose bytes such fields cover drops out. Each range
+and its definers is followed back once and the answer reused, so the cost grows with the number of
+copies, not the number of paths through them. Where copies feed each other in a loop, the walk
+stops at a copy already on its way back, and the first read to reach a range fixes its answer for
+every later read: a later read may keep the declared undivided field where it would have taken the
+finer fields that came round the loop. A write to
 a whole record contributes nothing to a read of part of it, so one record type of a `REDEFINES`
 never picks up another's fields. Edges then run from source fields to target fields:
 

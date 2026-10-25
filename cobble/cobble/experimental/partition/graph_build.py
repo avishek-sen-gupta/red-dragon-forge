@@ -17,6 +17,7 @@ from cobble.experimental.partition.barrier import Barrier
 from cobble.experimental.partition.byte_alignment import ByteAlignment
 from cobble.experimental.partition.field_graph import FieldGraph
 from cobble.experimental.partition.field_leaf import FieldLeaf
+from cobble.experimental.partition.fill_query import FillQuery
 from cobble.experimental.partition.flow import Flow
 from cobble.experimental.partition.graph_edge import GraphEdge
 from cobble.experimental.partition.graph_node import GraphNode
@@ -29,8 +30,7 @@ from cobble.experimental.partition.tally import GRAPH, Tally
 _Moved = tuple[tuple[GraphNode, ...], tuple[Flow, ...]]
 _Pair = tuple[FieldLeaf, FieldLeaf]
 _Rows = Mapping[str, tuple[DepRow, ...]]
-_Query = tuple[ByteRange, tuple[str, ...], frozenset[str]]
-_Traced = Callable[[ByteRange, tuple[str, ...], frozenset[str]], tuple[FieldLeaf, ...]]
+_Traced = Callable[[FillQuery], tuple[FieldLeaf, ...]]
 
 
 def field_node(leaf: FieldLeaf) -> GraphNode:
@@ -109,9 +109,11 @@ def _finer(
 ) -> tuple[FieldLeaf, ...]:
     shift = row.source.start - row.target.start
     inner = traced(
-        _within(row.source, leaf.start + shift, leaf.end + shift),
-        row.definers,
-        excluded | {row.site},
+        FillQuery(
+            _within(row.source, leaf.start + shift, leaf.end + shift),
+            row.definers,
+            excluded | {row.site},
+        )
     )
     if len(inner) < 2:
         return (leaf,)
@@ -143,34 +145,33 @@ def _inside(row: DepRow, extent: ByteRange) -> bool:
 
 
 def _traced_once(
-    index: LeafIndex, rows: _Rows, query: _Query, traced: _Traced
+    index: LeafIndex, rows: _Rows, query: FillQuery, traced: _Traced
 ) -> tuple[FieldLeaf, ...]:
-    extent, definers, excluded = query
     pieces = _distinct(
         piece
-        for definer in definers
-        if definer not in excluded
+        for definer in query.definers
+        if definer not in query.excluded
         for row in rows.get(definer, ())
-        if _inside(row, extent)
-        for piece in _through(index, row, excluded, traced)
+        if _inside(row, query.extent)
+        for piece in _through(index, row, query.excluded, traced)
     )
     runs = _runs(pieces)
-    kept = tuple(leaf for leaf in index.fields_in(extent) if not _covered(leaf, runs))
+    kept = tuple(
+        leaf for leaf in index.fields_in(query.extent) if not _covered(leaf, runs)
+    )
     return _distinct((*kept, *pieces))
 
 
 def _tracing(index: LeafIndex, rows: _Rows) -> _Traced:
     @cache
-    def traced(
-        extent: ByteRange, definers: tuple[str, ...], excluded: frozenset[str]
-    ) -> tuple[FieldLeaf, ...]:
-        return _traced_once(index, rows, (extent, definers, excluded), traced)
+    def traced(query: FillQuery) -> tuple[FieldLeaf, ...]:
+        return _traced_once(index, rows, query, traced)
 
     return traced
 
 
 def _read(traced: _Traced, dep: DepRow) -> Span:
-    return Span(dep.source, traced(dep.source, dep.definers, frozenset()))
+    return Span(dep.source, traced(FillQuery(dep.source, dep.definers, frozenset())))
 
 
 def _placed(target: Span, source: Span, pair: _Pair) -> tuple[ByteAlignment, ...]:
