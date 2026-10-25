@@ -36,8 +36,10 @@ Two places hold corpus-wide state today and are checked against this bar, not as
 combine loads every program's tables into memory at once (`combine/cli.py:_load_all`), and the
 fixpoint's publish step dedupes every row against a corpus-wide set (`FirstSighting` behind
 `GraphWriter` and `JsonlWriter`). Rows are program-qualified, so the corpus-wide dedupe can become
-per member. Combine's memory is measured on the large corpus and becomes follow-up work if it is
-the limit.
+per member. Combine links one call-connected group of programs at a time: programs are grouped over every edge
+that could link them (literal call targets, the fixpoint's dynamic-target candidates, CSD
+transactions), so the largest group, not the corpus, bounds its memory (decided by the user). A
+cache of programs is added only if a group turns out too big to hold.
 
 Every stage logs its progress as it goes, as the experimental stages already do. Speed-ups are not
 designed up front: once the change runs on the large corpus, it is profiled, and whatever the

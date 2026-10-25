@@ -233,3 +233,37 @@ fields (`cobble/dataflow/fields/`) and experimental partition packages.
   whole-scope fixpoint and for combine; file one issue per stage with the numbers and the
   extrapolation to 3,000 programs, combine's in-memory tables named.
 - [ ] **Step 4: Commit** `perf(cobble): the fixpoint's publish step dedupes per member`.
+
+### Task 10: Combine links one call-connected group at a time
+
+Added at the user's request: combine must not hold every program's tables at once. Decided by the
+user: group programs over everything that could link them, and load, link and write one group at a
+time. No cache; the largest group bounds memory.
+
+**Files:**
+- Create: `cobble/cobble/dataflow/combine/call_groups.py`
+- Modify: `cobble/cobble/dataflow/combine/cli.py` (`_load_all` and `_link_and_write` run per group; outputs append per group)
+- Test: `cobble/tests/dataflow/combine/test_call_groups.py`, and the existing combine suite unchanged
+
+**Interfaces:**
+- Produces: `call_groups(fixpoint_dir: Path, programs: frozenset[str], transactions: Mapping[str, str]) -> tuple[frozenset[str], ...]`:
+  the connected components of programs joined by any edge that could link them — each literal call
+  target in a member's `jumps.jsonl`, each candidate in the fixpoint's `targets.jsonl`, and each
+  `RETURN TRANSID`/`START` transaction mapped to its program by the CSD (`transactions`). Read from
+  the small per-member files only, streamed. Largest group first.
+- Combine's outputs (`targets.jsonl`, `links.jsonl`, the rest) are the concatenation of each group's
+  outputs, in group order, written as each group finishes.
+
+- [ ] **Step 1: Failing tests.** `test_call_groups.py`: over a `build_corpus` out-dir with programs A
+  (CALLs B by literal), B, C (XCTL to a field whose candidates are D), D, and E (alone), `call_groups`
+  returns `({A, B}, {C, D}, {E})` in size order. A combine run over that out-dir, per group, writes
+  the same set of output rows as today's all-at-once run (compare as sets; row order may change
+  with grouping).
+- [ ] **Step 2:** Run, see them fail.
+- [ ] **Step 3: Implement** `call_groups` and the per-group loop. A link that resolves to a program
+  outside its group is logged as a warning naming both programs (it means the grouping missed an
+  edge), and counted in the run report.
+- [ ] **Step 4:** Run the combine suite and the partition suite. Expected: pass.
+- [ ] **Step 5:** On CardDemo, record the group sizes, combine's peak memory and wall time next to
+  the all-at-once run, in the commit message; file an issue if any cross-group link was logged.
+- [ ] **Step 6: Commit** `perf(cobble): combine links one call-connected group of programs at a time`.
