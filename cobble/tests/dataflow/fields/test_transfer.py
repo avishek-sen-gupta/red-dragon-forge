@@ -674,3 +674,50 @@ def test_a_literal_move_carries_its_text_fitted_to_the_target(
     target = index.extent_of(index.cells_named("WS-PGM", (), 0)[0])
 
     assert values_at(after, target) == of_value(b"COSGN00C")
+
+
+def test_a_move_from_a_function_reads_the_fields_its_arguments_name(
+    program_of, field, after, names_reaching
+):
+    """MOVE FUNCTION UPPER-CASE(WS-A) TO WS-B WS-C: every target depends on every
+    field the arguments read, as a COMPUTE's do. A function reading no field keeps
+    the FUNCTION origin, since its result comes from nowhere in storage."""
+    asg = program_of(
+        [
+            {
+                "type": "MOVE",
+                "operands": [
+                    {
+                        "kind": "function",
+                        "name": "UPPER-CASE",
+                        "args": [{"kind": "ref", "name": "WS-A"}],
+                    },
+                    {"name": "WS-B"},
+                    {"name": "WS-C"},
+                ],
+            },
+            {
+                "type": "MOVE",
+                "operands": [
+                    {"kind": "function", "name": "CURRENT-DATE", "args": []},
+                    {"name": "WS-D"},
+                ],
+            },
+        ],
+        data_fields=[
+            field(
+                1,
+                "REC",
+                children=[
+                    field(5, "WS-A", "X(4)", offset=0),
+                    field(5, "WS-B", "X(4)", offset=4),
+                    field(5, "WS-C", "X(4)", offset=8),
+                    field(5, "WS-D", "X(21)", offset=12),
+                ],
+            )
+        ],
+    )
+    state, index = after(asg)
+    assert [
+        names_reaching(state, index, name) for name in ("WS-B", "WS-C", "WS-D")
+    ] == [{"WS-A"}, {"WS-A"}, {"FUNCTION"}]

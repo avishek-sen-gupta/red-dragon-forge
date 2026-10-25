@@ -59,7 +59,12 @@ from cobble.dataflow.fields.values import (
 )
 from cobble.dataflow.layout import Cell
 from cobble.dataflow.srccfg.literals import is_literal
-from cobol_asg.cobol_expression import ExprNode, FieldRefNode, RefModNode
+from cobol_asg.cobol_expression import (
+    ExprNode,
+    FieldRefNode,
+    RefModNode,
+    expr_from_dict,
+)
 from cobol_asg.cobol_statements import (
     ArithmeticStatement,
     CallStatement,
@@ -74,6 +79,7 @@ from cobol_asg.cobol_statements import (
     WriteStatement,
 )
 from cobol_asg.ref_mod import (
+    FunctionCallOperand,
     RefModBinOp,
     RefModExpr,
     RefModFunction,
@@ -208,9 +214,22 @@ def _one_move(
 
 
 def _source_operand(statement: MoveStatement) -> RefModOperand:
-    """A FUNCTION source denotes no storage, so only its absence of a name matters."""
+    """A FUNCTION source denotes no storage; its name keeps it from reading as a
+    literal, so a function reading no field is a FUNCTION origin."""
     source = statement.source
-    return source if isinstance(source, RefModOperand) else RefModOperand(name="")
+    if isinstance(source, FunctionCallOperand):
+        return RefModOperand(name=source.name)
+    return source
+
+
+def _function_reads(statement: MoveStatement) -> tuple[RefModOperand, ...]:
+    """The fields a FUNCTION source's arguments read, as a COMPUTE reads them."""
+    source = statement.source
+    if not isinstance(source, FunctionCallOperand):
+        return ()
+    return tuple(
+        read for arg in source.args for read in _expression_reads(expr_from_dict(arg))
+    )
 
 
 def _move_targets(statement: MoveStatement) -> tuple[RefModOperand, ...]:
@@ -220,6 +239,9 @@ def _move_targets(statement: MoveStatement) -> tuple[RefModOperand, ...]:
 def _move_writes(
     statement: MoveStatement, node: str, index: CellIndex, state: State
 ) -> Iterator[Write]:
+    reads = _function_reads(statement)
+    if reads:
+        return _union_writes(reads, _move_targets(statement), node, index)
     sources = operand_extents(statement.source, index)
     operand = _source_operand(statement)
     return (
