@@ -1,4 +1,4 @@
-"""One fact of a jumps.jsonl row, as far as the area need reads it."""
+"""One fact of a jumps.jsonl row, as far as resolved sites read it."""
 
 from __future__ import annotations
 

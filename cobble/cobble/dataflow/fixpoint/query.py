@@ -51,16 +51,8 @@ from types import MappingProxyType
 from cobble.cli_logging import configure_cli_logging
 from cobble.dataflow.fields.extent_text import NO_RANGE, ByteRange, byte_range
 from cobble.dataflow.fixpoint import rows
-from cobble.dataflow.fixpoint.build_corpus import (
-    ALIASES_FILE,
-    COUNTS_FILE,
-    DEFS_FILE,
-    GRAPH_FILE,
-    MEMBERS_DIR,
-)
-from cobble.dataflow.fixpoint.member_counts import MemberCounts
+from cobble.dataflow.fixpoint.build_corpus import ALIASES_FILE, DEFS_FILE, GRAPH_FILE
 from cobble.dataflow.fixpoint.rows import Row
-from cobble.dataflow.fixpoint.scope import Scope
 
 logger = logging.getLogger(__name__)
 
@@ -1232,7 +1224,7 @@ def _parser() -> argparse.ArgumentParser:
 def cli(argv: Sequence[str] = ()) -> int:
     configure_cli_logging()
     arguments = _parsed(argv)
-    problem = _missing(arguments) or _restriction(arguments.fixpoint_dir)
+    problem = _missing(arguments)
     if problem:
         sys.stderr.write(problem)
         return 2
@@ -1253,28 +1245,6 @@ def _missing(arguments: argparse.Namespace) -> str:
     if not arguments.extents.is_file():
         return f"fields: !! no extents table at {arguments.extents}\n"
     return ""
-
-
-def _restriction(fixpoint_dir: Path) -> str:
-    restricted = _restricted(fixpoint_dir)
-    if not restricted:
-        return ""
-    return (
-        f"fields: !! {fixpoint_dir} holds a run restricted to call"
-        f" targets ({', '.join(restricted)}); rerun cobble-dataflow-fixpoint"
-        " without --call-targets-only to query it\n"
-    )
-
-
-def _restricted(fixpoint_dir: Path) -> tuple[str, ...]:
-    return tuple(
-        sorted(
-            path.parent.name
-            for path in (fixpoint_dir / MEMBERS_DIR).glob(f"*/{COUNTS_FILE}")
-            if MemberCounts.model_validate_json(path.read_text(encoding="utf-8")).scope
-            is not Scope.WHOLE
-        )
-    )
 
 
 def main() -> int:

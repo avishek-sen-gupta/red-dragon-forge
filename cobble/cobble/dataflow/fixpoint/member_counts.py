@@ -1,6 +1,5 @@
 """MemberCounts -- what one member adds to a fixpoint run's report."""
 
-from cobble.dataflow.fixpoint.scope import Scope
 from pydantic import BaseModel, ConfigDict
 
 
@@ -26,6 +25,5 @@ class MemberCounts(BaseModel):
     file_sites: int = 0
     file_resolved_one: int = 0
     file_resolved_several: int = 0
-    scope: Scope = Scope.WHOLE
     tracked: int = 0
     relevant: int = 0

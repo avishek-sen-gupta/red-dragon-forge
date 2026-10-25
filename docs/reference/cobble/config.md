@@ -33,7 +33,6 @@ full flag list with `--help`.
 | `cobble-dataflow-fixpoint` | ASG cache, extents | [field-dataflow](field-dataflow.md) |
 | `cobble-dataflow-fixpoint-query` | fixpoint output | [field-dataflow](field-dataflow.md) |
 | `cobble-dataflow-fixpoint-diagnose` | ASG cache | [field-dataflow](field-dataflow.md) |
-| `cobble-dataflow-area-need` | ASG cache, extents | [field-dataflow](field-dataflow.md) |
 | `cobble-dataflow-combine` | corpus config, fixpoint output | [field-dataflow](field-dataflow.md) |
 | `cobble-fields-access` | CFG file, ASG cache | [field-dataflow](field-dataflow.md) |
 | `cobble-access-query` | access rows, extents | [field-dataflow](field-dataflow.md) |
@@ -77,7 +76,7 @@ the working directory of the command, not against the config file. One exception
 ## Corpus config
 
 Read by the diagnoses, `cobble-sym`, `cobble-csd`, the two parse stages, `cobble-build`,
-`cobble-dataflow-combine`, `cobble-dataflow-area-need` and the two BMS commands.
+`cobble-dataflow-combine` and the two BMS commands.
 `cobble/config/carddemo.toml` is the CardDemo instance; its paths are relative to `cobble/`.
 
 ```toml

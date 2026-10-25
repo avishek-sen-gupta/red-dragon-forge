@@ -11,12 +11,12 @@ member is named for; a batch or contained program after it is not analysed
 3. `cobble-dataflow-combine` links those results across programs.
 4. `cobble-dataflow-fixpoint-query` answers questions over the output.
 
-`cobble-dataflow-area-need`, `cobble-dataflow-fixpoint-diagnose`, the access commands and the
+`cobble-dataflow-fixpoint-diagnose`, the access commands and the
 name-level `cobble-depgraph` are described after them.
 
 Code: `cobble/cobble/dataflow/layout.py` (byte extents), `dataflow/fields/` (extents, transfer
 functions, state, values, aliases, traces, accesses), `dataflow/fixpoint/` (solver, corpus run,
-targets, query, area need), `dataflow/combine/`, `dataflow/depgraph/`.
+targets, query), `dataflow/combine/`, `dataflow/depgraph/`.
 
 ## Extents
 
@@ -49,8 +49,7 @@ the ASG cache changes.
 ```
 cobble-dataflow-fixpoint --asg-dir ASG_DIR --out-dir OUT_DIR --extents EXTENTS
     (--member NAME [NAME ...] | --all)
-    [--iteration-factor N | --sweeps N] [--min-coverage F]
-    [--call-targets-only [--narrow-areas FILE]] [--force] [--max-workers N]
+    [--iteration-factor N | --sweeps N] [--min-coverage F] [--force] [--max-workers N]
 ```
 
 | Flag | Meaning |
@@ -62,11 +61,8 @@ cobble-dataflow-fixpoint --asg-dir ASG_DIR --out-dir OUT_DIR --extents EXTENTS
 | `--iteration-factor` | worklist budget: dequeues allowed per CFG node (default 150) |
 | `--sweeps` | run reverse-postorder passes instead, at most N. Exclusive with `--iteration-factor` |
 | `--min-coverage` | floor for the fraction of writes resolved to storage (default 0.60) |
-| `--call-targets-only` | keep only entries a dynamic call target, a dynamic file name or a handed-over area depends on |
-| `--narrow-areas` | with `--call-targets-only`: of each handed-over area, track only the bytes the area-need file says some program reads |
 | `--force` | discard every finished member directory and analyse again |
 | `--max-workers` | worker processes (default 4) |
-| `--max-rounds` | stop after N rounds even if the need has not settled (default 0: until it settles). A capped run warns how many members were still to walk; its need can miss bytes that only arrive through longer call chains, and a fixpoint narrowed by it can then miss candidates the settled need would keep |
 
 The walk runs over each program's CFG from `program_cfg`, seeded from the `VALUE` image of the
 member's records. Before walking, it removes a paragraph end's `FALLTHRU` edge unless control
@@ -142,17 +138,6 @@ directories and analyses only the rest. The corpus files are rebuilt from the se
 directories once every member is done, so an interrupted run leaves the previous corpus files
 unchanged. A `--member` run publishes only its members. Nothing checks that a member directory
 came from the same `--sweeps`, cache or extents table; use `--force` after changing any of them.
-
-An out-dir holds one scope. Switching between a whole run and `--call-targets-only` stops and
-asks for `--force`. `cobble-dataflow-fixpoint-query` refuses a call-targets-only out-dir.
-
-### Call-targets-only
-
-Before each member's walk, a backward liveness pass finds what later reads need: every dynamic
-call target, every dynamic file name, every handed-over area, and the `LINKAGE` areas read at an exit or a CICS
-`RETURN`. Entries that overlap nothing live are dropped. `targets.jsonl`, `jumps.jsonl` and the
-combine's results equal a full run's; `graph` and `defs` keep only rows for writes that are
-live afterwards. `counts.json` records `scope`, `tracked` and `relevant`.
 
 ### Dynamic call targets
 
@@ -271,7 +256,7 @@ cobble-dataflow-fixpoint-query QUERY SUBJECT --fixpoint-dir DIR --extents EXTENT
 
 | Flag | Meaning |
 |---|---|
-| `--fixpoint-dir` | a whole-scope fixpoint `--out-dir` |
+| `--fixpoint-dir` | a fixpoint `--out-dir` |
 | `--extents` | the extents table the fixpoint read |
 | `--depth` | flows `reaches`/`reached-by` follow (default 6) |
 | `--across-calls` | let `reaches`/`reached-by` cross a commarea window into the callee. Refused on the other queries |
@@ -291,54 +276,18 @@ is in `aliases.jsonl` and the summary's `alias_dead_ends`.
 Field names go to stdout only; the log on stderr is safe to share. The extents table is
 streamed, so memory stays near one program's declarations.
 
-## cobble-dataflow-area-need
-
-```
-cobble-dataflow-area-need --asg-dir DIR --extents EXTENTS --out OUT [--max-workers N] [--max-rounds N]
-    [--config CONFIG] [--fixpoint-dir DIR --combined-dir DIR]
-    [--sites FILE] [--explain MEMBER] [--explain-over BYTES]
-```
-
-One row per member: which bytes of its commarea or `USING` areas its call targets read on
-entry (`entry`), and which its callers read back after it returns (`back`). The output feeds
-`cobble-dataflow-fixpoint --call-targets-only --narrow-areas`, which refuses an older format.
-
-| Flag | Meaning |
-|---|---|
-| `--config` | the corpus config the combine reads. Its CSD maps a `RETURN TRANSID` or `START` transaction to a program. Without it no transaction resolves |
-| `--fixpoint-dir`, `--combined-dir` | add the sites a finished fixpoint and combine resolved completely |
-| `--sites` | after loading, write every dynamic site as JSONL: its operand, how its own program resolved it or why not, and every write to the operand |
-| `--explain` | after the rounds, write a JSONL row to stdout for MEMBER: what each demand source accounts for, and the writes that make more live than their target keeps |
-| `--explain-over` | the same for every member needing at least BYTES on entry |
-| `--max-workers` | worker processes (default 4) |
-| `--max-rounds` | stop after N rounds even if the need has not settled (default 0: until it settles). A capped run warns how many members were still to walk; its need can miss bytes that only arrive through longer call chains, and a fixpoint narrowed by it can then miss candidates the settled need would keep |
-
-A call naming its program by a literal is charged with that callee's row; a callee not in the
-corpus is charged every byte. A `START` hands over its `FROM` area like a `LINK` hands over a
-commarea. A dynamic `XCTL`, `LINK`, `CALL`, `RETURN TRANSID` or `START` resolves within its own
-program when every definition reaching it overwrites all of it with a literal, or is the
-program's own storage that no write reached. A resolved site is charged with the programs it
-reaches. Any other dynamic site is charged with the union over every member for that kind of
-area. A byte-for-byte `MOVE` counts only the bytes it copies. Liveness reruns in rounds until no
-row changes: the first walks every member, each later one only the members whose callees' entry
-rows, own back row, or -- with a site nothing resolved -- union of every member's entry need
-changed. That reaches the same rows as walking every member every round. The log's round line
-says how many were walked and how many come next.
-
 ## cobble-dataflow-fixpoint-diagnose
 
 ```
 cobble-dataflow-fixpoint-diagnose --asg-dir DIR --member MEMBER
-    [--max-steps N] [--every N] [--call-targets-only [--narrow-areas FILE]] [--anonymise]
+    [--max-steps N] [--every N] [--anonymise]
 ```
 
 Walks one member as the fixpoint does, stopping after `--max-steps` dequeues (default 50000),
 and reports: the most-dequeued nodes and how often a dequeue grew a successor, the cycle each
 sits in, the fields that keep gaining writers, the tallest writer sets, and a timeline every
 `--every` steps (default 5000). `--anonymise` replaces paragraph and field names with stable
-aliases (`PARA-001`, `FIELD-001`). `--narrow-areas FILE`, with `--call-targets-only`, walks the member as
-`cobble-dataflow-fixpoint --narrow-areas FILE` does, tracking only the handed-over bytes the
-area-need file says some program needs.
+aliases (`PARA-001`, `FIELD-001`).
 
 ## cobble-fields-access
 

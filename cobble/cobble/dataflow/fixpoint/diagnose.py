@@ -12,10 +12,8 @@ from types import MappingProxyType
 import networkx as nx
 from cobble.cli_logging import configure_cli_logging
 from cobble.dataflow.fields.state import State
-from cobble.dataflow.fixpoint.area_need_file import read_rows, table_of
 from cobble.dataflow.fixpoint.fixpoint import stepwise
 from cobble.dataflow.fixpoint.options import AnalysisOptions
-from cobble.dataflow.fixpoint.scope import Scope
 from cobble.dataflow.fixpoint.step_fact import StepFact
 from cobble.dataflow.fixpoint.stepped import Stepped
 from cobble.dataflow.srccfg.cfg import Cfg
@@ -226,15 +224,6 @@ def _parsed(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--member", required=True)
     parser.add_argument("--max-steps", type=int, default=50000)
     parser.add_argument("--every", type=int, default=5000)
-    parser.add_argument("--call-targets-only", action="store_true")
-    parser.add_argument(
-        "--narrow-areas",
-        default="",
-        metavar="FILE",
-        help="with --call-targets-only: walk as cobble-dataflow-fixpoint"
-        " --narrow-areas FILE does, tracking only the handed-over bytes the"
-        " area-need file says some program needs",
-    )
     parser.add_argument("--anonymise", action="store_true")
     return parser.parse_args(argv)
 
@@ -242,20 +231,7 @@ def _parsed(argv: Sequence[str]) -> argparse.Namespace:
 def _refusal(arguments: argparse.Namespace, path: Path) -> str:
     if not path.is_file():
         return f"fields: !! no cached ASG at {path}\n"
-    if arguments.narrow_areas and not arguments.call_targets_only:
-        return "fields: !! --narrow-areas needs --call-targets-only\n"
     return ""
-
-
-def _options(arguments: argparse.Namespace) -> AnalysisOptions:
-    """The options cobble-dataflow-fixpoint walks this member with, for the same flags."""
-    if arguments.narrow_areas:
-        table = table_of(read_rows(Path(arguments.narrow_areas)))
-        return AnalysisOptions(
-            scope=Scope.NARROW_CALL_TARGETS, areas=table.seen_from(arguments.member)
-        )
-    scope = Scope.CALL_TARGETS if arguments.call_targets_only else Scope.WHOLE
-    return AnalysisOptions(scope=scope)
 
 
 def cli(argv: Sequence[str]) -> int:
@@ -268,7 +244,7 @@ def cli(argv: Sequence[str]) -> int:
     sys.stdout.write(
         report(
             path,
-            _options(arguments),
+            AnalysisOptions(),
             arguments.max_steps,
             arguments.every,
             arguments.anonymise,

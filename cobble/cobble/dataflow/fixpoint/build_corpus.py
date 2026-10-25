@@ -136,12 +136,10 @@ from cobble.dataflow.fields.side_tables import (
     target_row,
 )
 from cobble.dataflow.fixpoint import rows
-from cobble.dataflow.fixpoint.area_need_file import read_rows, table_of
 from cobble.dataflow.fixpoint.fixpoint import NO_INDEX, ProgramFlow, analysed
 from cobble.dataflow.fixpoint.member_counts import MemberCounts
 from cobble.dataflow.fixpoint.options import ITERATION_FACTOR, AnalysisOptions
 from cobble.dataflow.fixpoint.rows import Row
-from cobble.dataflow.fixpoint.scope import Scope
 from cobble.dataflow.fixpoint.target_kind import TargetKind
 from cobble.dataflow.fixpoint.targets import ResolvedTarget
 from cobble.dataflow.jumps.jump import Jump
@@ -152,7 +150,6 @@ from cobble.knowledge_graph.graph_writer import GraphWriter, graph_writer
 from cobble.parsing.asg_cache import first_program_at
 from cobble.path_utils import ensure_dir
 from cobol_asg.asg_types import CobolASG
-from pydantic import ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -193,7 +190,6 @@ class MemberResult:
     sweeps: int = 0
     settled: bool = True
     skipped: str = ""
-    scope: Scope = Scope.WHOLE
     tracked: int = 0
     relevant: int = 0
 
@@ -380,13 +376,10 @@ def _analysed_member(
     asg = first_program_at(path)
     flow, index = analysed(
         asg,
-        replace(options, areas=options.areas.seen_from(published.member)),
+        options,
         published.layout,
     )
-    tables = replace(
-        _tables(published.member, flow, published.layout, locations),
-        scope=options.scope,
-    )
+    tables = _tables(published.member, flow, published.layout, locations)
     return _aliased_member(tables, asg, index, path.parent)
 
 
@@ -421,7 +414,6 @@ def _member_result(
         return MemberResult(
             member=published.member,
             skipped=f"unreadable: {error!r}",
-            scope=options.scope,
         )
 
 
@@ -510,7 +502,6 @@ def counts_of(result: MemberResult) -> MemberCounts:
         file_sites=len(files),
         file_resolved_one=_resolved_one(files),
         file_resolved_several=_resolved_several(files),
-        scope=result.scope,
         tracked=result.tracked,
         relevant=result.relevant,
     )
@@ -1033,17 +1024,10 @@ def _absent(paths: Sequence[Path]) -> tuple[Path, ...]:
     return tuple(path for path in paths if not path.is_file())
 
 
-def _scope(arguments: argparse.Namespace) -> Scope:
-    if arguments.narrow_areas:
-        return Scope.NARROW_CALL_TARGETS
-    return Scope.CALL_TARGETS if arguments.call_targets_only else Scope.WHOLE
-
-
 def _options(arguments: argparse.Namespace) -> AnalysisOptions:
     return AnalysisOptions(
         sweeps=arguments.sweeps,
         factor=arguments.iteration_factor,
-        scope=_scope(arguments),
     )
 
 
@@ -1084,10 +1068,6 @@ def _analysed_run(paths: Sequence[Path], arguments: argparse.Namespace) -> int:
     if arguments.force:
         shutil.rmtree(members, ignore_errors=True)
     ensure_dir(members)
-    problem = _refusal(arguments, members)
-    if problem:
-        sys.stderr.write(problem)
-        return 2
     return _members_run(paths, arguments)
 
 
@@ -1103,73 +1083,10 @@ def _members_run(paths: Sequence[Path], arguments: argparse.Namespace) -> int:
     with ProcessPoolExecutor(
         max_workers=arguments.max_workers, initializer=configure_cli_logging
     ) as pool:
-        inputs = _inputs(paths, arguments, locations)
-        totals = _run(_narrowed(inputs, arguments), pool)
+        totals = _run(_inputs(paths, arguments, locations), pool)
     _publish(arguments, locations, totals)
     _report(totals)
     return _exit_code(totals, arguments.min_coverage)
-
-
-def _narrowed(inputs: _Inputs, arguments: argparse.Namespace) -> _Inputs:
-    """With --narrow-areas, the per-member table cobble-dataflow-area-need wrote,
-    handed to every member's walk, which looks up its callees and itself in it."""
-    if not arguments.narrow_areas:
-        return inputs
-    table = table_of(read_rows(Path(arguments.narrow_areas)))
-    return replace(inputs, options=replace(inputs.options, areas=table))
-
-
-def _narrow_problem(arguments: argparse.Namespace) -> str:
-    if arguments.narrow_areas and not arguments.call_targets_only:
-        return "fields: !! --narrow-areas needs --call-targets-only\n"
-    if arguments.narrow_areas:
-        return _stored_problem(Path(arguments.narrow_areas))
-    return ""
-
-
-def _stored_problem(path: Path) -> str:
-    if not path.is_file():
-        return (
-            f"fields: !! no area need at {path}: run cobble-dataflow-area-need first\n"
-        )
-    if not _rows_readable(path):
-        return (
-            f"fields: !! {path} is not a per-member area need:"
-            " rerun cobble-dataflow-area-need\n"
-        )
-    return ""
-
-
-def _rows_readable(path: Path) -> bool:
-    try:
-        read_rows(path)
-    except ValidationError:
-        return False
-    return True
-
-
-def _refusal(arguments: argparse.Namespace, members: Path) -> str:
-    problem = _narrow_problem(arguments)
-    if problem:
-        return problem
-    mixed = _other_scope(members, _options(arguments).scope)
-    if mixed:
-        return (
-            f"fields: !! members analysed in another scope: {', '.join(mixed)};"
-            " rerun with --force\n"
-        )
-    return ""
-
-
-def _other_scope(members: Path, scope: Scope) -> tuple[str, ...]:
-    return tuple(
-        sorted(
-            path.parent.name
-            for path in members.glob(f"*/{COUNTS_FILE}")
-            if MemberCounts.model_validate_json(path.read_text(encoding="utf-8")).scope
-            is not scope
-        )
-    )
 
 
 def _publish(
@@ -1247,18 +1164,6 @@ def _add_inputs(parser: argparse.ArgumentParser) -> None:
 
 def _add_walk_budget(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--min-coverage", type=float, default=DEFAULT_FLOOR)
-    parser.add_argument(
-        "--call-targets-only",
-        action="store_true",
-        help="track only the bytes call targets and jump areas depend on",
-    )
-    parser.add_argument(
-        "--narrow-areas",
-        default="",
-        metavar="FILE",
-        help="with --call-targets-only: of each handed-over area, track only the bytes"
-        " the area need in FILE says some program reads (cobble-dataflow-area-need)",
-    )
     walk = parser.add_mutually_exclusive_group()
     walk.add_argument(
         "--iteration-factor",

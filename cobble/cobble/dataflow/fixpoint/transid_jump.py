@@ -1,4 +1,4 @@
-"""A jumps.jsonl row naming a transaction, as far as the area need reads it."""
+"""A jumps.jsonl row naming a transaction, as far as resolved sites read it."""
 
 from __future__ import annotations
 

@@ -30,7 +30,7 @@ From the forge root. Each target runs the one before it.
 | `PARTITION_BARRIER`, `PARTITION_FANOUT` | `fanout`, `8` | the barrier, below |
 
 The CardDemo config parses into its own cache, so a cache written before a bridge change is
-never read. `PARTITION_DIR` then holds `extents.jsonl`, `area-need.jsonl`, `fixpoint/`,
+never read. `PARTITION_DIR` then holds `extents.jsonl`, `fixpoint/`,
 `combine/`, `traces/`, `knowledge-graph.jsonl`, `graph.jsonl`, `clusters.jsonl`, `clusters.md` and
 `partition.html`.
 

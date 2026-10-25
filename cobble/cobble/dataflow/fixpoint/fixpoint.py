@@ -81,12 +81,10 @@ from cobble.dataflow.fields.values import EMPTY as VALUES_EMPTY
 from cobble.dataflow.fields.values import ValueSet
 from cobble.dataflow.fixpoint.fallthrough import fallthroughs_pruned
 from cobble.dataflow.fixpoint.live import EVERYTHING, Live
-from cobble.dataflow.fixpoint.liveness import live as live_ranges
 from cobble.dataflow.fixpoint.options import DEFAULT_OPTIONS, AnalysisOptions
-from cobble.dataflow.fixpoint.scope import Scope
 from cobble.dataflow.fixpoint.stepped import Stepped
 from cobble.dataflow.fixpoint.targets import ResolvedTarget, resolved_targets
-from cobble.dataflow.jumps.discover import call_target_demand, jumps_of
+from cobble.dataflow.jumps.discover import jumps_of
 from cobble.dataflow.jumps.jump import Jump
 from cobble.dataflow.layout import UnsizeableFieldError, program_records
 from cobble.dataflow.srccfg.build import label_id, paragraph_order
@@ -797,7 +795,7 @@ def analyse(
     found = _statements_at(cfg, statements)
     _warn_untracked(cfg.program, found, index)
     tally = _tally(found, index)
-    live = _live(asg, cfg, statements, index, options)
+    live = EVERYTHING
     entry = _entry_node(asg)
     walk = _walked(
         cfg, statements, index, live, entry, options, _for(entry_state, live, entry)
@@ -883,23 +881,6 @@ def _kept_after(cfg: Cfg, live: Live) -> Callable[[str, FieldExtent], bool]:
     )
 
 
-def _live(
-    asg,
-    cfg: Cfg,
-    statements: Mapping[str, Statement],
-    index: CellIndex,
-    options: AnalysisOptions,
-) -> Live:
-    if options.scope is Scope.WHOLE:
-        return EVERYTHING
-    return live_ranges(
-        cfg,
-        statements,
-        index,
-        call_target_demand(asg, cfg, statements, index, options.areas),
-    )
-
-
 def program_graph(asg) -> tuple[Cfg, Mapping[str, Statement]]:
     """The pruned CFG a walk runs over, and the statements at its nodes."""
     unpruned = program_cfg(asg)
@@ -921,7 +902,7 @@ def stepwise(asg, options: AnalysisOptions, cap: int) -> tuple[Cfg, Iterator[Ste
     unpruned = program_cfg(asg)
     statements = with_unmodelled(statement_index(asg), unpruned, condition_index(asg))
     cfg = fallthroughs_pruned(unpruned, paragraph_order(asg), statements)
-    live = _live(asg, cfg, statements, built.index, options)
+    live = EVERYTHING
     entry = _entry_node(asg)
     if entry not in cfg.node_ids:
         return cfg, iter(())

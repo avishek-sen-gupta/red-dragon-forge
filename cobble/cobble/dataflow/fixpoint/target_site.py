@@ -1,4 +1,4 @@
-"""Dynamic call sites the combined run resolved completely, read for the area need; file sites are not calls."""
+"""Dynamic call sites the combined run resolved completely; file sites are not calls."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ Sites = tuple[tuple[str, str, tuple[str, ...]], ...]
 
 
 class TargetSite(BaseModel):
-    """The fields of a combined targets row the area need reads. A site is resolved
+    """The fields of a combined targets row this stage reads. A site is resolved
     when nothing says its candidates may be incomplete: no reasons, and no caller
     outside the corpus that could have written the name."""
 

@@ -139,17 +139,6 @@ def test_a_file_named_by_a_data_item_is_a_site_and_a_literal_file_is_not(
     ]
 
 
-def test_a_run_narrowed_to_targets_resolves_file_sites_the_same(
-    fixpoint_corpus_with: Callable[[Mapping[str, str], tuple[str, ...]], Path],
-) -> None:
-    full = fixpoint_corpus_with({"FILESHP": SHAPES}, ())
-    narrowed = fixpoint_corpus_with({"FILESHP": SHAPES}, ("--call-targets-only",))
-
-    assert target_rows(narrowed / "targets.jsonl") == target_rows(
-        full / "targets.jsonl"
-    )
-
-
 def test_a_file_name_handed_over_in_a_commarea_resolves_through_the_combine(
     fixpoint_corpus: Callable[[Mapping[str, str]], Path], tmp_path: Path
 ) -> None:

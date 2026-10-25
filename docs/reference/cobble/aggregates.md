@@ -2,7 +2,7 @@
 
 Candidate domain aggregates: groups of fields that are read and written together, and the
 paragraphs that use them, found by factoring a paragraph x field matrix. Three stages, each a separate command, run after the
-[partition graph](partition.md) and a whole (not `--call-targets-only`) `cobble-dataflow-fixpoint`
+[partition graph](partition.md) and a `cobble-dataflow-fixpoint`
 run.
 
 ```text

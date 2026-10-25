@@ -1,4 +1,4 @@
-"""The area need reads only call sites the combine resolved completely from the targets table."""
+"""Resolved sites are only call sites the combine resolved completely from the targets table."""
 
 from __future__ import annotations
 
