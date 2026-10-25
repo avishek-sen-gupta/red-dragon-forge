@@ -18,11 +18,11 @@ from catnip.labels import (
 )
 from catnip.variable_records import VariableRecordDriver
 from cobol_asg.file_enums import FileOrganization, OpenMode
-from interpreter.cobol.alternate_index_driver import open_alternate_index_driver
-from interpreter.cobol.alternate_key import AlternateKey
-from interpreter.cobol.file_drivers import FileOrganizationDriver, open_driver
-from interpreter.cobol.prime_key import PrimeKey
-from interpreter.cobol.record_shape import RecordShape
+from interpreter.record_io.alternate_index_driver import open_alternate_index_driver
+from interpreter.record_io.alternate_key import AlternateKey
+from interpreter.record_io.file_drivers import FileOrganizationDriver, open_driver
+from interpreter.record_io.prime_key import PrimeKey
+from interpreter.record_io.record_shape import RecordShape
 
 
 @dataclass(frozen=True)

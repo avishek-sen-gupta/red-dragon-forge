@@ -1,10 +1,9 @@
 """CICS file control's RESP for each access-method condition."""
 
-from interpreter.cobol.access_result import AccessCondition
-
 from cics.vsam.eibresp import to_eibresp
-from tests.covers import covers
 from interpreter.cobol.features import CobolFeature
+from interpreter.record_io.access_result import AccessCondition
+from tests.covers import covers
 
 
 @covers(CobolFeature.EXEC_CICS)

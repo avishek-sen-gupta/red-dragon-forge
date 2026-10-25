@@ -1,10 +1,10 @@
 """The files a program declares, read from its file-definitions Data."""
 
 from cobol_asg.cobol_statements import FileControlEntry
-from cobol_asg.ref_mod import RefModOperand
 from cobol_asg.file_enums import AccessMode, FileOrganization
-from interpreter.cobol.data_literals import boolean, integer, named, text
+from cobol_asg.ref_mod import RefModOperand
 from interpreter.cobol.file_definitions_data import FILE_DEFINITIONS
+from interpreter.data_literals import boolean, integer, named, text
 from interpreter.data_value import DataList, DataRecord, DataValue
 from interpreter.instructions import Data
 from interpreter.var_name import VarName

@@ -1,6 +1,3 @@
-from interpreter.cobol.access_result import AccessCondition
-
-from tests.covers import covers, NotLanguageFeature
 from cics.vsam.eibresp import (
     RESP_DUPREC,
     RESP_ENDFILE,
@@ -9,6 +6,8 @@ from cics.vsam.eibresp import (
     RESP_NOTFND,
     to_eibresp,
 )
+from interpreter.record_io.access_result import AccessCondition
+from tests.covers import NotLanguageFeature, covers
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)

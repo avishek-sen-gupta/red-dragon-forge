@@ -157,7 +157,7 @@ def test_open_names_an_unreadable_linked_file(
         open_package(path)
 
     assert str(refused.value) == (
-        f"{path}: {LINKED_ENTRY}: not a linked-program file of format 3"
+        f"{path}: {LINKED_ENTRY}: not a linked-program file of format 9"
     )
 
 

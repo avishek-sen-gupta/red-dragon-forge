@@ -62,8 +62,8 @@ def test_repro_reads_its_input_at_the_input_label_and_writes_at_the_output_label
     copied = run_idcams((Repro(infile_dd="INF", outfile_dd="OUT"),), env, cat)
     assert (defined, copied) == (0, 0)
     from cobol_asg.file_enums import OpenMode
-    from interpreter.cobol.file_drivers import IndexedDriver
-    from interpreter.cobol.prime_key import PrimeKey
+    from interpreter.record_io.file_drivers import IndexedDriver
+    from interpreter.record_io.prime_key import PrimeKey
 
     drv = IndexedDriver()
     drv.open(cat.resolve("OUT.KSDS").path, OpenMode.INPUT, 9, PrimeKey(0, 3))
@@ -324,8 +324,8 @@ def test_repro_reads_a_variable_input_record_by_record_at_each_record_length(
     tmp_path,
 ):
     from cobol_asg.file_enums import OpenMode
-    from interpreter.cobol.file_drivers import IndexedDriver
-    from interpreter.cobol.prime_key import PrimeKey
+    from interpreter.record_io.file_drivers import IndexedDriver
+    from interpreter.record_io.prime_key import PrimeKey
     from jackal.idcams.executor import run_idcams
 
     upload(

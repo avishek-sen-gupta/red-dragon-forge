@@ -6,11 +6,11 @@ from catnip.dataset import Dataset
 from catnip.labels import Label, RecordFormat, SequentialLabel
 from cobol_asg.cobol_statements import FileControlEntry
 from cobol_asg.file_enums import FileOrganization
-from interpreter.cobol.access_result import AccessCondition
-from interpreter.cobol.file_frame import FileFrame
 from interpreter.cobol.io_provider import IOResult
-from interpreter.cobol.prime_key import PrimeKey
 from interpreter.data_value import DataRecord
+from interpreter.record_io.access_result import AccessCondition
+from interpreter.record_io.file_frame import FileFrame
+from interpreter.record_io.prime_key import PrimeKey
 from jackal.allocation import DatasetAllocation, DdEnvironment, Positioning
 from jackal.cobol_files import ProgramFile
 from jackal.model import DdName, DispAbnormal, DispNormal, ResolvedDisp

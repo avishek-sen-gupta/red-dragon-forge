@@ -13,7 +13,7 @@ from catnip.labels import KsdsLabel, PathView, RecordFormat, SequentialLabel
 from catnip.system_catalog import NotCataloged, SystemCatalog
 from catnip.system_catalog_removal import remove_cataloged
 from cobol_asg.file_enums import OpenMode
-from interpreter.cobol.access_result import AccessCondition, AccessResult
+from interpreter.record_io.access_result import AccessCondition, AccessResult
 from tests.covers import NotLanguageFeature, covers
 
 _KSDS = KsdsLabel(8, 0, 3)

@@ -67,7 +67,6 @@ def run_cobol_step(
         program.linked,
         program.entry,
         max_steps=budget,
-        io_provider=provider,
         builtins=builtins,
         initial_vm=_initial_vm(step, provider),
         permit_unresolved_call_targets=permit_unresolved_call_targets,
