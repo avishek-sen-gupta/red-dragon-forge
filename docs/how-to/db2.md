@@ -92,11 +92,11 @@ memory. A local connect reports `SQL1032N`.
 
    Prints `TCP listener up.`.
 
-3. If it recurs, give the VM at least 6 GiB and cap Db2's instance memory at 1 GiB.
+3. If it recurs, give the VM at least 6 GiB and cap Db2's instance memory at 2 GiB. A 1 GiB cap refuses connections (SQL1643C, SQL10003C) under the parallel suites.
 
    ```bash
    colima stop && colima start --cpu 4 --memory 6     # Docker Desktop: Settings → Resources
-   docker exec squall-db2 bash -lc "su - db2inst1 -c 'db2 update dbm cfg using INSTANCE_MEMORY 262144'"
+   docker exec squall-db2 bash -lc "su - db2inst1 -c 'db2 update dbm cfg using INSTANCE_MEMORY 524288'"
    make db2-restart
    ```
 

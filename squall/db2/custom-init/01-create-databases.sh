@@ -17,5 +17,5 @@ create_db_if_absent() {
 su - db2inst1 -c "db2start" || true   # ensure the manager is up before CREATE
 create_db_if_absent MOJO
 create_db_if_absent MOJO2
-su - db2inst1 -c "db2 update dbm cfg using INSTANCE_MEMORY 262144"
-echo "custom-init: databases ready, instance memory capped at 1 GiB"
+su - db2inst1 -c "db2 update dbm cfg using INSTANCE_MEMORY 524288"
+echo "custom-init: databases ready, instance memory capped at 2 GiB"
