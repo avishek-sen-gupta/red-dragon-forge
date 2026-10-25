@@ -23,8 +23,7 @@ label { margin-right:10px; }
 <body><div id="wrap"><div id="side">
 <b id="title"></b><div id="stats" class="muted"></div>
 <div style="margin-top:8px">
-<label><input type="radio" name="group" value="cluster" checked> clusters</label>
-<label><input type="radio" name="group" value="component"> components</label>
+<label><input type="radio" name="group" value="component" checked> components</label>
 <label><input type="radio" name="group" value="dataset"> datasets</label><br>
 <label><input type="checkbox" id="terminals" checked> origins and sinks</label>
 <label><input type="checkbox" id="blocked" checked> blocked edges</label>
@@ -47,15 +46,15 @@ const SLOT = "#2e86de";
 const graph = new graphology.DirectedGraph();
 DATA.nodes.forEach(n => graph.addNode(n.id, { ...n, y: -n.y,
   size: n.kind === "field" ? 0.6 + 0.1 * Math.min(6, Math.sqrt(n.degree)) : 1,
-  color: n.kind === "sink" ? "#c0392b" : n.kind === "origin" ? "#2c3e50" : n.kind === "dataset" ? SLOT : colour(n.cluster) }));
+  color: n.kind === "sink" ? "#c0392b" : n.kind === "origin" ? "#2c3e50" : n.kind === "dataset" ? SLOT : colour(n.component) }));
 const isSlot = id => graph.getNodeAttribute(id, "kind") === "dataset";
 DATA.edges.forEach(e => graph.addEdge(e.source, e.target, { ...e,
   dataset: isSlot(e.source) || isSlot(e.target),
   size: Math.min(0.5, 0.1 + 0.1 * Math.log2(e.sites)),
   color: isSlot(e.source) || isSlot(e.target) ? (e.certainty === "exact" ? SLOT : "#aed6f1")
     : !e.clustered ? "#c0392b" : e.cross_program ? "#f5cba7" : "#bbb" }));
-let grouping = "cluster", showTerminals = true, showBlocked = true, focus = null, focusTerminals = null, hover = null, matching = null, chain = null, followed = null;
-const groupOf = d => grouping === "cluster" ? d.cluster : d.component;
+let grouping = "component", showTerminals = true, showBlocked = true, focus = null, focusTerminals = null, hover = null, matching = null, chain = null, followed = null;
+const groupOf = d => d.component;
 const isField = id => graph.getNodeAttribute(id, "kind") === "field";
 const isStorage = id => isField(id) || isSlot(id);
 const inFocus = id => isField(id) && groupOf(graph.getNodeAttributes(id)) === focus;
@@ -109,7 +108,7 @@ renderer.on("clickNode", ({ node }) => {
   if (!isField(node)) return;
   const slot = graph.neighbors(node).find(isSlot);
   if (grouping === "dataset" && slot) return followDataset(graph.getNodeAttribute(slot, "record"));
-  if (grouping === "dataset") { grouping = "cluster"; document.querySelector("input[name=group][value=cluster]").checked = true; }
+  if (grouping === "dataset") { grouping = "component"; document.querySelector("input[name=group][value=component]").checked = true; }
   const k = groupOf(graph.getNodeAttributes(node));
   if (k < 0) return select(null);
   select(k, node);
@@ -200,7 +199,7 @@ function render() {
   const list = document.getElementById("list");
   list.innerHTML = "";
   const found = groups();
-  const isolated = DATA.nodes.filter(n => n.kind === "field" && n.cluster < 0).length;
+  const isolated = DATA.nodes.filter(n => n.kind === "field" && n.component < 0).length;
   document.getElementById("stats").textContent = `${found.length} ${grouping}s · ${isolated} isolated fields · barrier ${DATA.barrier}`;
   found.slice(0, 500).forEach(([k, ids]) => {
     const s = summary(ids);

@@ -6,7 +6,6 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from itertools import groupby
 
-from cobble.experimental.partition.cluster_set import ClusterSet
 from cobble.experimental.partition.field_graph import FieldGraph
 from cobble.experimental.partition.graph_edge import GraphEdge
 from cobble.experimental.partition.graph_node import GraphNode
@@ -24,13 +23,13 @@ class Folded:
     occurrences: Mapping[str, tuple[GraphNode, ...]]
 
 
-def _likeness(node: GraphNode, cluster: int, into: _Ends, out: _Ends) -> _Likeness:
+def _likeness(node: GraphNode, component: int, into: _Ends, out: _Ends) -> _Likeness:
     return (
         node.program,
         node.record,
         node.field,
         node.subscripts[:-1],
-        cluster,
+        component,
         into,
         out,
     )
@@ -82,16 +81,15 @@ def _neighbours(pairs: Iterable[tuple[str, str]]) -> Mapping[str, _Ends]:
 
 
 def _folds(
-    graph: FieldGraph, clusters: ClusterSet
+    graph: FieldGraph, component_of: Mapping[str, int]
 ) -> tuple[tuple[GraphNode, ...], ...]:
-    cluster = {m: c.id for c in clusters.clusters for m in c.members}
     into = _neighbours((edge.target, edge.source) for edge in graph.edges)
     out = _neighbours((edge.source, edge.target) for edge in graph.edges)
     alike = sorted(
         (
             _likeness(
                 node,
-                cluster.get(node.id, -1),
+                component_of.get(node.id, -1),
                 into.get(node.id, _NONE),
                 out.get(node.id, _NONE),
             ),
@@ -110,8 +108,8 @@ def _folds(
     )
 
 
-def folded(graph: FieldGraph, clusters: ClusterSet) -> Folded:
-    runs = tuple((_drawn(run), run) for run in _folds(graph, clusters))
+def folded(graph: FieldGraph, component_of: Mapping[str, int]) -> Folded:
+    runs = tuple((_drawn(run), run) for run in _folds(graph, component_of))
     renamed = {node.id: drawn.id for drawn, run in runs for node in run}
     kept = tuple(node for node in graph.nodes if node.id not in renamed)
     ends = sorted(

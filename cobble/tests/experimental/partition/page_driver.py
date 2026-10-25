@@ -13,8 +13,10 @@ VISIBLE = f"{DATASET_EDGES}.filter(e => !renderer.getEdgeDisplayData(e).hidden).
 LAYOUT = "[...document.querySelectorAll('#layout tr')].map(r => [...r.children].map(c => c.innerText))"
 OTHERS = "graph.filterNodes(id => !chain.has(id)).map(id => renderer.getNodeDisplayData(id)).filter(d => !d.hidden)"
 OTHER_EDGES = "graph.filterEdges((e, d, s, t) => !(chain.has(s) && chain.has(t))).filter(e => !renderer.getEdgeDisplayData(e).hidden).length"
-PLAIN_FIELD = "graph.filterNodes((id, d) => d.kind === 'field' && d.cluster >= 0 && !graph.neighbors(id).some(isSlot))[0]"
-ISOLATED_FIELD = "graph.filterNodes((id, d) => d.kind === 'field' && d.cluster < 0)[0]"
+PLAIN_FIELD = "graph.filterNodes((id, d) => d.kind === 'field' && d.component >= 0 && !graph.neighbors(id).some(isSlot))[0]"
+ISOLATED_FIELD = (
+    "graph.filterNodes((id, d) => d.kind === 'field' && d.component < 0)[0]"
+)
 CHAIN_DATASETS = "[...new Set([...chain].filter(isSlot).map(i => graph.getNodeAttribute(i, 'record')))].sort()"
 
 

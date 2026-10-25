@@ -25,7 +25,7 @@ help:
 	@echo "make partition-traces   - experimental: parse, extents, call targets and one path trace per member (PARTITION_CONFIG, PARTITION_ASG)"
 	@echo "make partition-graph    - experimental: the knowledge graph, then the field graph of those traces with dataset links (PARTITION_BARRIER, PARTITION_FANOUT)"
 	@echo "make partition-clusters - experimental: clusters of fields inside each program, and their report"
-	@echo "make partition-render   - experimental: the WebGL page of the graph and its clusters"
+	@echo "make partition-render   - experimental: the WebGL page of the graph"
 	@echo "make db2-up    - start squall's Db2 container and wait until healthy (idempotent)"
 	@echo "make db2-seed  - create and seed CardDemo's Db2 schema (the only DROP TABLE)"
 	@echo "make db2-status - does Db2 actually answer? (container up != instance alive)"
@@ -111,8 +111,8 @@ partition-graph: partition-traces
 partition-clusters: partition-graph
 	$(COBBLE) cobble-experimental-partition-clusters --graph $(PARTITION_DIR)/graph.jsonl --out $(PARTITION_DIR)/clusters.jsonl --report $(PARTITION_DIR)/clusters.md
 
-partition-render: partition-clusters
-	$(COBBLE) cobble-experimental-partition-render --graph $(PARTITION_DIR)/graph.jsonl --clusters $(PARTITION_DIR)/clusters.jsonl --out $(PARTITION_DIR)/partition.html
+partition-render: partition-graph
+	$(COBBLE) cobble-experimental-partition-render --graph $(PARTITION_DIR)/graph.jsonl --out $(PARTITION_DIR)/partition.html
 
 # squall's Db2 test database (official icr.io image). The compose project stays
 # squall/, so the squall-db2 container and its named volume are the same ones.

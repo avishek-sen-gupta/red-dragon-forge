@@ -162,22 +162,23 @@ cluster's records and fields.
 ## cobble-experimental-partition-render
 
 ```
-cobble-experimental-partition-render --graph GRAPH --clusters CLUSTERS --out OUT
+cobble-experimental-partition-render --graph GRAPH --out OUT
 ```
 
 One self-contained WebGL page, using the sigma.js and graphology builds cobble vendors, dark on
-light. Each program is laid out on its own: each of its clusters is a group laid out by a seeded
-networkx `spring_layout` over the edges among its members, and every field in no cluster, origin
-and sink is a group of one; the groups start at seeded random places and are pushed apart until
-none overlap, so a cluster's colour reads as one patch. Programs are then placed by a seeded `spring_layout` over what links them, call handovers
-and datasets they share, and pushed apart the same way, so programs that exchange bytes tend to
-sit near each other. A dataset slot sits at the mean of the fields it links, jittered. The page folds a run of consecutive occurrences of one table element that
-share a cluster and have exactly the same edges into one drawn node, `LK-COMMAREA(9:16)`, whose
+light. Each program is laid out on its own, by one seeded networkx `spring_layout` over the edges
+among its nodes, so linked fields pull together and a field nothing links drifts to the edge.
+Programs are then placed by a seeded `spring_layout` over what links them, call handovers
+and datasets they share, and pushed apart until none overlap, so programs that exchange bytes tend
+to sit near each other. A dataset slot sits at the mean of the fields it links, jittered. A
+component is the connected component of a field over clustered edges inside its program, worked out
+from the graph alone. The page folds a run of consecutive occurrences of one table element that
+share a component and have exactly the same edges into one drawn node, `LK-COMMAREA(9:16)`, whose
 edges carry the largest site count among the edges they stand for; selecting it lists the
-occurrences. Only the page folds: `graph.jsonl` and `clusters.jsonl` keep every occurrence. Dot sizes are in layout units, so they keep their spacing when zoomed out.
-Labels show only for a hovered node and its neighbours, or the selected cluster. Colour shows the
-cluster. The side panel lists
-clusters or components. Clicking one zooms to it and lists its fields and terminals. Hovering a
+occurrences. Only the page folds: `graph.jsonl` keeps every occurrence. Dot sizes are in layout units, so they keep their spacing when zoomed out.
+Labels show only for a hovered node and its neighbours, or the selected component. Colour shows the
+component. The side panel lists components or datasets. Clicking one zooms to it and lists its
+fields and terminals. Hovering a
 node shows its edges. Edges are grey when clustered, pale orange when they cross programs, and red
 when a barrier blocked them. Dataset slots are blue dots in the outer rings. Dataset edges are not drawn until a dataset is
 followed: pick it in the `datasets` list (largest first, with its field and program counts), click
@@ -187,7 +188,7 @@ over the graph: one row per slot in byte order, one column per program, each cel
 write (`→`) or read (`←`) those bytes, a `possible` one in grey with its reasons on hover. The side
 panel lists the fields by program and every dataset edge with its certainty and reasons. In the `datasets`
 view, clicking a field follows a dataset it touches; clicking a field no dataset touches switches
-to `clusters` and selects its cluster.
+to `components` and selects its component.
 
 `tests/experimental/partition/page_driver.py` drives a rendered page in headless Chromium
 (Playwright): it loads it, checks for script errors, lists the datasets, follows the first and

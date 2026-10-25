@@ -1,4 +1,4 @@
-"""Places every node organically: each cluster a force-laid group inside its program, groups and lone nodes scattered and pushed apart, programs placed by a force layout over what links them and pushed apart, dataset slots among the fields they link."""
+"""Places every node organically: each program force-laid over its own edges, programs placed by a force layout over what links them and pushed apart, dataset slots among the fields they link."""
 
 from __future__ import annotations
 
@@ -20,8 +20,6 @@ LAYOUT_SEED = 7
 SPREAD = 2.2
 GAP = 4.0
 DOT = 1.4
-SCATTER = 1.3
-SPREAD_STEPS = 200
 JITTER = 1.5
 SETTLE_STEPS = 3000
 
@@ -58,60 +56,17 @@ def _local(graph: FieldGraph, members: Sequence[str]) -> nx.Graph[str]:
     return local
 
 
-def _component(local: nx.Graph[str], members: Sequence[str]) -> _Points:
+def _region(graph: FieldGraph, members: Sequence[str]) -> dict[str, _Point]:
     if len(members) == 1:
-        return np.zeros((1, 2), dtype=np.float64)
-    placed = nx.spring_layout(local.subgraph(members), seed=LAYOUT_SEED)
+        return {members[0]: (0.0, 0.0)}
+    placed = nx.spring_layout(_local(graph, members), seed=LAYOUT_SEED)
     raw = np.array([placed[member] for member in members], dtype=np.float64)
     spread = raw - raw.mean(axis=0)
     reach = max(float(np.linalg.norm(spread, axis=1).max()), 1e-9)
-    return spread * (_radius(len(members)) / reach)
-
-
-def _scattered(radii: _Points) -> _Points:
-    area = math.sqrt(float((radii**2).sum())) * SCATTER
-    rng = np.random.default_rng(LAYOUT_SEED)
-    angles = rng.uniform(0, 2 * math.pi, len(radii))
-    reach = area * np.sqrt(rng.uniform(0, 1, len(radii)))
-    start = np.stack((reach * np.cos(angles), reach * np.sin(angles)), axis=1)
-    return _apart(start, radii, DOT, SPREAD_STEPS)
-
-
-def _groups(
-    members: Sequence[str], cluster_of: Mapping[str, int]
-) -> tuple[tuple[str, ...], ...]:
-    clusters = sorted(
-        {cluster_of[member] for member in members if member in cluster_of}
-    )
-    return (
-        *(
-            tuple(member for member in members if cluster_of.get(member) == cluster)
-            for cluster in clusters
-        ),
-        *((member,) for member in members if member not in cluster_of),
-    )
-
-
-def _region(
-    graph: FieldGraph, members: Sequence[str], cluster_of: Mapping[str, int]
-) -> dict[str, _Point]:
-    local = _local(graph, members)
-    groups = _groups(members, cluster_of)
-    shapes = tuple(_component(local, group) for group in groups)
-    radii = np.array(
-        [float(np.linalg.norm(shape, axis=1).max()) + DOT for shape in shapes],
-        dtype=np.float64,
-    )
-    centres = _scattered(radii)
-    placed = {
-        member: centre + point
-        for group, shape, centre in zip(groups, shapes, centres, strict=True)
-        for member, point in zip(group, shape, strict=True)
-    }
-    middle = np.array(list(placed.values()), dtype=np.float64).mean(axis=0)
+    scaled = spread * (_radius(len(members)) / reach)
     return {
-        member: (float(point[0] - middle[0]), float(point[1] - middle[1]))
-        for member, point in placed.items()
+        member: (float(point[0]), float(point[1]))
+        for member, point in zip(members, scaled, strict=True)
     }
 
 
@@ -209,12 +164,12 @@ def _among(graph: FieldGraph, points: Mapping[str, _Point], slot: str) -> _Point
     )
 
 
-def layout(graph: FieldGraph, cluster_of: Mapping[str, int]) -> dict[str, _Point]:
+def layout(graph: FieldGraph) -> dict[str, _Point]:
     programs = _programs(graph)
     names = tuple(programs)
     owner = {node: name for name, members in programs.items() for node in members}
     regions = {
-        name: _region(graph, programs[name], cluster_of)
+        name: _region(graph, programs[name])
         for name in counted(names, Tally(RENDER, "programs laid out", 1), len(names))
     }
     radii = np.array(

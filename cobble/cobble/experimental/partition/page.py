@@ -1,4 +1,4 @@
-"""Renders the graph and its clusters as one self-contained WebGL page."""
+"""Renders the graph as one self-contained WebGL page."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
 
-from cobble.experimental.partition.cluster_set import ClusterSet
+from cobble.experimental.partition.field_components import component_of
 from cobble.experimental.partition.field_graph import FieldGraph
 from cobble.experimental.partition.fold import folded
 from cobble.experimental.partition.layout import layout
@@ -16,23 +16,12 @@ from cobble.experimental.partition.page_node import PageNode
 TEMPLATE = Path(__file__).with_name("partition_page.html")
 
 
-def _data(full: FieldGraph, clusters: ClusterSet) -> PageData:
-    drawn = folded(full, clusters)
+def _data(full: FieldGraph) -> PageData:
+    components = component_of(full)
+    drawn = folded(full, components)
     graph = drawn.graph
-    placed = {
-        member: (cluster.component, cluster.id)
-        for cluster in clusters.clusters
-        for member in cluster.members
-    }
     stands = {node: run[0].id for node, run in drawn.occurrences.items()}
-    points = layout(
-        graph,
-        {
-            node.id: placed[stands.get(node.id, node.id)][1]
-            for node in graph.nodes
-            if stands.get(node.id, node.id) in placed
-        },
-    )
+    points = layout(graph)
     degree = Counter(end for edge in graph.edges for end in (edge.source, edge.target))
     return PageData(
         barrier=graph.barrier,
@@ -46,8 +35,7 @@ def _data(full: FieldGraph, clusters: ClusterSet) -> PageData:
                 pic=node.pic,
                 x=points[node.id][0],
                 y=points[node.id][1],
-                component=placed.get(stands.get(node.id, node.id), (-1, -1))[0],
-                cluster=placed.get(stands.get(node.id, node.id), (-1, -1))[1],
+                component=components.get(stands.get(node.id, node.id), -1),
                 degree=degree[node.id],
                 occurrences=tuple(
                     member.label for member in drawn.occurrences.get(node.id, ())
@@ -61,9 +49,9 @@ def _data(full: FieldGraph, clusters: ClusterSet) -> PageData:
     )
 
 
-def page(graph: FieldGraph, clusters: ClusterSet, scripts: Sequence[str]) -> str:
+def page(graph: FieldGraph, scripts: Sequence[str]) -> str:
     head, rest = TEMPLATE.read_text(encoding="utf-8").split("/*SCRIPTS*/", 1)
     middle, tail = rest.split("/*DATA*/", 1)
-    data = _data(graph, clusters).model_dump_json().replace("</", "<\\/")
+    data = _data(graph).model_dump_json().replace("</", "<\\/")
     tags = "\n".join(f"<script>{script}</script>" for script in scripts)
     return f"{head}{tags}{middle}{data}{tail}"

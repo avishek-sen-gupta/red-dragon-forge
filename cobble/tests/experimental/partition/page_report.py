@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class PageReport:
-    """Script errors, dataset edges drawn before and after following a dataset, the datasets list, what following showed, the followed record layout table row by row, how the nodes and edges outside the followed chain are drawn, and the view and headline after clicking a field no dataset touches and a field in no cluster."""
+    """Script errors, dataset edges drawn before and after following a dataset, the datasets list, what following showed, the followed record layout table row by row, how the nodes and edges outside the followed chain are drawn, and the view and headline after clicking a field no dataset touches and a field in no component."""
 
     errors: tuple[str, ...]
     dataset_edges: int

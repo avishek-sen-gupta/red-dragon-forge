@@ -205,8 +205,6 @@ def test_the_commands_turn_traces_into_a_graph_clusters_a_report_and_a_page(
             [
                 "--graph",
                 str(graph_path),
-                "--clusters",
-                str(clusters_path),
                 "--out",
                 str(page_path),
             ]
@@ -277,7 +275,7 @@ def test_the_commands_turn_traces_into_a_graph_clusters_a_report_and_a_page(
         .split("const DATA = ", 1)[1]
         .split(";\n", 1)[0]
     )
-    assert [(n["id"], n["cluster"]) for n in payload["nodes"]] == [
+    assert [(n["id"], n["component"]) for n in payload["nodes"]] == [
         ("P:IN.A", 0),
         ("P:IN.B", 1),
         ("P:OUT.C", 0),

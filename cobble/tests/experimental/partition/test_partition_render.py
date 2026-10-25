@@ -13,10 +13,10 @@ from tests.experimental.partition.page_report import PageReport
 
 from cobble.experimental.partition.certainty import Certainty
 from cobble.dataflow.fields.extent_text import ByteRange
-from cobble.experimental.partition.clustering import cluster_set
 from cobble.experimental.partition.dataset_links import with_datasets
 from cobble.experimental.partition.dataset_site import DatasetSite
 from cobble.experimental.partition.extent_row import ExtentRow
+from cobble.experimental.partition.field_components import component_of
 from cobble.experimental.partition.file_site import FileSite
 from cobble.experimental.partition.leaf_index import leaf_index
 from cobble.experimental.partition.render_cli import SCRIPTS
@@ -133,37 +133,22 @@ SPREAD_OUT = FieldGraph(
 )
 
 
-CLUSTER_OF = {
-    **{f"P:REC.{name}": 0 for name in "ABCD"},
-    **{f"P:REC.{name}": 1 for name in "EF"},
-    **{f"Q:REC.{name}": 2 for name in "ABC"},
-    **{f"S:REC.{name}": 3 for name in "AB"},
-}
+def test_linked_fields_sit_closer_together_than_a_field_nothing_links() -> None:
+    points = layout(SPREAD_OUT)
+    linked = [
+        math.dist(points[f"P:REC.{a}"], points[f"P:REC.{b}"])
+        for a, b in ("AB", "BC", "CD", "EF")
+    ]
+    apart = [math.dist(points["P:REC.H"], points[f"P:REC.{name}"]) for name in "ABCDEF"]
 
-
-def _disc(
-    points: dict[str, tuple[float, float]], members: list[str]
-) -> tuple[tuple[float, float], float]:
-    centre = (
-        sum(points[m][0] for m in members) / len(members),
-        sum(points[m][1] for m in members) / len(members),
-    )
-    return centre, max(math.dist(points[m], centre) for m in members)
-
-
-def test_each_cluster_sits_together_apart_from_the_others_in_its_program() -> None:
-    points = layout(SPREAD_OUT, CLUSTER_OF)
-    first = _disc(points, [f"P:REC.{name}" for name in "ABCD"])
-    second = _disc(points, [f"P:REC.{name}" for name in "EF"])
-
-    assert math.dist(first[0], second[0]) > first[1] + second[1]
+    assert max(linked) < min(apart)
 
 
 def test_each_program_keeps_to_its_own_region_and_slots_sit_among_their_fields(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     with caplog.at_level(logging.INFO):
-        points = layout(SPREAD_OUT, CLUSTER_OF)
+        points = layout(SPREAD_OUT)
     logged = [record.getMessage() for record in caplog.records]
     clouds = {
         program: [
@@ -188,7 +173,7 @@ def test_each_program_keeps_to_its_own_region_and_slots_sit_among_their_fields(
     )
 
     assert set(points) == {node.id for node in SPREAD_OUT.nodes}
-    assert layout(SPREAD_OUT, CLUSTER_OF) == points
+    assert layout(SPREAD_OUT) == points
     assert {
         pair: math.dist(centres[pair[0]], centres[pair[1]])
         >= reach[pair[0]] + reach[pair[1]]
@@ -203,24 +188,22 @@ def test_each_program_keeps_to_its_own_region_and_slots_sit_among_their_fields(
     ]
 
 
-def test_the_page_embeds_the_graph_with_each_field_s_component_and_cluster() -> None:
-    clusters = cluster_set(GRAPH, split_at=30)
-    html = page(GRAPH, clusters, scripts=("/*one*/", "/*two*/"))
+def test_the_page_embeds_the_graph_with_each_field_s_component() -> None:
+    html = page(GRAPH, scripts=("/*one*/", "/*two*/"))
     payload = json.loads(html.split("const DATA = ", 1)[1].split(";\n", 1)[0])
 
     assert html.count("<script>/*one*/</script>") == 1
     assert html.count("<script>/*two*/</script>") == 1
     assert payload["barrier"] == "fanout-8"
     assert [
-        (n["id"], n["kind"], n["component"], n["cluster"], n["degree"])
-        for n in payload["nodes"]
+        (n["id"], n["kind"], n["component"], n["degree"]) for n in payload["nodes"]
     ] == [
-        ("P:REC.A", "field", 0, 0, 2),
-        ("P:REC.B", "field", 0, 0, 2),
-        ("P:REC.C", "field", 0, 0, 2),
-        ("P:REC.D", "field", -1, -1, 2),
-        ("P:REC.E", "field", -1, -1, 0),
-        ("P|sink|MAP:M", "sink", -1, -1, 2),
+        ("P:REC.A", "field", 0, 2),
+        ("P:REC.B", "field", 0, 2),
+        ("P:REC.C", "field", 0, 2),
+        ("P:REC.D", "field", -1, 2),
+        ("P:REC.E", "field", -1, 0),
+        ("P|sink|MAP:M", "sink", -1, 2),
     ]
     assert payload["edges"] == [
         {
@@ -285,8 +268,7 @@ def test_the_page_draws_a_run_of_occurrences_with_the_same_neighbours_as_one_nod
             )
         ),
     )
-    clusters = cluster_set(graph, split_at=30)
-    html = page(graph, clusters, scripts=())
+    html = page(graph, scripts=())
     payload = json.loads(html.split("const DATA = ", 1)[1].split(";\n", 1)[0])
 
     assert sorted(
@@ -306,9 +288,9 @@ def test_the_page_draws_a_run_of_occurrences_with_the_same_neighbours_as_one_nod
         ("S:DFH.LKB(3:4)", "S:SA.SA-B", 2),
         ("S:DFH.LKB(6)", "S:SA.SA-B", 2),
     ]
-    placed = {member: c.id for c in clusters.clusters for member in c.members}
+    placed = component_of(graph)
     assert {
-        n["id"]: n["cluster"] for n in payload["nodes"] if n["record"] == "DFH"
+        n["id"]: n["component"] for n in payload["nodes"] if n["record"] == "DFH"
     } == {
         "S:DFH.LKB(1:2)": placed["S:DFH.LKB(1)"],
         "S:DFH.LKB(3:4)": placed["S:DFH.LKB(3)"],
@@ -353,7 +335,7 @@ def test_the_page_embeds_dataset_slots_and_their_edge_labels() -> None:
             ),
         ),
     )
-    html = page(slotted, cluster_set(slotted, split_at=30), scripts=())
+    html = page(slotted, scripts=())
     payload = json.loads(html.split("const DATA = ", 1)[1].split(";\n", 1)[0])
 
     assert sorted((n["id"], n["kind"]) for n in payload["nodes"]) == [
@@ -396,7 +378,6 @@ def test_the_page_follows_one_dataset_at_a_time_and_hides_dataset_links_otherwis
     out.write_text(
         page(
             linked,
-            cluster_set(linked, split_at=30),
             tuple(script.read_text(encoding="utf-8") for script in SCRIPTS),
         ),
         encoding="utf-8",
@@ -419,7 +400,7 @@ def test_the_page_follows_one_dataset_at_a_time_and_hides_dataset_links_otherwis
         others_shown=9,
         other_colours=("#e4e4e4",),
         other_edges_shown=0,
-        field_click=("cluster", "P.A [REC] "),
-        isolated_click=("cluster", ""),
+        field_click=("component", "P.A [REC] "),
+        isolated_click=("component", ""),
         searched="DS.A",
     )
