@@ -10,6 +10,7 @@ from functools import cache, reduce
 from itertools import groupby, product
 from operator import itemgetter
 
+from cobble.dataflow.combine.link_row import LinkRow
 from cobble.dataflow.fields.dep_row import DepRow
 from cobble.dataflow.fields.extent_text import ByteRange, byte_range
 from cobble.experimental.partition.barrier import Barrier
@@ -20,7 +21,6 @@ from cobble.experimental.partition.flow import Flow
 from cobble.experimental.partition.graph_edge import GraphEdge
 from cobble.experimental.partition.graph_node import GraphNode
 from cobble.experimental.partition.leaf_index import LeafIndex
-from cobble.experimental.partition.link_row import LinkRow
 from cobble.experimental.partition.node_kind import NodeKind
 from cobble.experimental.partition.progress import counted
 from cobble.experimental.partition.span import Span

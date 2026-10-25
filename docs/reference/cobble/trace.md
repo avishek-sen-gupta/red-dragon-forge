@@ -84,22 +84,4 @@ A dep row with a `sink` records bytes leaving the program, and its `target` is n
 Progress goes to stderr, one line per path: nodes run, cumulative branch coverage, queue
 sizes, programs entered and dead ends met, then the reason the run stopped.
 
-## cobble-trace-query
-
-```
-cobble-trace-query {forward,backward} FIELD --trace TRACE [--depth N] [--extents EXTENTS]
-```
-
-| Flag | Meaning |
-|---|---|
-| `forward` / `backward` | what FIELD affects, or what feeds it |
-| `FIELD` | a field name, or `PROGRAM.FIELD` |
-| `--trace` | the trace file; a partial file with no footer is read as far as it goes |
-| `--depth` | hops to follow (default 5) |
-| `--extents` | an extents table, for a field no dep row names |
-
-Matches by byte-extent containment within a program and deduplicates on load. The backward
-walk narrows at each hop: when a dep's target is a group wider than the range being traced,
-the source is clipped to the overlapping sub-range. Output is an indented tree, one line per
-provenance edge, with origins (`FILE:`, `LITERAL`, `%CALL:`) at the backward leaves and
-sinks at the forward ones.
+`cobble-trace-query` reads the fixpoint's provenance now; see [field-dataflow](field-dataflow.md).

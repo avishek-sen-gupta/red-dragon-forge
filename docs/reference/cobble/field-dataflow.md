@@ -388,3 +388,25 @@ Writes `graph_dir/depgraph-webgl.html` from `nodes.jsonl` and `pairs.json`, laid
 `sfdp`. Nodes are coloured by where they are declared (`WORKING-STORAGE`, `FILE`, `LINKAGE`,
 `<undeclared>`) or by external kind (`DATASET`, `MAP`, `PROGRAM`, `TSQUEUE`, `TRANSID`); edges
 by verb family. `--min-degree` drops variables with fewer edges (default 1, keep all).
+
+## cobble-trace-query
+
+```
+cobble-trace-query {forward,backward} FIELD --fixpoint DIR [--links LINKS] [--depth N] [--extents EXTENTS]
+```
+
+| Flag | Meaning |
+|---|---|
+| `forward` / `backward` | what FIELD affects, or what feeds it |
+| `FIELD` | a field name, or `PROGRAM.FIELD`; a program the out-dir holds no member for exits 2 |
+| `--fixpoint` | the out-dir `cobble-dataflow-fixpoint` wrote; every finished member's `FLOWS_TO` edges, reaching definitions and sinks are read |
+| `--links` | `links.jsonl` from `cobble-dataflow-combine`; each window carries the walk into the callee, and back when the call returns. Without it the walk stays in each program |
+| `--depth` | hops to follow (default 5) |
+| `--extents` | an extents table, for a field no row names |
+
+Matches by byte-extent containment within a program and deduplicates the rows. The backward walk
+narrows at each hop: when a row's target is a group wider than the range being traced, the source is
+clipped to the overlapping sub-range. Output is an indented tree, one line per provenance edge, with
+origins (`FILE:`, `LITERAL`, `%CALL:`) at the backward leaves and sinks at the forward ones. The rows
+are the fixpoint's, merged over paths, so the walk shows every flow the analysis found, not the paths
+that carried them; a run capped with `--sweeps` that did not settle shows a subset.

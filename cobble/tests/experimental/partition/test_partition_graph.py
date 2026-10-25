@@ -10,7 +10,7 @@ from cobble.experimental.partition.fanout_barrier import FanoutBarrier
 from cobble.experimental.partition.field_graph import FieldGraph
 from cobble.experimental.partition.graph_build import field_graph
 from cobble.experimental.partition.leaf_index import leaf_index
-from cobble.experimental.partition.link_row import LinkRow
+from cobble.dataflow.combine.link_row import LinkRow
 from cobble.experimental.partition.no_barrier import NoBarrier
 from cobble.experimental.partition.node_kind import NodeKind
 

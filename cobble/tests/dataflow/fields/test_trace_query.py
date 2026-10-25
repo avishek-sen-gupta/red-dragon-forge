@@ -1,30 +1,58 @@
-"""Provenance walks over hand-built JSONL traces."""
+"""Provenance walks over hand-built fixpoint out-dirs and combine links."""
 
 from __future__ import annotations
 
-import json
+import logging
 from pathlib import Path
 
+import pytest
+
+from tests.dataflow.fixpoint.fixpoint_dir import fixpoint_dir, flow_row, sink_row
+
+from cobble.dataflow.combine.link_row import LinkRow
+from cobble.dataflow.fields.dep_row import DepRow
 from cobble.dataflow.fields.extent_text import ByteRange
 from cobble.dataflow.fields.trace_query import (
     BACKWARD,
     FORWARD,
-    DepRow,
     _narrow_sources,
     _narrowed,
     _resolve,
-    load,
+    cli,
+    provenance_rows,
     query,
 )
 
 
-def _jsonl(rows: list[dict], tmp_path: Path) -> Path:
-    path = tmp_path / "trace.jsonl"
-    path.write_text(
-        "\n".join(json.dumps(r, separators=(",", ":")) for r in rows) + "\n",
-        encoding="utf-8",
-    )
-    return path
+def _text(found: dict) -> str:
+    return f"{found['field']}@{found['region']}[{found['start']}:{found['end']}]"
+
+
+def _out_dir(rows: list[dict], tmp_path: Path) -> Path:
+    def node(row: dict) -> str:
+        return row["site"].split("/", 1)[1]
+
+    flows = [
+        flow_row(
+            row["program"],
+            node(row),
+            _text(row["target"]),
+            _text(row["source"]) if row["source"] else "",
+            row["origin"],
+        )
+        for row in rows
+        if not row.get("sink")
+    ]
+    sinks = [
+        sink_row(row["program"], node(row), _text(row["source"]), row["sink"])
+        for row in rows
+        if row.get("sink")
+    ]
+    return fixpoint_dir(tmp_path / "fixpoint", flows, sinks)
+
+
+def _jsonl(rows: list[dict], tmp_path: Path) -> tuple[DepRow, ...]:
+    return provenance_rows(_out_dir(rows, tmp_path), Path())
 
 
 def _dep(
@@ -187,17 +215,6 @@ def test_field_not_found(tmp_path: Path):
     assert any("not found" in line for line in result)
 
 
-def test_load_skips_non_dep_rows(tmp_path: Path):
-    rows = [
-        _dep("P", "A", 0, 8, "B", 10, 18),
-        {"kind": "coverage", "taken": 1, "total": 2, "paths": 1, "programs": 1},
-        {"kind": "limits", "items": ["x"]},
-    ]
-    trace = _jsonl(rows, tmp_path)
-    deps = load(trace)
-    assert len(deps) == 1
-
-
 def _range(program: str, name: str, start: int, end: int) -> ByteRange:
     return ByteRange(
         program=program,
@@ -210,44 +227,46 @@ def _range(program: str, name: str, start: int, end: int) -> ByteRange:
     )
 
 
-def test_a_source_in_another_program_is_addressed_by_that_program(tmp_path: Path):
-    """A bridge dep's two ends live in different programs. Reading the source with
-    the row's own program would make it uncomparable to the callee's rows and
-    comparable to the caller's bytes at the same offsets -- a miss and a lie at
-    once."""
-    trace = _jsonl(
-        [_dep("CALLER", "WS-AREA", 4, 8, "SUB-RESULT", 4, 8, source_program="CALLEE")],
+def test_backward_crosses_into_a_callee_through_a_returning_link(tmp_path: Path):
+    """Each program's rows stay in that program; a combine link window is what
+    carries the walk across, both ways when the call returns."""
+    out = _out_dir(
+        [_dep("CALLEE", "SUB-RESULT", 4, 8, "SUB-CODE", 0, 4, site="CALLEE/CALC/0")],
         tmp_path,
     )
-
-    (dep,) = load(trace)
-
-    assert dep.target.program == "CALLER"
-    assert dep.source.program == "CALLEE"
-
-
-def test_backward_crosses_into_the_program_the_source_names(tmp_path: Path):
-    trace = _jsonl(
-        [
-            _dep(
-                "CALLER",
-                "WS-AREA",
-                4,
-                8,
-                "SUB-RESULT",
-                4,
-                8,
-                source_program="CALLEE",
-                site="CALLER/LINK/0",
-            ),
-            _dep("CALLEE", "SUB-RESULT", 4, 8, "SUB-KEY", 0, 4, site="CALLEE/CALC/0"),
-        ],
-        tmp_path,
+    links = tmp_path / "links.jsonl"
+    links.write_text(
+        LinkRow(
+            caller="CALLER",
+            node="LINK/0",
+            callee="CALLEE",
+            caller_extent="WS-AREA@working_storage[4:8]",
+            callee_extent="SUB-RESULT@working_storage[4:8]",
+            returns=True,
+        ).model_dump_json()
+        + "\n",
+        encoding="utf-8",
     )
 
-    answer = "\n".join(query(trace, BACKWARD, "CALLER.WS-AREA"))
+    crossed = "\n".join(query(provenance_rows(out, links), BACKWARD, "CALLER.WS-AREA"))
+    alone = "\n".join(query(provenance_rows(out, Path()), BACKWARD, "CALLER.WS-AREA"))
 
-    assert "CALLEE/CALC/0" in answer
+    assert "CALLEE/CALC/0" in crossed
+    assert "CALLEE/CALC/0" not in alone
+
+
+def test_a_program_the_out_dir_does_not_hold_exits_two(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    out = _out_dir([_dep("P", "A", 0, 8, "B", 10, 18)], tmp_path)
+
+    with caplog.at_level(logging.ERROR):
+        code = cli(["forward", "NOPE.FIELD", "--fixpoint", str(out)])
+
+    assert code == 2
+    assert [record.getMessage() for record in caplog.records] == [
+        f"trace-query: no member NOPE under {out}"
+    ]
 
 
 def test_a_frontier_range_wider_than_the_target_narrows_to_their_overlap():

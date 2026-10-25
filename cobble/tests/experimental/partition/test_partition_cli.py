@@ -9,11 +9,11 @@ from pathlib import Path
 from typing import TypedDict
 
 import pytest
+from tests.dataflow.fixpoint.fixpoint_dir import Row, fixpoint_dir, flow_row, sink_row
 
-from cobble.dataflow.fixpoint.member_counts import MemberCounts
 from cobble.experimental.partition import clusters_cli, graph_cli, render_cli
 from cobble.experimental.partition.extent_row import ExtentRow
-from cobble.experimental.partition.link_row import LinkRow
+from cobble.dataflow.combine.link_row import LinkRow
 
 
 class _Range(TypedDict):
@@ -52,60 +52,14 @@ def _flow(
     source: _Range | None,
     origin: str = "",
     literal: str = "",
-) -> tuple[str, str]:
-    return (
-        program,
-        json.dumps(
-            {
-                "type": "edge",
-                "source": f"{program}.SRC",
-                "source_kind": "FIELD",
-                "target": f"{program}.{target['field']}",
-                "target_kind": "FIELD",
-                "kind": "FLOWS_TO",
-                "attrs": {
-                    "node": node,
-                    "source_extent": _text(source) if source else "",
-                    "target_extent": _text(target),
-                    "origin": origin,
-                    "literal": literal,
-                },
-            }
-        ),
+) -> Row:
+    return flow_row(
+        program, node, _text(target), _text(source) if source else "", origin, literal
     )
 
 
-def _sink(program: str, node: str, source: _Range, sink: str) -> tuple[str, str]:
-    return (
-        program,
-        json.dumps(
-            {
-                "program": program,
-                "node": node,
-                "sink": sink,
-                "source_extent": _text(source),
-                "definers": [],
-            }
-        ),
-    )
-
-
-def _fixpoint(
-    root: Path, flows: Sequence[tuple[str, str]], sinks: Sequence[tuple[str, str]]
-) -> Path:
-    """A fixpoint out-dir with one member per program named, holding these rows."""
-    programs = sorted({program for program, _ in (*flows, *sinks)})
-    for program in programs:
-        member = root / "members" / program
-        member.mkdir(parents=True)
-        _jsonl(member / "graph.jsonl", [row for p, row in flows if p == program])
-        _jsonl(member / "sinks.jsonl", [row for p, row in sinks if p == program])
-        _jsonl(member / "defs.jsonl", [])
-        (member / "counts.json").write_text(
-            MemberCounts(member=program, program=program).model_dump_json(),
-            encoding="utf-8",
-        )
-    return root
+def _sink(program: str, node: str, source: _Range, sink: str) -> Row:
+    return sink_row(program, node, _text(source), sink)
 
 
 class _Placed(TypedDict):
@@ -168,7 +122,7 @@ def test_the_commands_turn_a_fixpoint_out_dir_into_a_graph_clusters_a_report_and
             _extent("UNTRACED", ("REC",), "working_storage[0:8]"),
         ],
     )
-    fixpoint = _fixpoint(
+    fixpoint = fixpoint_dir(
         tmp_path / "fixpoint",
         [
             _flow("P", "1", _range("OUT", 8, 16), _range("IN", 0, 8)),
@@ -345,7 +299,7 @@ def _dataset_inputs(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
             _extent("R", ("RCICS",), "working_storage[8:16]"),
         ],
     )
-    fixpoint = _fixpoint(
+    fixpoint = fixpoint_dir(
         tmp_path / "fixpoint",
         [
             _flow("R", "1", _range("RIN", 0, 8), None, origin="FILE:IN-FILE"),

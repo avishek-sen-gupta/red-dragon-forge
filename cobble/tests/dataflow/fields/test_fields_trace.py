@@ -47,7 +47,6 @@ from cobble.dataflow.fields.trace import (
     traced,
     visited_order,
 )
-from cobble.dataflow.fields.trace_query import BACKWARD, query
 from cobble.dataflow.fields.trace_report import _footer_lines, _make_sink
 from cobble.dataflow.srccfg.cfg import Cfg, Edge, EdgeKind, Node, NodeKind
 from cobble.dataflow.srccfg.program import program_cfg
@@ -1459,28 +1458,6 @@ def test_a_passed_through_sources_definers_are_read_in_its_own_programs_storage(
     assert {(one.source_program, one.definers) for one in rows} == {
         ("CALLER", ("CALLER/M/0",))
     }
-
-
-def test_backward_provenance_crosses_the_link_into_the_callees_own_writes(
-    crossed, tmp_path
-):
-    """The whole path: walk, JSONL, query. The only test that runs all three.
-
-    The bridge rows are written by the walk and read by the query, and each side's
-    own tests pass while the pair disagrees: the walk emits a callee-space source,
-    the row carries one program for both ends of a dep, so the query stamps the
-    caller's name on the callee's bytes and the frontier never matches the callee's
-    rows. Backward from the caller's window must arrive at the statement in TPROGB
-    that wrote those bytes, not stop one hop short at the bridge row itself.
-    """
-    report = tmp_path / "trace.jsonl"
-    with report.open("w", encoding="utf-8") as handle:
-        _make_sink(handle)(crossed.deps)
-        handle.write("\n".join(_footer_lines(crossed)) + "\n")
-
-    answer = "\n".join(query(report, BACKWARD, "TPROGA.WS-AREA", max_depth=6))
-
-    assert "TPROGB/SUB-PARA/1" in answer
 
 
 def test_no_dep_in_the_start_program_claims_it_was_entered_through_a_call(crossed):

@@ -1,8 +1,10 @@
-"""Forward and backward provenance queries over a JSONL trace report.
+"""Forward and backward provenance queries over a fixpoint out-dir's provenance.
 
-The trace is flat -- one row per dep, each self-contained -- and the query is a
-BFS over byte-extent containment. Forward walks from a field to everything its
-bytes eventually reach; backward walks from a field to every origin that fed it.
+The rows are flat -- one per write and source, each self-contained -- and the
+query is a BFS over byte-extent containment. Forward walks from a field to
+everything its bytes eventually reach; backward walks from a field to every origin
+that fed it. Each program's rows stay in that program; combine's link windows,
+when given, carry the walk across calls.
 """
 
 from __future__ import annotations
@@ -17,55 +19,64 @@ from functools import partial, reduce
 from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
+from cobble.dataflow.combine.link_row import LinkRow
 from cobble.dataflow.fields.dep_row import DepRow
-from cobble.dataflow.fields.extent_text import (
-    NO_RANGE,
-    ByteRange,
-    byte_range,
-    byte_range_from_dict,
-)
-from pydantic import TypeAdapter
+from cobble.dataflow.fields.extent_text import ByteRange, byte_range
+from cobble.dataflow.fixpoint.build_corpus import MEMBERS_DIR
+from cobble.dataflow.fixpoint.provenance import provenance
 
 logger = logging.getLogger(__name__)
 
 _RangeKey = tuple[str, str, int, int]
-_DEFINERS = TypeAdapter(tuple[str, ...])
 
 
-def _range_of(
-    raw: str | int | bool | Mapping[str, str | int | bool], program: str
-) -> ByteRange:
-    """A null end -- an origin row's source, a sink row's target -- is no range."""
-    return byte_range_from_dict(raw, program) if isinstance(raw, Mapping) else NO_RANGE
+def _crossings(link: LinkRow) -> tuple[DepRow, ...]:
+    caller = byte_range(link.caller_extent, link.caller)
+    callee = byte_range(link.callee_extent, link.callee)
+    site = f"{link.caller}/{link.node}"
+    entered = DepRow(
+        program=link.callee,
+        via="",
+        target=callee,
+        origin="",
+        source=caller,
+        site=site,
+        definers=(),
+        sink="",
+    )
+    if not link.returns:
+        return (entered,)
+    returned = DepRow(
+        program=link.caller,
+        via="",
+        target=caller,
+        origin="",
+        source=callee,
+        site=site,
+        definers=(),
+        sink="",
+    )
+    return (entered, returned)
 
 
-def _dep_of(
-    row: Mapping[str, str | int | bool | Mapping[str, str | int | bool]],
-) -> DepRow:
-    program = str(row.get("program", ""))
-    source_program = str(row.get("source_program", "")) or program
-    return DepRow(
-        program=program,
-        via=str(row.get("via", "")),
-        target=_range_of(row.get("target", ""), program),
-        origin=str(row.get("origin", "")),
-        source=_range_of(row.get("source", ""), source_program),
-        site=str(row.get("site", "")),
-        definers=_DEFINERS.validate_python(row.get("definers", ())),
-        sink=str(row.get("sink", "")),
-        literal=str(row.get("literal", "")),
+def _links(path: Path) -> tuple[LinkRow, ...]:
+    if path == Path():
+        return ()
+    return tuple(
+        LinkRow.model_validate_json(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
     )
 
 
-def load(path: Path) -> tuple[DepRow, ...]:
-    """Every dep row from a JSONL trace, deduplicated, ignoring footer rows."""
+def provenance_rows(fixpoint_dir: Path, links_path: Path) -> tuple[DepRow, ...]:
+    """The fixpoint's flow and sink rows, then a crossing per combine link window."""
     return tuple(
         dict.fromkeys(
-            _dep_of(parsed)
-            for line in path.read_text(encoding="utf-8").splitlines()
-            if line.strip()
-            for parsed in (json.loads(line),)
-            if parsed.get("kind") == "dep"
+            (
+                *provenance(fixpoint_dir),
+                *(row for link in _links(links_path) for row in _crossings(link)),
+            )
         )
     )
 
@@ -337,16 +348,15 @@ def _roots_of(
 
 
 def query(
-    path: Path,
+    deps: Sequence[DepRow],
     direction: str,
     field: str,
     max_depth: int = 5,
     extents_path: Path = Path(),
 ) -> tuple[str, ...]:
-    deps = load(path)
     roots = _roots_of(field, deps, extents_path)
     if not roots:
-        return (f"field {field!r} not found in trace or extents",)
+        return (f"field {field!r} not found in the provenance or extents",)
     walk = _forward if direction == FORWARD else _backward
     hits = walk(deps, roots, max_depth)
     if not hits:
@@ -356,7 +366,7 @@ def query(
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Forward or backward provenance walk over a JSONL trace."
+        description="Forward or backward provenance walk over a fixpoint out-dir."
     )
     parser.add_argument(
         "direction",
@@ -368,7 +378,16 @@ def _parser() -> argparse.ArgumentParser:
         help="a field name (FIELD-X) or PROGRAM.FIELD to qualify it",
     )
     parser.add_argument(
-        "--trace", required=True, type=Path, help="path to the JSONL trace file"
+        "--fixpoint",
+        required=True,
+        type=Path,
+        help="the out-dir cobble-dataflow-fixpoint wrote",
+    )
+    parser.add_argument(
+        "--links",
+        type=Path,
+        default=Path(),
+        help="links.jsonl from cobble-dataflow-combine; without it the walk stays in each program",
     )
     parser.add_argument(
         "--depth",
@@ -385,14 +404,25 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _refusal(fixpoint_dir: Path, field: str) -> str:
+    members = fixpoint_dir / MEMBERS_DIR
+    if not members.is_dir():
+        return f"no fixpoint out-dir at {fixpoint_dir}"
+    program, _ = _parsed_name(field)
+    if program and not (members / program).is_dir():
+        return f"no member {program} under {fixpoint_dir}"
+    return ""
+
+
 def cli(argv: Sequence[str] = ()) -> int:
     configure_cli_logging()
     arguments = _parser().parse_args(tuple(argv) if argv else None)
-    if not arguments.trace.is_file():
-        logger.error("trace-query: no trace file at %s", arguments.trace)
+    refused = _refusal(arguments.fixpoint, arguments.field)
+    if refused:
+        logger.error("trace-query: %s", refused)
         return 2
     output = query(
-        arguments.trace,
+        provenance_rows(arguments.fixpoint, arguments.links),
         arguments.direction,
         arguments.field,
         arguments.depth,

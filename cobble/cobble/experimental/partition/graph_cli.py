@@ -8,6 +8,7 @@ from collections.abc import Iterator, Sequence
 from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
+from cobble.dataflow.combine.link_row import LinkRow
 from cobble.dataflow.fields.dep_row import DepRow
 from cobble.dataflow.fixpoint.provenance import provenance
 from cobble.dataflow.fixpoint.target_site import TargetSite
@@ -21,7 +22,6 @@ from cobble.experimental.partition.graph_build import field_graph
 from cobble.experimental.partition.graph_file import write_graph
 from cobble.experimental.partition.knowledge_graph_view import knowledge_graph
 from cobble.experimental.partition.leaf_index import LeafIndex, leaf_index
-from cobble.experimental.partition.link_row import LinkRow
 from cobble.experimental.partition.node_kind import NodeKind
 from cobble.experimental.partition.progress import counted
 from cobble.experimental.partition.tally import GRAPH, tenths
