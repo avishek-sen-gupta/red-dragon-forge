@@ -20,6 +20,7 @@ from types import MappingProxyType
 import pytest
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.fields.aliases import NOT_IN_CACHE
+from cobble.dataflow.fields.call_targets import NO_CALL_TARGETS
 from cobble.dataflow.fields.side_tables import CommareaAlias
 from cobble.dataflow.fields.state import EMPTY, Source, State, write
 from cobble.dataflow.fields.trace import (
@@ -904,6 +905,22 @@ def test_a_site_with_no_window_is_a_dead_end_and_the_callers_path_goes_on():
     ) == ("M/0", "M/1", "M/2")
 
 
+def test_a_site_with_several_callees_enters_each_on_a_path_of_its_own():
+    """A dynamic site the targets table resolves to two programs is a decision, like
+    a branch: the first path enters the first candidate, and the flipped path
+    resumes before the call runs and enters the other."""
+    other = _only("TPROGC", (_node("T/0"),), (), "T/0")
+    rows = (_linked(), replace(_linked(), callee="TPROGC"))
+    loader = _loader(replace(CALLER, aliases={"M/1": rows}), CALLEE, other)
+
+    one = traced("TPROGA", loader, Budget(paths=1))
+    both = traced("TPROGA", loader, Budget(paths=2))
+
+    assert one.coverage.programs == {"TPROGA", "TPROGB"}
+    assert both.coverage.programs == {"TPROGA", "TPROGB", "TPROGC"}
+    assert (both.paths, both.dead_ends) == (2, frozenset())
+
+
 def test_a_program_already_on_the_stack_is_not_re_entered():
     """A LINK cycle is the re-entry rule's third case, with no extra machinery: the
     callee's entry node is one an open frame has already run."""
@@ -1246,7 +1263,7 @@ def test_the_loader_reports_an_absent_cache_file_rather_than_raising(tmp_path):
     """The loader is total: every reason a member cannot be entered arrives as a
     ``Loaded.reason`` that ``_refusal`` can rank, never as an exception that ends a
     run of hundreds of paths on one unparsed callee."""
-    refused = _loaded(tmp_path, "TPROGZ")
+    refused = _loaded(tmp_path, "TPROGZ", NO_CALL_TARGETS)
 
     assert refused.reason.startswith(NOT_PARSED)
     assert not refused.entry
@@ -1501,7 +1518,9 @@ def test_the_coverage_denominator_comes_from_the_graphs_and_not_from_the_answer(
     with no NOHANDLE and no RESP a ``#raise`` test, so the real count is well above
     the one ``IF`` a reader of the fixture source can see.
     """
-    graphs = tuple(_loaded(parsed, one).cfg for one in ("TPROGA", "TPROGB"))
+    graphs = tuple(
+        _loaded(parsed, one, NO_CALL_TARGETS).cfg for one in ("TPROGA", "TPROGB")
+    )
     edges = tuple(one for cfg in graphs for one in _branch_edges(cfg))
 
     assert crossed.coverage.programs == {"TPROGA", "TPROGB"}

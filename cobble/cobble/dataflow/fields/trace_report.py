@@ -21,6 +21,11 @@ from pathlib import Path
 from typing import IO
 
 from cobble.cli_logging import configure_cli_logging
+from cobble.dataflow.fields.call_targets import (
+    NO_CALL_TARGETS,
+    CallTargets,
+    read_call_targets,
+)
 from cobble.dataflow.fields.trace import (
     DEFAULT_COVERAGE,
     DEFAULT_PATHS,
@@ -255,6 +260,17 @@ def _parser() -> argparse.ArgumentParser:
         help="if given, write one path record per sampled path to this JSONL file",
     )
     parser.add_argument(
+        "--dynamic-call-targets",
+        type=Path,
+        default=Path(),
+        metavar="TARGETS",
+        help=(
+            "targets.jsonl from cobble-dataflow-combine: a call site whose target is a "
+            "field enters each program it names, one path per candidate; without it "
+            "such a site is a dynamic-target dead end"
+        ),
+    )
+    parser.add_argument(
         "--single-program",
         action="store_true",
         help=(
@@ -286,7 +302,17 @@ def _loader_of(arguments: argparse.Namespace) -> Loader:
             arguments.program,
         )
         return single_program_loader(arguments.asg_dir, arguments.program)
-    return closure_loader(arguments.asg_dir)
+    return closure_loader(
+        arguments.asg_dir, _call_targets(arguments.dynamic_call_targets)
+    )
+
+
+def _call_targets(path: Path) -> CallTargets:
+    if path == Path():
+        return NO_CALL_TARGETS
+    found = read_call_targets(path)
+    logger.info("trace: %d dynamic call sites resolved from %s", len(found.sites), path)
+    return found
 
 
 def _log_start(program: str, budget: Budget) -> float:

@@ -12,7 +12,7 @@ Code: `cobble/cobble/dataflow/fields/trace*.py`.
 ```
 cobble-fields-trace PROGRAM --asg-dir DIR --out OUT
     [--paths N] [--coverage F] [--max-depth N] [--record-paths FILE]
-    [--single-program] [--force]
+    [--dynamic-call-targets TARGETS] [--single-program] [--force]
 ```
 
 | Flag | Meaning |
@@ -24,6 +24,7 @@ cobble-fields-trace PROGRAM --asg-dir DIR --out OUT
 | `--coverage` | stop once this fraction of branch edges has been taken (default 1.0) |
 | `--max-depth` | nodes one path may visit. Default: three times the CFG nodes of every program the entry can reach, or of its own CFG with `--single-program` |
 | `--record-paths` | also write one path record per sampled path, for `cobble-viz-pathwalk` |
+| `--dynamic-call-targets` | `targets.jsonl` from `cobble-dataflow-combine`. A call whose target is a field, `XCTL PROGRAM(CDEMO-TO-PROGRAM)`, enters each program the file names for that site; without it, or for a site it does not name, the site is a `dynamic-target` dead end |
 | `--single-program` | stay in PROGRAM's CFG. `LINK` and `XCTL` run as statements, crediting the commarea to `%CALL:<program>`, and no other program is loaded |
 | `--force` | trace again and overwrite `--out` |
 
@@ -39,6 +40,10 @@ An entered call does not credit its windows to `%CALL:<program>`: the callee sha
 bytes, so a byte it never writes comes back with the caller's own provenance. Each window
 gets a dep row at the callee's entry, from the caller's bytes to the callee's, with
 `source_program` the caller, so a forward query crosses into the callee.
+
+A site with several candidate callees is a decision like a branch, made before the call runs:
+one path enters each candidate, and each candidate counts as a branch edge for `--coverage`, so a
+run is not done until every one has been entered.
 
 A callee the cache does not hold is an opaque block. The site is listed under dead ends with
 the alias reason (`callee-not-in-cache`), the commarea is credited to `%CALL:<program>`, and

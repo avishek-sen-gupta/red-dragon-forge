@@ -197,9 +197,10 @@ can be pointed at any rendered page.
 ## Limits
 
 - The trace samples paths, so a flow no sampled path took has no edge.
-- The trace does not enter a callee named by a variable (`XCTL PROGRAM(CDEMO-TO-PROGRAM)`): it
-  records a `dynamic-target` dead end. `--links` joins those programs through the combine's
-  windows instead, which is not tied to any path (red-dragon-forge-fjx7).
+- The trace enters a callee named by a variable (`XCTL PROGRAM(CDEMO-TO-PROGRAM)`) only when
+  `cobble-fields-trace` is given `--dynamic-call-targets`, as `make partition-traces` does; a site
+  the targets do not name is a `dynamic-target` dead end. `--links` still joins programs through
+  the combine's windows, which is not tied to any sampled path.
 - A `RETURN TRANSID` hop to the next task has no edge.
 - A CICS file sink is named by the field holding the file name (`FILE:LIT-CUSTFILENAME`), so a
   writer and a reader of one file are not matched.

@@ -33,6 +33,7 @@ from types import MappingProxyType
 
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.fields.aliases import NO_EXTENT, UNSIZEABLE, commarea_aliases
+from cobble.dataflow.fields.call_targets import NO_CALL_TARGETS, CallTargets
 from cobble.dataflow.fields.extent import CellIndex, cell_index, operand_extents
 from cobble.dataflow.fields.extent_text import byte_range
 from cobble.dataflow.fields.side_tables import CommareaAlias
@@ -316,6 +317,7 @@ Loader = Callable[[str], Loaded]
 
 
 LOOP_ITERATIONS = 2
+CALLEE_ARM = "callee:"
 
 
 @dataclass(frozen=True)
@@ -363,6 +365,7 @@ class _Checkpoint:
     program) and the decisions made so far.  ``order`` carries the node sequence
     accumulated before the checkpoint so that a resumed walk can present a complete
     path to a ``PathListener`` rather than only the suffix from the flip point.
+    ``ran`` is false at a choice of callee, which is made before the call node runs.
     """
 
     node: str
@@ -371,6 +374,7 @@ class _Checkpoint:
     made: tuple[_Choice, ...]
     entered: frozenset[str]
     order: tuple[str, ...] = ()
+    ran: bool = True
 
 
 def _via(stack: tuple[Frame, ...]) -> str:
@@ -1218,7 +1222,34 @@ def _moved(walk: _Walk, loaded: Loaded, loader: Loader) -> _Walk:
     rows = loaded.aliases.get(walk.node, ())
     if not rows:
         return _followed(_ran(walk, loaded), loaded)
-    return _called(walk, loaded, loader, tuple(rows))
+    chosen, picked = _callee_chosen(walk, tuple(rows))
+    return _called(chosen, loaded, loader, picked)
+
+
+def _callee_chosen(
+    walk: _Walk, rows: tuple[CommareaAlias, ...]
+) -> tuple[_Walk, tuple[CommareaAlias, ...]]:
+    """A site with rows for several callees is a decision like a branch, made before
+    the call node runs; each callee is an arm coverage counts, so a run is not done
+    until every candidate has been entered."""
+    callees = tuple(dict.fromkeys(row.callee for row in rows))
+    if len(callees) < 2:
+        return walk, rows
+    index = _index(walk)
+    arms = tuple(
+        frozenset({(walk.program, walk.node, f"{CALLEE_ARM}{callee}")})
+        for callee in callees
+    )
+    saved = replace(_checkpoint_of(walk), ran=False)
+    return (
+        replace(
+            walk,
+            checkpoints=(*walk.checkpoints, saved),
+            made=(*walk.made, _Choice(taken=index, arms=arms)),
+            taken=walk.taken | arms[index],
+        ),
+        tuple(row for row in rows if row.callee == callees[index]),
+    )
 
 
 def _stepped(walk: _Walk, loader: Loader) -> _Walk:
@@ -1267,9 +1298,17 @@ def _started(program: str, loader: Loader, plan: tuple[int, ...]) -> _Walk:
     )
 
 
-def _branches(cfg: Cfg) -> int:
-    tests = frozenset(node.id for node in cfg.nodes if node.kind is NodeKind.TEST)
-    return sum(1 for edge in cfg.edges if edge.source in tests)
+def _branches(loaded: Loaded) -> int:
+    tests = frozenset(
+        node.id for node in loaded.cfg.nodes if node.kind is NodeKind.TEST
+    )
+    callees = sum(
+        count
+        for rows in loaded.aliases.values()
+        for count in (len({row.callee for row in rows}),)
+        if count > 1
+    )
+    return sum(1 for edge in loaded.cfg.edges if edge.source in tests) + callees
 
 
 def _coverage(before: Coverage, walk: _Walk, loader: Loader) -> Coverage:
@@ -1279,7 +1318,7 @@ def _coverage(before: Coverage, walk: _Walk, loader: Loader) -> Coverage:
     programs = before.programs | walk.entered
     return Coverage(
         taken=before.taken | walk.taken,
-        total=sum(_branches(loader(one).cfg) for one in sorted(programs)),
+        total=sum(_branches(loader(one)) for one in sorted(programs)),
         programs=programs,
     )
 
@@ -1359,6 +1398,8 @@ def _flipped(head: _Next, loader: Loader) -> _Walk:
     would apply that statement twice.
     """
     walk = _resumed(head.checkpoint, head.arm, 0)
+    if not head.checkpoint.ran:
+        return _moved(walk, loader(walk.program), loader)
     return _followed(walk, loader(walk.program))
 
 
@@ -1513,7 +1554,7 @@ def visited_order(
 
 
 @cache
-def _loaded(asg_dir: Path, program: str) -> Loaded:
+def _loaded(asg_dir: Path, program: str, targets: CallTargets) -> Loaded:
     """Everything a path needs from one member, built once per process.
 
     Memoised on the directory as well as the name, so a run against a different
@@ -1533,7 +1574,7 @@ def _loaded(asg_dir: Path, program: str) -> Loaded:
     return _built(
         asg_dir,
         program,
-        lambda asg, index: _by_node(commarea_aliases(asg, index, asg_dir)),
+        lambda asg, index: _by_node(commarea_aliases(asg, index, asg_dir, targets)),
     )
 
 
@@ -1569,9 +1610,10 @@ def _built(asg_dir: Path, program: str, aliases_of: AliasesOf) -> Loaded:
     )
 
 
-def closure_loader(asg_dir: Path) -> Loader:
-    """Every program a path reaches, each loaded as it is first asked for."""
-    return lambda member: _loaded(asg_dir, member)
+def closure_loader(asg_dir: Path, targets: CallTargets) -> Loader:
+    """Every program a path reaches, each loaded as it is first asked for; a dynamic
+    call site enters the programs ``targets`` names for it."""
+    return lambda member: _loaded(asg_dir, member, targets)
 
 
 def single_program_loader(asg_dir: Path, program: str) -> Loader:
@@ -1628,7 +1670,7 @@ def loadable(asg_dir: Path, program: str) -> str:
     path = asg_dir / f"{program}.json"
     if not path.is_file():
         return f"no ASG cache at {path}"
-    loaded = _loaded(asg_dir, program)
+    loaded = _loaded(asg_dir, program, NO_CALL_TARGETS)
     return _loaded_unrunnable(loaded)
 
 
@@ -1639,7 +1681,7 @@ def sampled(program: str, asg_dir: Path, budget: Budget = DEFAULT_BUDGET) -> Tra
     callee ``aliases.jsonl`` has no rows for, which is any member a single-member
     build did not select.
     """
-    return traced(program, closure_loader(asg_dir), budget)
+    return traced(program, closure_loader(asg_dir, NO_CALL_TARGETS), budget)
 
 
 Sink = Callable[[frozenset[Dep]], None]

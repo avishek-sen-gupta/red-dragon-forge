@@ -101,7 +101,7 @@ partition-traces: jar
 	mkdir -p cobble/$(PARTITION_DIR)/traces
 	cd cobble && for member in $(PARTITION_ASG)/*.json; do \
 	  name=$$(basename $$member .json); \
-	  uv run --no-sync cobble-fields-trace $$name --asg-dir $(PARTITION_ASG) --out $(PARTITION_DIR)/traces/$$name.jsonl --paths $(PARTITION_PATHS) || exit 1; \
+	  uv run --no-sync cobble-fields-trace $$name --asg-dir $(PARTITION_ASG) --out $(PARTITION_DIR)/traces/$$name.jsonl --paths $(PARTITION_PATHS) --dynamic-call-targets $(PARTITION_DIR)/combine/targets.jsonl || exit 1; \
 	done
 
 partition-graph: partition-traces

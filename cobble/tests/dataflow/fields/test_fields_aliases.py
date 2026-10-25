@@ -15,6 +15,7 @@ from cobble.dataflow.fields.aliases import (
     commarea_aliases,
 )
 from cobble.dataflow.fields import aliases
+from cobble.dataflow.fields.call_targets import NO_CALL_TARGETS, CallTargets
 from cobble.dataflow.fields.side_tables import alias_row
 from cobol_asg.asg_types import CobolASG
 from cobol_memory.field_extent import FieldExtent, Precision
@@ -63,8 +64,8 @@ def _callee_linkage(directory: Path, program: str, linkage_fields: list) -> None
     )
 
 
-def _rows(asg, asg_dir: Path, index_of):
-    return commarea_aliases(asg, index_of(asg), asg_dir)
+def _rows(asg, asg_dir: Path, index_of, targets: CallTargets = NO_CALL_TARGETS):
+    return commarea_aliases(asg, index_of(asg), asg_dir, targets)
 
 
 def test_link_shares_the_whole_area_when_both_sides_agree(
@@ -208,9 +209,23 @@ def test_a_dynamic_target_is_a_named_dead_end(tmp_path, program_of, field, index
     )
 
     (row,) = _rows(asg, tmp_path, index_of)
+    _callee_json(tmp_path, "XPROGB", 12, field)
+    resolved = _rows(
+        asg,
+        tmp_path,
+        index_of,
+        CallTargets(sites=(("PROGA", row.node, ("XPROGB", "XPROGZ")),)),
+    )
 
     assert row.reason == DYNAMIC_TARGET
     assert row.callee == ""
+    assert [
+        (one.callee, one.caller_extent, one.callee_extent, one.reason)
+        for one in resolved
+    ] == [
+        ("XPROGB", "WS-AREA@working_storage[0:12]", "DFHCOMMAREA@linkage[0:12]", ""),
+        ("XPROGZ", "", "", NOT_IN_CACHE),
+    ]
 
 
 def test_a_callee_without_a_commarea_is_a_named_dead_end(
@@ -347,7 +362,7 @@ def test_a_qualified_commarea_resolves_through_its_of_chain(
         ],
     )
 
-    (row,) = commarea_aliases(asg, index_of(asg), tmp_path)
+    (row,) = commarea_aliases(asg, index_of(asg), tmp_path, NO_CALL_TARGETS)
 
     assert row.reason == ""
     assert row.caller_extent == "WS-AREA@working_storage[0:12]"
