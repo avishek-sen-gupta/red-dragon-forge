@@ -1,12 +1,15 @@
 """Write the linked targets and links tables."""
 
 import json
+from collections.abc import Iterable
 from pathlib import Path
 
 from cobble.dataflow.combine.edge import Edge
 from cobble.dataflow.combine.linked import Linked
 from cobble.dataflow.combine.linked_target import LinkedTarget
+from cobble.dataflow.combine.run_report import RunReport
 from cobble.dataflow.fields.side_tables import (
+    JsonlWriter,
     jsonl_writer,
     target_fields,
     target_identity,
@@ -39,9 +42,18 @@ def _link(edge: Edge) -> tuple[str, str]:
     return row, row
 
 
-def write_outputs(out_dir: Path, linked: Linked) -> None:
+def write_outputs(out_dir: Path, groups: Iterable[Linked]) -> tuple[RunReport, ...]:
+    """Each group's targets and links, appended as the group is linked, so only
+    one group's tables are ever held."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    with jsonl_writer(out_dir / "targets.jsonl") as targets:
-        targets.add_rows(map(_target, linked.targets))
-    with jsonl_writer(out_dir / "links.jsonl") as links:
-        links.add_rows(map(_link, linked.edges))
+    with (
+        jsonl_writer(out_dir / "targets.jsonl") as targets,
+        jsonl_writer(out_dir / "links.jsonl") as links,
+    ):
+        return tuple(_written(targets, links, linked) for linked in groups)
+
+
+def _written(targets: JsonlWriter, links: JsonlWriter, linked: Linked) -> RunReport:
+    targets.add_rows(map(_target, linked.targets))
+    links.add_rows(map(_link, linked.edges))
+    return linked.report

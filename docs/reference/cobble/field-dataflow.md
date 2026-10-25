@@ -217,6 +217,14 @@ cobble-dataflow-combine --config CONFIG --fixpoint-dir DIR --out-dir DIR (--all 
 | `--max-hops` | program crossings one walk may make: into a caller, into a `LINK`ed callee's exits, or into a `START`er. A walk that would cross more stops there, keeps what it found, and its target gains `hop-limit`. Default: no limit. Each walk is then bounded by the programs within N crossings, not by the corpus |
 | `--skip-readbacks` | do not walk into a `LINK`ed program for bytes it may have written back. Those bytes give `readback-skipped` |
 
+Programs are linked one call group at a time, so memory follows the largest group, not the
+corpus. A group is the programs joined by any call that could link them: a literal or locally
+resolved target in `jumps.jsonl`, any program candidate in the fixpoint's `targets.jsonl`
+whatever its reasons, or a `RETURN TRANSID`/`START` transaction the CSD maps to a program. Each
+group's rows are appended as it finishes. A link that linking discovers into another group is
+a warning naming the caller, node and callee, and the report counts them: that callee's group
+was linked without this caller.
+
 Lets values cross programs, in rounds, until the set of links stops growing. Where a target
 field lies inside the bytes handed over on a link, those bytes hold the callee's name. A target
 with a computed subscript keeps the fixpoint's own candidates. A missing config, `members/`

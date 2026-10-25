@@ -37,7 +37,7 @@ def _row(callee_extent: str) -> LinkRow:
 
 
 def _written(tmp_path: Path, *edges: Edge) -> list[LinkRow]:
-    write_outputs(tmp_path, Linked(targets=(), edges=edges, report=RunReport()))
+    write_outputs(tmp_path, (Linked(targets=(), edges=edges, report=RunReport()),))
     return link_rows(tmp_path / "links.jsonl")
 
 

@@ -1,5 +1,6 @@
 """The return-to-caller idiom, compiled by the real bridge, linked end to end."""
 
+import logging
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
@@ -320,3 +321,65 @@ def test_the_query_command_reads_links_in_place_of_aliases(
         + "  hop 1  depth 1  PROGA.DFHCOMMAREA  DFHCOMMAREA@linkage[0:20]"
         + "  via PROGB:MAIN-PARA/1\n\n"
     )
+
+
+PROGX = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROGX.
+       DATA DIVISION.
+       LINKAGE SECTION.
+       01  DFHCOMMAREA          PIC X(20).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           EXEC CICS RETURN END-EXEC.
+"""
+
+
+def test_a_link_combine_discovers_into_another_group_is_warned_and_counted(
+    fixpoint_corpus: Callable[[Mapping[str, str]], Path],
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """PROGB's own walk names only PROGM, so PROGX starts in a group of its own;
+    combine then finds PROGA handing PROGB the name PROGX."""
+    out = fixpoint_corpus(
+        {
+            "PROGA": PROGA.replace("'PROGA' TO WS-FROM", "'PROGX' TO WS-FROM"),
+            "PROGB": PROGB,
+            "PROGX": PROGX,
+        }
+    )
+    config = tmp_path / "corpus.toml"
+    config.write_text(CONFIG.format(asg=out.parent / "parsed"), encoding="utf-8")
+    caplog.set_level(logging.INFO)
+
+    code = cli(
+        [
+            "--config",
+            str(config),
+            "--fixpoint-dir",
+            str(out),
+            "--out-dir",
+            str(tmp_path / "combined"),
+            "--all",
+        ]
+    )
+
+    messages = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name.startswith("cobble.dataflow.combine.cli")
+    ]
+    assert code == 0
+    assert [m for m in messages if "group" in m] == [
+        "combine: 2 call groups, the largest 2 programs",
+        "combine: !! PROGB MAIN-PARA/1 links to PROGX, outside its call group",
+        "combine: links that crossed call groups: 1",
+    ]
+    assert [
+        (row.caller, row.callee, row.discovered)
+        for row in link_rows(tmp_path / "combined" / "links.jsonl")
+    ] == [
+        ("PROGA", "PROGB", False),
+        ("PROGB", "PROGX", True),
+    ]

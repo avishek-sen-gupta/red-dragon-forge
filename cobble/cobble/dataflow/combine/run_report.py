@@ -9,3 +9,4 @@ class RunReport:
     discovered: int = 0
     unresolved_outside_jumps: int = 0
     without_results: tuple[str, ...] = ()
+    crossed: int = 0

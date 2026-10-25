@@ -4,13 +4,15 @@ import argparse
 import logging
 import sys
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import replace
 from pathlib import Path
 
 from cics.csd_parse import parse_csd
 from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import CorpusConfig, load_corpus_config
 from cobble.dataflow.combine.asg_callee_areas import AsgCalleeAreas
+from cobble.dataflow.combine.call_groups import call_groups
 from cobble.dataflow.combine.link import UNLIMITED_HOPS, link
 from cobble.dataflow.combine.linked import Linked
 from cobble.dataflow.combine.load import load_tables
@@ -105,12 +107,15 @@ def _inside(
     return wanted & present, tuple(sorted(wanted - present))
 
 
-def _report(report: RunReport, every: bool) -> None:
+def _report(reports: Sequence[RunReport], every: bool) -> None:
+    report = _summed(reports)
     _LOG.info(
         "combine: %d rounds, %d discovered edges",
         report.rounds,
         report.discovered,
     )
+    if report.crossed:
+        _LOG.info("combine: links that crossed call groups: %d", report.crossed)
     if every:
         return
     _LOG.info(
@@ -118,6 +123,18 @@ def _report(report: RunReport, every: bool) -> None:
         "%d outside programs without results",
         report.unresolved_outside_jumps,
         len(report.without_results),
+    )
+
+
+def _summed(reports: Sequence[RunReport]) -> RunReport:
+    """Rounds are the most any group took; the outside is the same for every
+    group, since it is computed once over the whole selection."""
+    first = reports[0] if reports else RunReport()
+    return replace(
+        first,
+        rounds=max((r.rounds for r in reports), default=0),
+        discovered=sum(r.discovered for r in reports),
+        crossed=sum(r.crossed for r in reports),
     )
 
 
@@ -160,32 +177,77 @@ def _load_all(
     return tables
 
 
-def _link_and_write(
+def _crossings(linked: Linked, group: frozenset[str], inside: frozenset[str]) -> int:
+    """Links into a program of another group: an edge the grouping missed, whose
+    callee's own group was linked without this caller."""
+    crossing = sorted(
+        {
+            (edge.caller, edge.node, edge.callee)
+            for edge in linked.edges
+            if edge.callee in inside and edge.callee not in group
+        }
+    )
+    tuple(
+        _LOG.warning(
+            "combine: !! %s %s links to %s, outside its call group",
+            caller,
+            node,
+            callee,
+        )
+        for caller, node, callee in crossing
+    )
+    return len(crossing)
+
+
+def _linked_group(
     arguments: argparse.Namespace,
     config: CorpusConfig,
-    tables: Mapping[str, ProgramTables],
+    group: frozenset[str],
     transactions: Mapping[str, str],
-    inside: frozenset[str],
+    outside: OutsideJumps,
 ) -> Linked:
     started = time.monotonic()
+    tables = _load_all(arguments.fixpoint_dir, group)
     linked = link(
         tables,
         TableCalleeAreas(tables, AsgCalleeAreas(config.asg_dir)),
         transactions,
-        _outside(arguments, config, inside, transactions),
+        outside,
         MemoResolve(tables, step),
         arguments.max_hops,
         not arguments.skip_readbacks,
     )
-    _PROGRESS.info("combine: linked in %.1fs", time.monotonic() - started)
-    write_outputs(arguments.out_dir, linked)
     _PROGRESS.info(
-        "combine: wrote %d targets, %d edges to %s",
+        "combine: linked %d programs in %.1fs: %d targets, %d edges",
+        len(group),
+        time.monotonic() - started,
         len(linked.targets),
         len(linked.edges),
-        arguments.out_dir,
     )
     return linked
+
+
+def _linked_groups(
+    arguments: argparse.Namespace,
+    config: CorpusConfig,
+    inside: frozenset[str],
+    transactions: Mapping[str, str],
+) -> Iterator[Linked]:
+    groups = call_groups(arguments.fixpoint_dir, inside, transactions)
+    _PROGRESS.info(
+        "combine: %d call groups, the largest %d programs",
+        len(groups),
+        max(map(len, groups), default=0),
+    )
+    outside = _outside(arguments, config, inside, transactions)
+    return (
+        replace(
+            linked,
+            report=replace(linked.report, crossed=_crossings(linked, group, inside)),
+        )
+        for group in groups
+        for linked in (_linked_group(arguments, config, group, transactions, outside),)
+    )
 
 
 def _combine(
@@ -193,9 +255,11 @@ def _combine(
 ) -> None:
     transactions = _transactions(config.csd_files)
     _PROGRESS.info("combine: %d transactions from CSD", len(transactions))
-    tables = _load_all(arguments.fixpoint_dir, inside)
-    linked = _link_and_write(arguments, config, tables, transactions, inside)
-    _report(linked.report, arguments.all)
+    reports = write_outputs(
+        arguments.out_dir, _linked_groups(arguments, config, inside, transactions)
+    )
+    _PROGRESS.info("combine: wrote %s", arguments.out_dir)
+    _report(reports, arguments.all)
 
 
 def _unusable(arguments: argparse.Namespace, config: CorpusConfig) -> Sequence[str]:
