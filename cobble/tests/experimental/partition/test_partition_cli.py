@@ -1,4 +1,4 @@
-"""The three commands chained over files: traces and extents in, graph, clusters, report and page out."""
+"""The three commands chained over files: a fixpoint out-dir and extents in, graph, clusters, report and page out."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from typing import TypedDict
 
 import pytest
 
+from cobble.dataflow.fixpoint.member_counts import MemberCounts
 from cobble.experimental.partition import clusters_cli, graph_cli, render_cli
 from cobble.experimental.partition.extent_row import ExtentRow
 from cobble.experimental.partition.link_row import LinkRow
@@ -21,20 +22,6 @@ class _Range(TypedDict):
     start: int
     end: int
     clamped: bool
-
-
-class _Dep(TypedDict):
-    kind: str
-    program: str
-    via: str
-    target: _Range | None
-    origin: str
-    literal: str
-    sink: str
-    source: _Range | None
-    source_program: str
-    site: str
-    definers: list[str]
 
 
 def _extent(program: str, path: tuple[str, ...], span: str) -> str:
@@ -54,24 +41,71 @@ def _range(field: str, start: int, end: int) -> _Range:
     )
 
 
-def _dep(
-    site: str, target: _Range | None, source: _Range | None, sink: str = ""
-) -> str:
-    return json.dumps(
-        _Dep(
-            kind="dep",
-            program="P",
-            via="",
-            target=target,
-            origin="" if source else "LITERAL",
-            literal="" if source else "'Y'",
-            sink=sink,
-            source=source,
-            source_program="P",
-            site=site,
-            definers=[],
-        )
+def _text(found: _Range) -> str:
+    return f"{found['field']}@{found['region']}[{found['start']}:{found['end']}]"
+
+
+def _flow(
+    program: str,
+    node: str,
+    target: _Range,
+    source: _Range | None,
+    origin: str = "",
+    literal: str = "",
+) -> tuple[str, str]:
+    return (
+        program,
+        json.dumps(
+            {
+                "type": "edge",
+                "source": f"{program}.SRC",
+                "source_kind": "FIELD",
+                "target": f"{program}.{target['field']}",
+                "target_kind": "FIELD",
+                "kind": "FLOWS_TO",
+                "attrs": {
+                    "node": node,
+                    "source_extent": _text(source) if source else "",
+                    "target_extent": _text(target),
+                    "origin": origin,
+                    "literal": literal,
+                },
+            }
+        ),
     )
+
+
+def _sink(program: str, node: str, source: _Range, sink: str) -> tuple[str, str]:
+    return (
+        program,
+        json.dumps(
+            {
+                "program": program,
+                "node": node,
+                "sink": sink,
+                "source_extent": _text(source),
+                "definers": [],
+            }
+        ),
+    )
+
+
+def _fixpoint(
+    root: Path, flows: Sequence[tuple[str, str]], sinks: Sequence[tuple[str, str]]
+) -> Path:
+    """A fixpoint out-dir with one member per program named, holding these rows."""
+    programs = sorted({program for program, _ in (*flows, *sinks)})
+    for program in programs:
+        member = root / "members" / program
+        member.mkdir(parents=True)
+        _jsonl(member / "graph.jsonl", [row for p, row in flows if p == program])
+        _jsonl(member / "sinks.jsonl", [row for p, row in sinks if p == program])
+        _jsonl(member / "defs.jsonl", [])
+        (member / "counts.json").write_text(
+            MemberCounts(member=program, program=program).model_dump_json(),
+            encoding="utf-8",
+        )
+    return root
 
 
 class _Placed(TypedDict):
@@ -118,7 +152,7 @@ def _jsonl(path: Path, lines: Sequence[str]) -> Path:
     return path
 
 
-def test_the_commands_turn_traces_into_a_graph_clusters_a_report_and_a_page(
+def test_the_commands_turn_a_fixpoint_out_dir_into_a_graph_clusters_a_report_and_a_page(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     extents = _jsonl(
@@ -134,17 +168,13 @@ def test_the_commands_turn_traces_into_a_graph_clusters_a_report_and_a_page(
             _extent("UNTRACED", ("REC",), "working_storage[0:8]"),
         ],
     )
-    traces = tmp_path / "traces"
-    traces.mkdir()
-    _jsonl(
-        traces / "P.jsonl",
+    fixpoint = _fixpoint(
+        tmp_path / "fixpoint",
         [
-            _dep("P/1", _range("OUT", 8, 16), _range("IN", 0, 8)),
-            _dep("P/2", _range("A", 0, 4), None),
-            _dep("P/3", None, _range("OUT", 8, 16), sink="FILE:F"),
-            _dep("P/1", _range("OUT", 8, 16), _range("IN", 0, 8)),
-            json.dumps({"kind": "coverage", "taken": 1, "total": 1}),
+            _flow("P", "1", _range("OUT", 8, 16), _range("IN", 0, 8)),
+            _flow("P", "2", _range("A", 0, 4), None, origin="LITERAL", literal="'Y'"),
         ],
+        [_sink("P", "3", _range("OUT", 8, 16), "FILE:F")],
     )
     links = _jsonl(
         tmp_path / "links.jsonl",
@@ -168,8 +198,8 @@ def test_the_commands_turn_traces_into_a_graph_clusters_a_report_and_a_page(
                 [
                     "--extents",
                     str(extents),
-                    "--traces",
-                    str(traces),
+                    "--fixpoint",
+                    str(fixpoint),
                     "--links",
                     str(links),
                     "--out",
@@ -286,26 +316,6 @@ def test_the_commands_turn_traces_into_a_graph_clusters_a_report_and_a_page(
     ]
 
 
-def _file_dep(
-    program: str, site: str, record: _Range, terminal: str, *, writes: bool
-) -> str:
-    return json.dumps(
-        _Dep(
-            kind="dep",
-            program=program,
-            via="",
-            target=None if writes else record,
-            origin="" if writes else terminal,
-            literal="",
-            sink=terminal if writes else "",
-            source=record if writes else None,
-            source_program=program,
-            site=f"{program}/{site}",
-            definers=[],
-        )
-    )
-
-
 def _kg_edge(
     source: tuple[str, str], kind: str, target: tuple[str, str], **attrs: str
 ) -> str:
@@ -335,18 +345,13 @@ def _dataset_inputs(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
             _extent("R", ("RCICS",), "working_storage[8:16]"),
         ],
     )
-    traces = tmp_path / "traces"
-    traces.mkdir()
-    _jsonl(
-        traces / "P.jsonl",
-        [_file_dep("P", "3", _range("OUT", 8, 16), "FILE:OUT-FILE", writes=True)],
-    )
-    _jsonl(
-        traces / "R.jsonl",
+    fixpoint = _fixpoint(
+        tmp_path / "fixpoint",
         [
-            _file_dep("R", "1", _range("RIN", 0, 8), "FILE:IN-FILE", writes=False),
-            _file_dep("R", "9", _range("RCICS", 8, 16), "FILE:LIT-ACCT", writes=False),
+            _flow("R", "1", _range("RIN", 0, 8), None, origin="FILE:IN-FILE"),
+            _flow("R", "9", _range("RCICS", 8, 16), None, origin="FILE:LIT-ACCT"),
         ],
+        [_sink("P", "3", _range("OUT", 8, 16), "FILE:OUT-FILE")],
     )
     graph = _jsonl(
         tmp_path / "knowledge-graph.jsonl",
@@ -380,7 +385,7 @@ def _dataset_inputs(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
             )
         ],
     )
-    return extents, traces, graph, targets
+    return extents, fixpoint, graph, targets
 
 
 def _graph(arguments: Sequence[str], out: Path) -> list[dict[str, dict[str, str]]]:
@@ -408,8 +413,8 @@ def _dataset_view(
 def test_without_a_knowledge_graph_the_graph_has_no_dataset_links(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    extents, traces, _, targets = _dataset_inputs(tmp_path)
-    base = ["--extents", str(extents), "--traces", str(traces)]
+    extents, fixpoint, _, targets = _dataset_inputs(tmp_path)
+    base = ["--extents", str(extents), "--fixpoint", str(fixpoint)]
 
     with caplog.at_level(logging.INFO):
         plain = _graph(base, tmp_path / "plain.jsonl")
@@ -433,12 +438,12 @@ def test_without_a_knowledge_graph_the_graph_has_no_dataset_links(
 def test_with_a_knowledge_graph_file_sites_become_dataset_links(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    extents, traces, graph, targets = _dataset_inputs(tmp_path)
+    extents, fixpoint, graph, targets = _dataset_inputs(tmp_path)
     base = [
         "--extents",
         str(extents),
-        "--traces",
-        str(traces),
+        "--fixpoint",
+        str(fixpoint),
         "--knowledge-graph",
         str(graph),
     ]

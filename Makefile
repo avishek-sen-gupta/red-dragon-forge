@@ -95,8 +95,7 @@ COBBLE = cd cobble && uv run --no-sync
 partition-traces: jar
 	$(BRIDGE_ENV) && $(COBBLE) cobble-parse-corpus --config $(PARTITION_CONFIG)
 	$(COBBLE) cobble-extents --asg-dir $(PARTITION_ASG) --out $(PARTITION_DIR)/extents.jsonl
-	$(COBBLE) cobble-dataflow-area-need --asg-dir $(PARTITION_ASG) --extents $(PARTITION_DIR)/extents.jsonl --config $(PARTITION_CONFIG) --out $(PARTITION_DIR)/area-need.jsonl
-	$(COBBLE) cobble-dataflow-fixpoint --asg-dir $(PARTITION_ASG) --extents $(PARTITION_DIR)/extents.jsonl --out-dir $(PARTITION_DIR)/fixpoint --call-targets-only --narrow-areas $(PARTITION_DIR)/area-need.jsonl --all
+	$(COBBLE) cobble-dataflow-fixpoint --asg-dir $(PARTITION_ASG) --extents $(PARTITION_DIR)/extents.jsonl --out-dir $(PARTITION_DIR)/fixpoint --all
 	$(COBBLE) cobble-dataflow-combine --config $(PARTITION_CONFIG) --fixpoint-dir $(PARTITION_DIR)/fixpoint --out-dir $(PARTITION_DIR)/combine --all --max-hops 5
 	mkdir -p cobble/$(PARTITION_DIR)/traces
 	cd cobble && for member in $(PARTITION_ASG)/*.json; do \
@@ -106,7 +105,7 @@ partition-traces: jar
 
 partition-graph: partition-traces
 	$(BRIDGE_ENV) && $(COBBLE) cobble-build --config $(PARTITION_CONFIG) --output $(PARTITION_DIR)/knowledge-graph.jsonl --dynamic-call-targets $(PARTITION_DIR)/combine/targets.jsonl
-	$(COBBLE) cobble-experimental-partition-graph --extents $(PARTITION_DIR)/extents.jsonl --traces $(PARTITION_DIR)/traces --links $(PARTITION_DIR)/combine/links.jsonl --knowledge-graph $(PARTITION_DIR)/knowledge-graph.jsonl --targets $(PARTITION_DIR)/combine/targets.jsonl --barrier $(PARTITION_BARRIER) --fanout-limit $(PARTITION_FANOUT) --out $(PARTITION_DIR)/graph.jsonl
+	$(COBBLE) cobble-experimental-partition-graph --extents $(PARTITION_DIR)/extents.jsonl --fixpoint $(PARTITION_DIR)/fixpoint --links $(PARTITION_DIR)/combine/links.jsonl --knowledge-graph $(PARTITION_DIR)/knowledge-graph.jsonl --targets $(PARTITION_DIR)/combine/targets.jsonl --barrier $(PARTITION_BARRIER) --fanout-limit $(PARTITION_FANOUT) --out $(PARTITION_DIR)/graph.jsonl
 
 partition-clusters: partition-graph
 	$(COBBLE) cobble-experimental-partition-clusters --graph $(PARTITION_DIR)/graph.jsonl --out $(PARTITION_DIR)/clusters.jsonl --report $(PARTITION_DIR)/clusters.md

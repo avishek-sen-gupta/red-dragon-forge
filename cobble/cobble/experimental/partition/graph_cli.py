@@ -9,7 +9,7 @@ from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
 from cobble.dataflow.fields.dep_row import DepRow
-from cobble.dataflow.fields.trace_query import load
+from cobble.dataflow.fixpoint.provenance import provenance
 from cobble.dataflow.fixpoint.target_site import TargetSite
 from cobble.experimental.partition.barrier_kind import BarrierKind
 from cobble.experimental.partition.certainty import Certainty
@@ -24,7 +24,7 @@ from cobble.experimental.partition.leaf_index import LeafIndex, leaf_index
 from cobble.experimental.partition.link_row import LinkRow
 from cobble.experimental.partition.node_kind import NodeKind
 from cobble.experimental.partition.progress import counted
-from cobble.experimental.partition.tally import GRAPH, Tally, tenths
+from cobble.experimental.partition.tally import GRAPH, tenths
 
 logger = logging.getLogger(__name__)
 
@@ -41,16 +41,16 @@ def _lines(path: Path) -> tuple[str, ...]:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="cobble-experimental-partition-graph",
-        description="Experimental: the field graph of every cobble-fields-trace output in a directory.",
+        description="Experimental: the field graph of a cobble-dataflow-fixpoint out-dir's byte provenance.",
     )
     parser.add_argument(
         "--extents", type=Path, required=True, help="extents.jsonl from cobble-extents"
     )
     parser.add_argument(
-        "--traces",
+        "--fixpoint",
         type=Path,
         required=True,
-        help="a directory of cobble-fields-trace JSONL files",
+        help="the out-dir cobble-dataflow-fixpoint wrote",
     )
     parser.add_argument(
         "--links",
@@ -88,12 +88,9 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _deps(traces: Sequence[Path]) -> tuple[DepRow, ...]:
-    return tuple(
-        dep
-        for trace in counted(traces, Tally(GRAPH, "traces read"), len(traces))
-        for dep in load(trace)
-    )
+def _deps(fixpoint: Path) -> tuple[DepRow, ...]:
+    logger.info("partition graph: reading provenance from %s", fixpoint)
+    return tuple(provenance(fixpoint))
 
 
 def _links(path: Path) -> tuple[LinkRow, ...]:
@@ -206,14 +203,12 @@ def _built(arguments: argparse.Namespace, deps: Sequence[DepRow]) -> FieldGraph:
 def main(argv: Sequence[str] = ()) -> int:
     configure_cli_logging()
     arguments = _parser().parse_args(tuple(argv) if argv else None)
-    traces = tuple(sorted(arguments.traces.glob("*.jsonl")))
-    deps = _deps(traces)
+    deps = _deps(arguments.fixpoint)
     graph = _built(arguments, deps)
     logger.info("partition graph: writing %s", arguments.out)
     write_graph(arguments.out, graph)
     logger.info(
-        "partition graph: %d traces, %d dep rows -> %d nodes, %d edges (%d blocked by %s) in %s",
-        len(traces),
+        "partition graph: %d dep rows -> %d nodes, %d edges (%d blocked by %s) in %s",
         len(deps),
         len(graph.nodes),
         len(graph.edges),

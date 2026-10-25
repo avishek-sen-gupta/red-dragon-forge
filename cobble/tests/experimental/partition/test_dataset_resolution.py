@@ -188,12 +188,13 @@ def test_a_site_with_no_binding_is_unresolved_not_dropped() -> None:
     )
 
 
-def test_a_call_site_s_write_back_and_a_write_with_no_source_are_not_file_sites() -> (
-    None
-):
+def test_a_call_s_write_back_and_a_write_with_no_source_are_not_file_sites() -> None:
+    """The fixpoint credits what a call hands back to a %CALL: origin, not to a
+    file, so the caller's write-back is told apart from the callee's file read by
+    its origin alone."""
     callee = DepRow(
         program="K",
-        via="C/CALL/0",
+        via="",
         target=_record("K"),
         origin="FILE:X",
         source=NO_RANGE,
@@ -205,7 +206,7 @@ def test_a_call_site_s_write_back_and_a_write_with_no_source_are_not_file_sites(
         program="C",
         via="",
         target=_record("C"),
-        origin="FILE:X",
+        origin="%CALL:K",
         source=NO_RANGE,
         site="C/CALL/0",
         definers=(),

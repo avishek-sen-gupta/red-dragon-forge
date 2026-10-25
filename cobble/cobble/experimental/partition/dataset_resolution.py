@@ -49,12 +49,7 @@ def _uses(dep: DepRow) -> tuple[FileSite, ...]:
 
 
 def file_sites(deps: Sequence[DepRow]) -> tuple[FileSite, ...]:
-    crossings = frozenset(dep.via for dep in deps if dep.via)
-    return tuple(
-        dict.fromkeys(
-            site for dep in deps if dep.site not in crossings for site in _uses(dep)
-        )
-    )
+    return tuple(dict.fromkeys(site for dep in deps for site in _uses(dep)))
 
 
 def _certainty(reasons: tuple[str, ...]) -> Certainty:

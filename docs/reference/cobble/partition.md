@@ -16,7 +16,7 @@ From the forge root. Each target runs the one before it.
 
 | Target | Does |
 |---|---|
-| `partition-traces` | `cobble-parse-corpus`, `cobble-extents`, `cobble-dataflow-area-need`, `cobble-dataflow-fixpoint --call-targets-only`, `cobble-dataflow-combine --max-hops 5`, then one `cobble-fields-trace` per member |
+| `partition-traces` | `cobble-parse-corpus`, `cobble-extents`, `cobble-dataflow-fixpoint --all` (whole scope), `cobble-dataflow-combine --max-hops 5`, then one `cobble-fields-trace` per member |
 | `partition-graph` | `cobble-build` (the knowledge graph), then `cobble-experimental-partition-graph` |
 | `partition-clusters` | `cobble-experimental-partition-clusters` |
 | `partition-render` | `cobble-experimental-partition-render` |
@@ -37,7 +37,7 @@ never read. `PARTITION_DIR` then holds `extents.jsonl`, `area-need.jsonl`, `fixp
 ## cobble-experimental-partition-graph
 
 ```
-cobble-experimental-partition-graph --extents EXTENTS --traces DIR --out OUT
+cobble-experimental-partition-graph --extents EXTENTS --fixpoint DIR --out OUT
     [--links LINKS] [--knowledge-graph GRAPH] [--targets TARGETS]
     [--barrier {none,fanout}] [--fanout-limit N]
 ```
@@ -45,16 +45,16 @@ cobble-experimental-partition-graph --extents EXTENTS --traces DIR --out OUT
 | Flag | Meaning |
 |---|---|
 | `--extents` | the table `cobble-extents` wrote |
-| `--traces` | a directory of `cobble-fields-trace` outputs; every `*.jsonl` in it is read |
-| `--links` | `links.jsonl` from `cobble-dataflow-combine`. Without it, programs join only where a trace entered a callee |
-| `--knowledge-graph` | the graph `cobble-build` wrote. Without it there are no dataset links and the graph is the one the traces and links alone give |
+| `--fixpoint` | the out-dir `cobble-dataflow-fixpoint` wrote; each finished member's `FLOWS_TO` edges, reaching definitions and sinks are read one member at a time |
+| `--links` | `links.jsonl` from `cobble-dataflow-combine`. Without it, no edge crosses a program |
+| `--knowledge-graph` | the graph `cobble-build` wrote. Without it there are no dataset links and the graph is the one the fixpoint's provenance and the links alone give |
 | `--targets` | `targets.jsonl` from `cobble-dataflow-combine`, for the CICS file names. Without it batch sites still link and every CICS file site is unresolved |
 | `--barrier`, `--fanout-limit` | which crossings clustering does not cross (default `fanout`, 8) |
 | `--out` | the graph JSONL |
 
-It reads only the extents rows of the programs the dep rows and links name, streaming the file and
-logging how many rows it kept, so tracing a few programs of a large corpus indexes only those. It
-logs a progress line every 1000 trace files, dep rows and links it works through, and one when each
+It reads only the extents rows of the programs the provenance rows and links name, streaming the
+file and logging how many rows it kept. It logs each fixpoint member it reads, and a progress line
+every 1000 dep rows and links it works through, and one when each
 run over them is done; with a knowledge graph, it also logs the dataset sites by certainty and the slots and
 dataset edges added.
 
@@ -97,7 +97,7 @@ edge as `{"edge": {...}}`.
 
 ### Dataset links
 
-With `--knowledge-graph`, every file statement the traces witnessed is resolved to the dataset it
+With `--knowledge-graph`, every file statement the fixpoint's provenance names is resolved to the dataset it
 reads or writes, and writers and readers of one dataset are linked through it.
 
 | Site | Resolved through |
@@ -197,11 +197,12 @@ can be pointed at any rendered page.
 
 ## Limits
 
-- The trace samples paths, so a flow no sampled path took has no edge.
-- The trace enters a callee named by a variable (`XCTL PROGRAM(CDEMO-TO-PROGRAM)`) only when
-  `cobble-fields-trace` is given `--dynamic-call-targets`, as `make partition-traces` does; a site
-  the targets do not name is a `dynamic-target` dead end. `--links` still joins programs through
-  the combine's windows, which is not tied to any sampled path.
+- The fixpoint merges paths: a move whose subscript takes several values reaches every candidate
+  occurrence and has no single placement, so it joins nothing in unify.
+- A fixpoint run capped with `--sweeps` that did not settle (its report says "NOT SETTLED") gives a
+  subset of the flows; nothing is invented, some may be missing.
+- Programs join only through combine's `links.jsonl` windows and dataset slots; the fixpoint's own
+  rows never cross a program.
 - A `RETURN TRANSID` hop to the next task has no edge.
 - A CICS file sink is named by the field holding the file name (`FILE:LIT-CUSTFILENAME`), so a
   writer and a reader of one file are not matched.
