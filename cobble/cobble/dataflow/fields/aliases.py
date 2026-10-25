@@ -28,7 +28,6 @@ from functools import cache
 from pathlib import Path
 
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
-from cobble.dataflow.fields.call_targets import CallTargets
 from cobble.dataflow.fields.extent import CellIndex, cell_index
 from cobble.dataflow.fields.extent_text import extent_text
 from cobble.dataflow.fields.side_tables import CommareaAlias
@@ -109,30 +108,22 @@ _REFUSALS = (
 
 
 def commarea_aliases(
-    asg: CobolASG, index: CellIndex, asg_dir: Path, targets: CallTargets
+    asg: CobolASG, index: CellIndex, asg_dir: Path
 ) -> tuple[CommareaAlias, ...]:
     """Every ``LINK``/``XCTL``/``CALL`` site in ``asg``, aliased or refused.
 
     ``index`` is the caller's own layout, already built by the walk that calls
     this; the CFG is rebuilt here because the fixpoint returns only its flow and
     that index, and widening its result for a pass that shares none of its work
-    would couple the two for no reason. A site whose target is a field is aliased
-    once per program ``targets`` names for it, and stays a dead end without any.
+    would couple the two for no reason. A site whose target is a field is a dead
+    end.
     """
     cfg = program_cfg(asg)
     return tuple(
         row
         for site in call_sites(cfg)
-        for one in _candidate_sites(site, targets)
-        for row in _site_rows(one, cfg.node(one.node).using, index, asg_dir)
+        for row in _site_rows(site, cfg.node(site.node).using, index, asg_dir)
     )
-
-
-def _candidate_sites(site: CallSite, targets: CallTargets) -> tuple[CallSite, ...]:
-    candidates = () if site.resolved else targets.of(site.caller, site.node)
-    return tuple(
-        replace(site, program=program, resolved=True) for program in candidates
-    ) or (site,)
 
 
 def _site_rows(

@@ -6,7 +6,6 @@ export COBBLE_DEMO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COBBLE="$(cd "$COBBLE_DEMO/../.." && pwd)"
 OUT="$COBBLE_DEMO/output"
 SRCCFG_PROGRAM="${SRCCFG_PROGRAM:-COSGN00C}"
-TRACE_PROGRAM="${TRACE_PROGRAM:-CBACT01C}"
 
 cd "$COBBLE"
 . ../bridge-env.sh
@@ -36,8 +35,3 @@ run cobble-srccfg-build "$SRCCFG_PROGRAM" --config "$COBBLE_DEMO/srccfg.toml" \
   --output "$OUT/srccfg/$SRCCFG_PROGRAM-closure.jsonl"
 run cobble-srccfg-webgl --cfg "$OUT/srccfg/$SRCCFG_PROGRAM-closure.jsonl" \
   --output "$OUT/srccfg/$SRCCFG_PROGRAM-closure.html"
-
-mkdir -p "$OUT/trace"
-run cobble-fields-trace "$TRACE_PROGRAM" --asg-dir "$OUT/parsed" \
-  --out "$OUT/trace/$TRACE_PROGRAM-trace.jsonl" \
-  --record-paths "$OUT/trace/$TRACE_PROGRAM-paths.jsonl" --force

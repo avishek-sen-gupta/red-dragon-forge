@@ -16,7 +16,7 @@ From the forge root. Each target runs the one before it.
 
 | Target | Does |
 |---|---|
-| `partition-traces` | `cobble-parse-corpus`, `cobble-extents`, `cobble-dataflow-fixpoint --all` (whole scope), `cobble-dataflow-combine --max-hops 5`, then one `cobble-fields-trace` per member |
+| `partition-traces` | `cobble-parse-corpus`, `cobble-extents`, `cobble-dataflow-fixpoint --all --sweeps $(PARTITION_SWEEPS)`, `cobble-dataflow-combine --max-hops 5` |
 | `partition-graph` | `cobble-build` (the knowledge graph), then `cobble-experimental-partition-graph` |
 | `partition-clusters` | `cobble-experimental-partition-clusters` |
 | `partition-render` | `cobble-experimental-partition-render` |
@@ -26,12 +26,12 @@ From the forge root. Each target runs the one before it.
 | `PARTITION_CONFIG` | `config/carddemo-partition.toml` | the corpus config, relative to `cobble/` |
 | `PARTITION_ASG` | `out-partition/asg` | the `asg_dir` that config names |
 | `PARTITION_DIR` | `out-partition` | where every artefact goes |
-| `PARTITION_PATHS` | `3000` | `--paths` for each trace |
+| `PARTITION_SWEEPS` | none; required | `--sweeps` for the fixpoint |
 | `PARTITION_BARRIER`, `PARTITION_FANOUT` | `fanout`, `8` | the barrier, below |
 
 The CardDemo config parses into its own cache, so a cache written before a bridge change is
 never read. `PARTITION_DIR` then holds `extents.jsonl`, `fixpoint/`,
-`combine/`, `traces/`, `knowledge-graph.jsonl`, `graph.jsonl`, `clusters.jsonl`, `clusters.md` and
+`combine/`, `knowledge-graph.jsonl`, `graph.jsonl`, `clusters.jsonl`, `clusters.md` and
 `partition.html`.
 
 ## cobble-experimental-partition-graph

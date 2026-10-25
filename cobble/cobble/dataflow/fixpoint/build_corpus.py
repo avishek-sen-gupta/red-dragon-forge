@@ -110,7 +110,6 @@ from cobble.dataflow.fields.aliases import (
     UNREADABLE,
     commarea_aliases,
 )
-from cobble.dataflow.fields.call_targets import NO_CALL_TARGETS
 from cobble.dataflow.fields.emit import graph_records
 from cobble.dataflow.fields.emit_extents import worker_count
 from cobble.dataflow.fields.extent import CellIndex
@@ -324,7 +323,7 @@ def _alias_rows(
     site was reached to name.
     """
     try:
-        return commarea_aliases(asg, index, asg_dir, NO_CALL_TARGETS)
+        return commarea_aliases(asg, index, asg_dir)
     except Exception as error:  # noqa: BLE001 - an alias costs one row, never a table
         return (
             CommareaAlias(

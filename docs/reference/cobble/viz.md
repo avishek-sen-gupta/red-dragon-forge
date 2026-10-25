@@ -40,22 +40,6 @@ cobble-viz-render --input INPUT --mode {callgraph,top,program} --out OUT [--prog
 Program labels drop the longest uppercase prefix common to every program. The page loads vis.js
 or Mermaid from a CDN (forge-y0e).
 
-## cobble-viz-pathwalk
-
-```
-cobble-viz-pathwalk --cfg CFG --paths PATHS --output OUTPUT [--vars FIELD1,FIELD2] [--speed MS] [--pause MS]
-```
-
-Animates the paths `cobble-fields-trace --record-paths` wrote over the CFG's paragraphs.
-
-| Flag | Meaning |
-|---|---|
-| `--cfg` | the CFG file |
-| `--paths` | the path records |
-| `--vars` | comma-separated fields to show provenance strips for |
-| `--speed` | milliseconds per node step (default 50) |
-| `--pause` | milliseconds between paths (default 600) |
-
 ## cobble-bms-metadata
 
 ```

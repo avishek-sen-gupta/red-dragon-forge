@@ -10,7 +10,7 @@ byte-level field dataflow from that cache, without running any program.
   [knowledge graph](../docs/reference/cobble/knowledge-graph.md),
   [srccfg](../docs/reference/cobble/srccfg.md),
   [field dataflow](../docs/reference/cobble/field-dataflow.md),
-  [trace](../docs/reference/cobble/trace.md), [viz](../docs/reference/cobble/viz.md).
+  [viz](../docs/reference/cobble/viz.md).
 - Open work: [roadmap](../docs/roadmaps/cobble.md).
 
 MIT; see [LICENSE.md](LICENSE.md). The JCL and `EXEC CICS` grammars come from

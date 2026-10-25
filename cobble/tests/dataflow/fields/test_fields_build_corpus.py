@@ -941,7 +941,7 @@ def test_a_commarea_operand_naming_nothing_is_a_named_dead_end(corpus, capsys):
     )
 
 
-def _never_aliases(asg, index, asg_dir, targets):
+def _never_aliases(asg, index, asg_dir):
     raise RuntimeError("the pass itself")
 
 

@@ -235,8 +235,6 @@ fileignoreconfig:
   checksum: 063f59919983494fd7f687fb61dcff47f35af29de2f71016daccea5f0cf18feb
 - filename: docs/superpowers/plans/2026-09-28-pathwalk-animation.md
   checksum: 310b0f9b8534349c95e52e5a4dcc2b68a0b1192bbe66f799db862d1735bdb6c3
-- filename: cobble/tests/viz/test_pathwalk_viz.py
-  checksum: 5f4569c14aca97b037c0685ec58ddf13ee6477e844a23ef5e7c394e4a53b7aeb
 - filename: docs/superpowers/specs/2026-09-30-cobble-exec-sql-whenever-cfg-design.md
   checksum: 36a247961ed723b5f5f5fca4664047c5be67ae7e895be491517b0cf3ba2485fb
 - filename: docs/superpowers/specs/2026-10-01-cobble-single-graph-file-design.md

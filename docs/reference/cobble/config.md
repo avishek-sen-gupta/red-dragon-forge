@@ -38,12 +38,10 @@ full flag list with `--help`.
 | `cobble-access-query` | access rows, extents | [field-dataflow](field-dataflow.md) |
 | `cobble-depgraph` | depgraph config | [field-dataflow](field-dataflow.md) |
 | `cobble-depgraph-render` | depgraph config | [field-dataflow](field-dataflow.md) |
-| `cobble-fields-trace` | ASG cache | [trace](trace.md) |
-| `cobble-trace-query` | trace file | [trace](trace.md) |
+| `cobble-trace-query` | fixpoint output | [field-dataflow](field-dataflow.md) |
 | `cobble-viz-callgraph` | graph file, CFG file | [viz](viz.md) |
 | `cobble-viz-sequence` | CFG file | [viz](viz.md) |
 | `cobble-viz-render` | viz JSON | [viz](viz.md) |
-| `cobble-viz-pathwalk` | CFG file, path records | [viz](viz.md) |
 | `cobble-bms-metadata` | corpus config `[bms]` | [viz](viz.md) |
 | `cobble-bms-render` | corpus config `[bms]` | [viz](viz.md) |
 | `cobble-experimental-partition-graph` | extents, traces, combine links | [partition](partition.md) (experimental) |

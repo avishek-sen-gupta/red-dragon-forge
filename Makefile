@@ -22,7 +22,7 @@ help:
 	@echo "make test      - root composition-layer suite (needs jar, Db2 DSN)"
 	@echo "make test-all  - jar once, then run every package's full suite (cicada, squall, catnip, litter, jackal, cobble, forge)"
 	@echo "make fmt       - black-format the codebase"
-	@echo "make partition-traces   - experimental: parse, extents, call targets and one path trace per member (PARTITION_CONFIG, PARTITION_ASG)"
+	@echo "make partition-traces   - experimental: parse, extents, the fixpoint capped at PARTITION_SWEEPS sweeps, and combine (PARTITION_CONFIG, PARTITION_ASG)"
 	@echo "make partition-graph    - experimental: the knowledge graph, then the field graph of those traces with dataset links (PARTITION_BARRIER, PARTITION_FANOUT)"
 	@echo "make partition-clusters - experimental: clusters of fields inside each program, and their report"
 	@echo "make partition-render   - experimental: the WebGL page of the graph"
@@ -87,21 +87,16 @@ fmt:
 PARTITION_CONFIG  ?= config/carddemo-partition.toml
 PARTITION_ASG     ?= out-partition/asg
 PARTITION_DIR     ?= out-partition
-PARTITION_PATHS   ?= 3000
 PARTITION_BARRIER ?= fanout
 PARTITION_FANOUT  ?= 8
 COBBLE = cd cobble && uv run --no-sync
 
 partition-traces: jar
+	$(if $(PARTITION_SWEEPS),,$(error set PARTITION_SWEEPS to the fixpoint's --sweeps))
 	$(BRIDGE_ENV) && $(COBBLE) cobble-parse-corpus --config $(PARTITION_CONFIG)
 	$(COBBLE) cobble-extents --asg-dir $(PARTITION_ASG) --out $(PARTITION_DIR)/extents.jsonl
-	$(COBBLE) cobble-dataflow-fixpoint --asg-dir $(PARTITION_ASG) --extents $(PARTITION_DIR)/extents.jsonl --out-dir $(PARTITION_DIR)/fixpoint --all
+	$(COBBLE) cobble-dataflow-fixpoint --asg-dir $(PARTITION_ASG) --extents $(PARTITION_DIR)/extents.jsonl --out-dir $(PARTITION_DIR)/fixpoint --all --sweeps $(PARTITION_SWEEPS)
 	$(COBBLE) cobble-dataflow-combine --config $(PARTITION_CONFIG) --fixpoint-dir $(PARTITION_DIR)/fixpoint --out-dir $(PARTITION_DIR)/combine --all --max-hops 5
-	mkdir -p cobble/$(PARTITION_DIR)/traces
-	cd cobble && for member in $(PARTITION_ASG)/*.json; do \
-	  name=$$(basename $$member .json); \
-	  uv run --no-sync cobble-fields-trace $$name --asg-dir $(PARTITION_ASG) --out $(PARTITION_DIR)/traces/$$name.jsonl --paths $(PARTITION_PATHS) --dynamic-call-targets $(PARTITION_DIR)/combine/targets.jsonl || exit 1; \
-	done
 
 partition-graph: partition-traces
 	$(BRIDGE_ENV) && $(COBBLE) cobble-build --config $(PARTITION_CONFIG) --output $(PARTITION_DIR)/knowledge-graph.jsonl --dynamic-call-targets $(PARTITION_DIR)/combine/targets.jsonl
