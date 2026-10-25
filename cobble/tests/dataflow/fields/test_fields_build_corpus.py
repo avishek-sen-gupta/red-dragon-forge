@@ -1412,6 +1412,26 @@ def test_force_analyses_every_member_again(corpus, caplog):
     assert _member_lines(caplog.messages) == ["MEMBERA", "MEMBERB", "MEMBERC"]
 
 
+def test_each_corpus_file_is_its_members_tables_in_member_order(corpus):
+    """Every row is program-qualified, so a row two members share can only be
+    planted; publishing keeps it twice rather than holding a corpus-wide memo."""
+    argv, out_dir = corpus(_three_members(), extra=("--min-coverage", "0.0"))
+    assert cli(argv) == 0
+    members = [out_dir / "members" / m for m in ("MEMBERA", "MEMBERB", "MEMBERC")]
+    planted = (members[0] / DEFS_FILE).read_text().splitlines()[0]
+    (members[1] / DEFS_FILE).write_text(
+        (members[1] / DEFS_FILE).read_text() + planted + "\n"
+    )
+    tables = (GRAPH_FILE, DEFS_FILE, SINKS_FILE, ALIASES_FILE, TARGETS_FILE, JUMPS_FILE)
+
+    assert cli(argv) == 0
+
+    assert {name: (out_dir / name).read_bytes() for name in tables} == {
+        name: b"".join((member / name).read_bytes() for member in members)
+        for name in tables
+    }
+
+
 def test_a_named_member_run_publishes_it_alone_and_keeps_the_rest(corpus):
     argv, out_dir = corpus(_three_members(), extra=("--min-coverage", "0.0"))
     assert cli(argv) == 0

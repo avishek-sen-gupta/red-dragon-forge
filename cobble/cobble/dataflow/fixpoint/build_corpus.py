@@ -86,9 +86,8 @@ import logging
 import shutil
 import sys
 import time
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
-from contextlib import AbstractContextManager
 from dataclasses import dataclass, replace
 from functools import reduce
 from itertools import (
@@ -101,6 +100,7 @@ from itertools import (
 from operator import itemgetter
 from pathlib import Path
 from types import MappingProxyType
+from typing import BinaryIO
 
 from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_index import CorpusIndex, FileLocationResolver
@@ -124,17 +124,12 @@ from cobble.dataflow.fields.side_tables import (
     JsonlWriter,
     ProgramSink,
     ReachingDefs,
-    alias_identity,
     alias_row,
-    defs_identity,
     defs_row,
     jsonl_writer,
-    sink_identity,
     sink_row,
-    target_identity,
     target_row,
 )
-from cobble.dataflow.fixpoint import rows
 from cobble.dataflow.fixpoint.fixpoint import NO_INDEX, ProgramFlow, analysed
 from cobble.dataflow.fixpoint.member_counts import MemberCounts
 from cobble.dataflow.fixpoint.options import ITERATION_FACTOR, AnalysisOptions
@@ -143,7 +138,6 @@ from cobble.dataflow.fixpoint.target_kind import TargetKind
 from cobble.dataflow.fixpoint.targets import ResolvedTarget
 from cobble.dataflow.jumps.jump import Jump
 from cobble.dataflow.jumps.rows import jump_identity, jump_row
-from cobble.knowledge_graph.graph_file import read_graph_rows
 from cobble.knowledge_graph.graph_types import GraphEdge, GraphNode
 from cobble.knowledge_graph.graph_writer import GraphWriter, graph_writer
 from cobble.parsing.asg_cache import first_program_at
@@ -559,67 +553,6 @@ class _Sinks:
         self.targets.add_rows(map(target_row, result.targets))
         self.jumps.add_rows((jump_identity(j), jump_row(j)) for j in result.jumps)
 
-    def add_member(self, directory: Path) -> None:
-        """One finished member's tables, replayed in the order they were written,
-        so the writers dedupe across members exactly as one uninterrupted run."""
-        tuple(map(self._add_graph_row, read_graph_rows(directory / GRAPH_FILE)))
-        self.defs.add_rows(_identified(directory / DEFS_FILE, _defs_identity))
-        self.sinks.add_rows(_identified(directory / SINKS_FILE, _sink_identity))
-        self.aliases.add_rows(_identified(directory / ALIASES_FILE, _alias_identity))
-        self.targets.add_rows(_identified(directory / TARGETS_FILE, _target_identity))
-        self.jumps.add_rows(_identified(directory / JUMPS_FILE, _jump_identity))
-
-    def _add_graph_row(self, row: GraphNode | GraphEdge) -> None:
-        if isinstance(row, GraphEdge):
-            self.graph.add_edge(row)
-            return
-        self.graph.add_node(row)
-
-
-def _defs_identity(row: Row) -> str:
-    return defs_identity(
-        rows.text(row, "program"), rows.text(row, "node"), rows.text(row, "extent")
-    )
-
-
-def _sink_identity(row: Row) -> str:
-    return sink_identity(
-        ProgramSink(
-            program=rows.text(row, "program"),
-            node=rows.text(row, "node"),
-            sink=rows.text(row, "sink"),
-            source_extent=rows.text(row, "source_extent"),
-            definers=(),
-        )
-    )
-
-
-def _alias_identity(row: Row) -> str:
-    return alias_identity(
-        rows.text(row, "caller"),
-        rows.text(row, "node"),
-        rows.text(row, "caller_extent"),
-    )
-
-
-def _target_identity(row: Row) -> str:
-    return target_identity(rows.text(row, "caller"), rows.text(row, "node"))
-
-
-def _jump_identity(row: Row) -> str:
-    return "\0".join(
-        (rows.text(row, "program"), rows.text(row, "node"), rows.text(row, "kind"))
-    )
-
-
-def _identified(
-    path: Path, identity: Callable[[Row], str]
-) -> tuple[tuple[str, str], ...]:
-    """Each line of a member's table under the identity its writer deduped it on;
-    the line itself is kept as written, so the corpus file is the same bytes."""
-    lines = path.read_text(encoding="utf-8").splitlines()
-    return tuple(zip(map(identity, rows.read(path)), lines, strict=True))
-
 
 def _walk_note(result: MemberCounts) -> str:
     """How the answer was reached, when that changes what it means."""
@@ -994,18 +927,6 @@ def _report(totals: RunTotals) -> None:
     sys.stdout.write("\n")
 
 
-def _writer(
-    arguments: argparse.Namespace, locations: CorpusIndex
-) -> AbstractContextManager[GraphWriter]:
-    return graph_writer(arguments.out_dir / GRAPH_FILE, locations)
-
-
-def _side_writer(
-    arguments: argparse.Namespace, name: str
-) -> AbstractContextManager[JsonlWriter]:
-    return jsonl_writer(arguments.out_dir / name)
-
-
 def _selected(asg_dir: Path, members: Sequence[str]) -> tuple[Path, ...]:
     """The named members' cache files, or every one the cache holds.
 
@@ -1071,10 +992,7 @@ def _analysed_run(paths: Sequence[Path], arguments: argparse.Namespace) -> int:
 
 
 def _members_run(paths: Sequence[Path], arguments: argparse.Namespace) -> int:
-    """One index for both halves: the nodes emit builds and the ones the writer
-    synthesises from an edge must carry the same location for the same id.
-
-    ``CorpusIndex()`` holds no mappings, which is honest -- this stage reads the
+    """``CorpusIndex()`` holds no mappings, which is honest -- this stage reads the
     ASG cache and never the corpus tree, so it has nothing to index. FIELD
     resolves NOT_INDEXED whatever the index holds; see corpus_index's table.
     """
@@ -1083,36 +1001,41 @@ def _members_run(paths: Sequence[Path], arguments: argparse.Namespace) -> int:
         max_workers=arguments.max_workers, initializer=configure_cli_logging
     ) as pool:
         totals = _run(_inputs(paths, arguments, locations), pool)
-    _publish(arguments, locations, totals)
+    _publish(arguments, totals)
     _report(totals)
     return _exit_code(totals, arguments.min_coverage)
 
 
-def _publish(
-    arguments: argparse.Namespace, locations: CorpusIndex, totals: RunTotals
-) -> None:
-    """The four corpus files, rebuilt from every finished member this run reached,
-    in table order. Only after every member is done, so an interrupted run leaves
-    the previous corpus files as they were rather than half of a new one."""
+def _publish(arguments: argparse.Namespace, totals: RunTotals) -> None:
+    """The corpus files, rebuilt from every finished member this run reached, in
+    table order. Each member's tables were deduped when it was staged and every
+    row is program-qualified, so a corpus file is its members' files end to end.
+    Renamed into place only once every member is copied, so an interrupted run
+    leaves the previous corpus files as they were rather than half of a new one."""
     finished = tuple(
         directory
         for directory in (arguments.out_dir / MEMBERS_DIR / m for m in totals.members)
         if directory.is_dir()
     )
-    with (
-        _writer(arguments, locations) as graph,
-        _side_writer(arguments, DEFS_FILE) as defs,
-        _side_writer(arguments, SINKS_FILE) as sinks,
-        _side_writer(arguments, ALIASES_FILE) as aliases,
-        _side_writer(arguments, TARGETS_FILE) as targets,
-        _side_writer(arguments, JUMPS_FILE) as jumps,
-    ):
-        tuple(
-            map(
-                _Sinks(graph, defs, sinks, aliases, targets, jumps).add_member,
-                finished,
-            )
-        )
+    staged = tuple(
+        _concatenated(arguments.out_dir / name, finished, name) for name in _TABLES
+    )
+    tuple(tmp.rename(tmp.with_suffix("")) for tmp in staged)
+
+
+_TABLES = (GRAPH_FILE, DEFS_FILE, SINKS_FILE, ALIASES_FILE, TARGETS_FILE, JUMPS_FILE)
+
+
+def _concatenated(path: Path, members: Sequence[Path], name: str) -> Path:
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with tmp.open("wb") as out:
+        tuple(_copied(member / name, out) for member in members)
+    return tmp
+
+
+def _copied(source: Path, out: BinaryIO) -> None:
+    with source.open("rb") as one:
+        shutil.copyfileobj(one, out)
 
 
 def _completed(arguments: argparse.Namespace) -> int:
