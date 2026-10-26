@@ -58,7 +58,7 @@ def _read_back(edge: ByteEdge) -> ByteEdge:
     )
 
 
-def _unplaced(graph: ByteGraph, fields: Mapping[str, ByteNode]) -> frozenset[str]:
+def unplaced_fields(graph: ByteGraph, fields: Mapping[str, ByteNode]) -> frozenset[str]:
     return frozenset(
         edge.target
         for edge in graph.edges
@@ -70,7 +70,7 @@ def _bytes(graph: ByteGraph) -> _Bytes:
     fields = {node.id: node for node in graph.nodes if node.kind is NodeKind.FIELD}
     slots = frozenset(node.id for node in graph.nodes if node.kind is NodeKind.DATASET)
     ends = fields.keys() | slots
-    unplaced = _unplaced(graph, fields)
+    unplaced = unplaced_fields(graph, fields)
     placed = tuple(
         edge
         for edge in graph.edges

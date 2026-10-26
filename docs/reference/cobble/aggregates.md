@@ -14,7 +14,7 @@ cobble-experimental-aggregate-decompose --matrix matrix.npz --meta meta.json
                                         --min-occurrences N [N ...] --k K [K ...]
                                         [--max-iter 500] [--seed 42] --out-dir DIR
 cobble-experimental-aggregate-class-share --matrix matrix.npz --meta meta.json --unified unified.jsonl
-                                          --min-occurrences N [N ...]
+                                          --graph graph.jsonl --min-occurrences N [N ...]
 ```
 
 `class-share` is a diagnostic, not a stage: it reads the matrix and the classes and changes nothing.
@@ -76,6 +76,15 @@ many of them are unified classes, and the classes' share of those columns' entri
 means the factors are dominated by fields only one program holds, and few classes reach a factor's
 top fields. On CardDemo, at thresholds 10, 4 and 2, it reports 33 of 107, 75 of 462 and 80 of 904
 columns as classes, holding 33.8%, 19.2% and 15.0% of the entries.
+
+It then reads the partition graph and counts the fields dataset slots link, by what kept each out of
+a class: the graph's field and slot counts and its `exact` and `possible` dataset edges; the fields
+an `exact`, placed edge links to a slot, split into those in a class, those blocked because some
+edge without placement reaches them, and the rest, whose layouts do not line up byte for byte with
+another program's; and the fields only `possible` edges link. No slots means the graph was built
+without `--knowledge-graph`. On CardDemo: 263 slots, 653 exact and 350 possible dataset edges; of
+470 fields linked by exact edges, 335 are in a class, 1 is blocked and 134 are neither; 100 fields
+are linked only by possible edges.
 
 ## On CardDemo
 

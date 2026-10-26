@@ -1,4 +1,4 @@
-"""cobble-experimental-aggregate-class-share: how much of the matrix the unified classes hold, per decompose threshold."""
+"""cobble-experimental-aggregate-class-share: how much of the matrix the unified classes hold, per decompose threshold, and why dataset-linked fields did or did not join a class."""
 
 from __future__ import annotations
 
@@ -8,8 +8,11 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
+from cobble.experimental.aggregates.byte_graph_file import read_byte_graph
 from cobble.experimental.aggregates.class_share import class_shares
 from cobble.experimental.aggregates.matrix import load_matrix
+from cobble.experimental.aggregates.slot_census import slot_census
+from cobble.experimental.aggregates.slot_fields import SlotFields
 from cobble.experimental.aggregates.unify import read_unified
 
 logger = logging.getLogger(__name__)
@@ -20,7 +23,8 @@ def _parser() -> argparse.ArgumentParser:
         prog="cobble-experimental-aggregate-class-share",
         description=(
             "Experimental: per threshold, the columns decompose would factor, how many "
-            "are unified classes, and the classes' share of those columns' entries."
+            "are unified classes, and the classes' share of those columns' entries; "
+            "then the fields dataset slots link, by what kept each out of a class."
         ),
     )
     parser.add_argument(
@@ -36,6 +40,12 @@ def _parser() -> argparse.ArgumentParser:
         help="unified.jsonl from cobble-experimental-aggregate-unify",
     )
     parser.add_argument(
+        "--graph",
+        type=Path,
+        required=True,
+        help="graph.jsonl from cobble-experimental-partition-graph",
+    )
+    parser.add_argument(
         "--min-occurrences",
         type=int,
         nargs="+",
@@ -45,11 +55,35 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _slots(found: SlotFields) -> None:
+    logger.info(
+        "aggregate class share: graph has %d fields, %d dataset slots, "
+        "%d exact and %d possible dataset edges",
+        found.fields,
+        found.slots,
+        found.exact_edges,
+        found.possible_edges,
+    )
+    logger.info(
+        "aggregate class share: graph links %d fields to slots by exact edges: "
+        "%d in a class, %d blocked by an edge without placement, %d neither",
+        found.linked,
+        found.classed,
+        found.blocked,
+        found.linked - found.classed - found.blocked,
+    )
+    logger.info(
+        "aggregate class share: graph links %d fields to slots only by possible edges",
+        found.possible_only,
+    )
+
+
 def main(argv: Sequence[str] = ()) -> int:
     configure_cli_logging()
     arguments = _parser().parse_args(tuple(argv) if argv else None)
     found = load_matrix(arguments.matrix, arguments.meta)
-    classes = frozenset(read_unified(arguments.unified).values())
+    unified = read_unified(arguments.unified)
+    classes = frozenset(unified.values())
     logger.info(
         "aggregate class share: %d fields, %d classes", len(found.fields), len(classes)
     )
@@ -63,4 +97,5 @@ def main(argv: Sequence[str] = ()) -> int:
             found_share.class_columns,
             100 * found_share.share,
         )
+    _slots(slot_census(read_byte_graph(arguments.graph), unified.keys()))
     return 0
