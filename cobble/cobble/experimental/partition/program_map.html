@@ -1,0 +1,75 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Program Map</title>
+<style>
+:root { --bg:#fafafa; --fg:#222; --panel:#fff; --line:#ddd; --muted:#777; --dim:#e4e4e4; }
+html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:13px system-ui, sans-serif; }
+#wrap { display:flex; height:100%; }
+#side { width:320px; overflow:auto; border-right:1px solid var(--line); background:var(--panel); padding:10px; box-sizing:border-box; }
+#graph { flex:1; position:relative; }
+input[type=text] { width:100%; box-sizing:border-box; padding:5px; margin:4px 0 8px; }
+.muted { color:var(--muted); }
+#detail { white-space:pre-wrap; font:11px ui-monospace, monospace; margin-top:8px; border-top:1px solid var(--line); padding-top:8px; }
+</style></head>
+<body><div id="wrap"><div id="side">
+<b>Program map</b><div id="stats" class="muted"></div>
+<div class="muted" style="margin-top:8px">dark dots: programs, sized by their nodes; blue dots: dataset records · an edge: graph edges between the two, thicker for more · click a program to open its page · hover to see what it links to</div>
+<form id="find"><input type="text" id="search" placeholder="search a program or dataset, then Enter"></form>
+<div id="detail"></div>
+</div><div id="graph"></div></div>
+/*SCRIPTS*/
+<script>
+const DATA = /*DATA*/;
+const dim = getComputedStyle(document.documentElement).getPropertyValue("--dim").trim();
+const graph = new graphology.UndirectedGraph();
+DATA.nodes.forEach(n => graph.addNode(n.id, { ...n, y: -n.y,
+  size: 3 + 1.5 * Math.log2(1 + n.fields),
+  color: n.kind === "dataset" ? "#2e86de" : "#2c3e50" }));
+DATA.edges.forEach(e => graph.addEdge(e.source, e.target, { ...e,
+  size: 0.5 + 0.5 * Math.log2(e.links), color: "#ccc" }));
+document.getElementById("stats").textContent =
+  `${DATA.nodes.filter(n => n.kind === "program").length} programs · ${DATA.nodes.filter(n => n.kind === "dataset").length} datasets · ${DATA.edges.length} links`;
+let hover = null, selected = null;
+const near = id => new Set([id, ...graph.neighbors(id)]);
+const renderer = new Sigma(graph, document.getElementById("graph"), {
+  hideEdgesOnMove: true, labelRenderedSizeThreshold: 8,
+  nodeReducer: (id, d) => {
+    const around = hover ?? (selected === null ? null : near(selected));
+    if (around === null) return d;
+    return around.has(id) ? { ...d, forceLabel: true } : { ...d, color: dim, label: null };
+  },
+  edgeReducer: (id, d) => {
+    const around = hover ?? (selected === null ? null : near(selected));
+    if (around === null) return d;
+    const [s, t] = graph.extremities(id);
+    return around.has(s) && around.has(t) ? d : { ...d, hidden: true };
+  },
+});
+const describe = id => {
+  const d = graph.getNodeAttributes(id);
+  const linked = graph.neighbors(id).map(other => `${other} (${graph.getEdgeAttribute(graph.edge(id, other), "links")})`).sort();
+  document.getElementById("detail").textContent = `${d.label} · ${d.kind} · ${d.fields} nodes\n${linked.join("\n")}`;
+};
+const select = id => {
+  selected = id;
+  if (id !== null) {
+    describe(id);
+    const at = renderer.getNodeDisplayData(id);
+    renderer.getCamera().animate({ x: at.x, y: at.y, ratio: 0.3 }, { duration: 300 });
+  }
+  renderer.refresh();
+};
+renderer.on("enterNode", ({ node }) => { hover = near(node); describe(node); renderer.refresh(); });
+renderer.on("leaveNode", () => { hover = null; renderer.refresh(); });
+renderer.on("clickNode", ({ node }) => {
+  const href = graph.getNodeAttribute(node, "href");
+  if (href) window.location.href = href; else select(node);
+});
+renderer.on("clickStage", () => select(null));
+document.getElementById("find").addEventListener("submit", event => {
+  event.preventDefault();
+  const text = document.getElementById("search").value.trim().toLowerCase();
+  const found = graph.nodes().find(id => id.toLowerCase() === text) ?? graph.nodes().find(id => id.toLowerCase().includes(text));
+  select(found ?? null);
+});
+</script>
+</body></html>
