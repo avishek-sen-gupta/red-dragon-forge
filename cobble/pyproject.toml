@@ -80,6 +80,7 @@ cobble-experimental-partition-render = "cobble.experimental.partition.render_cli
 cobble-experimental-aggregate-unify = "cobble.experimental.aggregates.unify_cli:main"
 cobble-experimental-aggregate-matrix = "cobble.experimental.aggregates.matrix_cli:main"
 cobble-experimental-aggregate-decompose = "cobble.experimental.aggregates.decompose_cli:main"
+cobble-experimental-aggregate-class-share = "cobble.experimental.aggregates.class_share_cli:main"
 
 # The project is installed (editable) into the venv so that [project.scripts]
 # exists at all -- `uv run diagnose-copybooks` needs an installed entry point,

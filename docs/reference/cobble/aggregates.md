@@ -13,7 +13,11 @@ cobble-experimental-aggregate-matrix    --defs defs.jsonl --extents extents.json
 cobble-experimental-aggregate-decompose --matrix matrix.npz --meta meta.json
                                         --min-occurrences N [N ...] --k K [K ...]
                                         [--max-iter 500] [--seed 42] --out-dir DIR
+cobble-experimental-aggregate-class-share --matrix matrix.npz --meta meta.json --unified unified.jsonl
+                                          --min-occurrences N [N ...]
 ```
+
+`class-share` is a diagnostic, not a stage: it reads the matrix and the classes and changes nothing.
 
 ## Unify
 
@@ -64,6 +68,14 @@ at least its threshold of paragraphs. Matrices saved before this layout do not l
 earlier rounds already explained (`explained_by_earlier`), and its fit: `k`, reconstruction error,
 iterations, and each factor's twenty highest-loading fields with the name prefixes they span and
 its twenty highest-loading paragraphs.
+
+## Class share
+
+For each `--min-occurrences` threshold, `class-share` logs the columns decompose would factor, how
+many of them are unified classes, and the classes' share of those columns' entries. A small share
+means the factors are dominated by fields only one program holds, and few classes reach a factor's
+top fields. On CardDemo, at thresholds 10, 4 and 2, it reports 33 of 107, 75 of 462 and 80 of 904
+columns as classes, holding 33.8%, 19.2% and 15.0% of the entries.
 
 ## On CardDemo
 
