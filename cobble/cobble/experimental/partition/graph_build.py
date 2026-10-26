@@ -2,13 +2,8 @@
 
 from __future__ import annotations
 
-import sys
-from bisect import bisect_right
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import replace
-from functools import cache, reduce
 from itertools import groupby, product
-from operator import itemgetter
 
 from cobble.dataflow.combine.link_row import LinkRow
 from cobble.dataflow.fields.dep_row import DepRow
@@ -18,6 +13,8 @@ from cobble.experimental.partition.byte_alignment import ByteAlignment
 from cobble.experimental.partition.field_graph import FieldGraph
 from cobble.experimental.partition.field_leaf import FieldLeaf
 from cobble.experimental.partition.fill_query import FillQuery
+from cobble.experimental.partition.fill_trace import read_of
+from cobble.experimental.partition.fill_walk import fill_tracer
 from cobble.experimental.partition.flow import Flow
 from cobble.experimental.partition.graph_edge import GraphEdge
 from cobble.experimental.partition.graph_node import GraphNode
@@ -29,7 +26,6 @@ from cobble.experimental.partition.tally import GRAPH, Tally
 
 _Moved = tuple[tuple[GraphNode, ...], tuple[Flow, ...]]
 _Pair = tuple[FieldLeaf, FieldLeaf]
-_Rows = Mapping[str, tuple[DepRow, ...]]
 _Traced = Callable[[FillQuery], tuple[FieldLeaf, ...]]
 
 
@@ -77,101 +73,8 @@ def _span(index: LeafIndex, extent: ByteRange) -> Span:
     return Span(extent, index.fields_in(extent))
 
 
-def _within(extent: ByteRange, start: int, end: int) -> ByteRange:
-    return replace(extent, start=start, end=end)
-
-
-def _joined(
-    runs: tuple[tuple[int, int], ...], piece: tuple[int, int]
-) -> tuple[tuple[int, int], ...]:
-    if runs and piece[0] <= runs[-1][1]:
-        return (*runs[:-1], (runs[-1][0], max(runs[-1][1], piece[1])))
-    return (*runs, piece)
-
-
-def _runs(pieces: Sequence[FieldLeaf]) -> tuple[tuple[int, int], ...]:
-    return reduce(_joined, sorted((piece.start, piece.end) for piece in pieces), ())
-
-
-def _covered(leaf: FieldLeaf, runs: tuple[tuple[int, int], ...]) -> bool:
-    if leaf.start >= leaf.end:
-        return True
-    place = bisect_right(runs, (leaf.start, sys.maxsize)) - 1
-    return place >= 0 and runs[place][0] <= leaf.start and leaf.end <= runs[place][1]
-
-
-def _distinct(leaves: Iterable[FieldLeaf]) -> tuple[FieldLeaf, ...]:
-    return tuple({leaf: None for leaf in leaves})
-
-
-def _finer(
-    row: DepRow, leaf: FieldLeaf, excluded: frozenset[str], traced: _Traced
-) -> tuple[FieldLeaf, ...]:
-    shift = row.source.start - row.target.start
-    inner = traced(
-        FillQuery(
-            _within(row.source, leaf.start + shift, leaf.end + shift),
-            row.definers,
-            excluded | {row.site},
-        )
-    )
-    if len(inner) < 2:
-        return (leaf,)
-    return tuple(
-        replace(
-            piece, region=leaf.region, start=piece.start - shift, end=piece.end - shift
-        )
-        for piece in inner
-    )
-
-
-def _through(
-    index: LeafIndex, row: DepRow, excluded: frozenset[str], traced: _Traced
-) -> tuple[FieldLeaf, ...]:
-    written = index.fields_in(row.target)
-    if not row.source.known:
-        return written
-    return tuple(
-        piece for leaf in written for piece in _finer(row, leaf, excluded, traced)
-    )
-
-
-def _inside(row: DepRow, extent: ByteRange) -> bool:
-    return (
-        (row.target.program, row.target.region) == (extent.program, extent.region)
-        and extent.start <= row.target.start
-        and row.target.end <= extent.end
-    )
-
-
-def _traced_once(
-    index: LeafIndex, rows: _Rows, query: FillQuery, traced: _Traced
-) -> tuple[FieldLeaf, ...]:
-    pieces = _distinct(
-        piece
-        for definer in query.definers
-        if definer not in query.excluded
-        for row in rows.get(definer, ())
-        if _inside(row, query.extent)
-        for piece in _through(index, row, query.excluded, traced)
-    )
-    runs = _runs(pieces)
-    kept = tuple(
-        leaf for leaf in index.fields_in(query.extent) if not _covered(leaf, runs)
-    )
-    return _distinct((*kept, *pieces))
-
-
-def _tracing(index: LeafIndex, rows: _Rows) -> _Traced:
-    @cache
-    def traced(query: FillQuery) -> tuple[FieldLeaf, ...]:
-        return _traced_once(index, rows, query, traced)
-
-    return traced
-
-
 def _read(traced: _Traced, dep: DepRow) -> Span:
-    return Span(dep.source, traced(FillQuery(dep.source, dep.definers, frozenset())))
+    return Span(dep.source, traced(read_of(dep)))
 
 
 def _placed(target: Span, source: Span, pair: _Pair) -> tuple[ByteAlignment, ...]:
@@ -276,23 +179,13 @@ def _ends(flow: Flow) -> tuple[str, str]:
     return (flow.source, flow.target)
 
 
-def _rows(deps: Sequence[DepRow]) -> _Rows:
-    written = sorted(
-        (dep.site, i) for i, dep in enumerate(deps) if dep.target.known and not dep.sink
-    )
-    return {
-        site: tuple(deps[i] for _, i in group)
-        for site, group in groupby(written, itemgetter(0))
-    }
-
-
 def field_graph(
     index: LeafIndex,
     deps: Sequence[DepRow],
     links: Sequence[LinkRow],
     barrier: Barrier,
 ) -> FieldGraph:
-    traced = _tracing(index, _rows(deps))
+    traced = fill_tracer(index, deps)
     moved = (
         *(
             _moved(index, traced, barrier, dep)

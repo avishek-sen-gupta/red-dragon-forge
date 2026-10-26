@@ -360,10 +360,10 @@ def _record(k: int) -> ByteRange:
     )
 
 
-def test_a_read_through_a_long_chain_of_branching_copies_and_a_loop_back_reaches_the_fields_that_filled_it() -> (
+def test_a_read_through_a_long_chain_of_branching_copies_and_a_loop_back_reaches_the_fields_that_filled_it_in_any_row_order() -> (
     None
 ):
-    depth = 40
+    depth = 400
     extents = (
         _layout("P", "working_storage", ("R0",), (0, 10)),
         _layout("P", "working_storage", ("R0", "A"), (0, 4)),
@@ -395,10 +395,12 @@ def test_a_read_through_a_long_chain_of_branching_copies_and_a_loop_back_reaches
         definers=(f"a{depth}", f"b{depth}"),
     )
 
-    graph = field_graph(
-        leaf_index(extents), (*copies, looped, written), (), NoBarrier()
-    )
+    rows = (*copies, looped, written)
 
+    graph = field_graph(leaf_index(extents), rows, (), NoBarrier())
+    backwards = field_graph(leaf_index(extents), rows[::-1], (), NoBarrier())
+
+    assert _edges(backwards) == _edges(graph)
     assert _edges(graph) == {
         *(
             (f"P:R0.{part}", f"P:R{k}.R{k}", 3 if k == 1 else 2, True)

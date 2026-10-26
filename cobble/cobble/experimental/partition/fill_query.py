@@ -1,8 +1,8 @@
-"""A read's bytes and the definers that may have filled them, remembered by those two alone, with the sites already followed to reach it."""
+"""A read's bytes and the definers that may have filled them: one lookup when tracing a read back."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from cobble.dataflow.fields.extent_text import ByteRange
 
@@ -11,4 +11,3 @@ from cobble.dataflow.fields.extent_text import ByteRange
 class FillQuery:
     extent: ByteRange
     definers: tuple[str, ...]
-    excluded: frozenset[str] = field(compare=False)
