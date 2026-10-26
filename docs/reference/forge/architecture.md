@@ -12,6 +12,7 @@ a multi-language interpreter vendored at `vendor/red-dragon`. The forge never mo
 | `cicada/` | `cics` | CICS runtime: pseudo-conversational transaction dispatch, VSAM KSDS file control over the system catalog, BMS screens, a TN3270 server. | [cicada](../cicada/architecture.md) |
 | `squall/` | `squall` | EXEC SQL coprocessor runtime for Db2-attached programs. | [squall](../squall/architecture.md) |
 | `jackal/` | `jackal` | JCL/batch engine: job and step orchestration, IDCAMS, a job's view of the datasets. | [jackal](../jackal/architecture.md) |
+| `zos/` | `zos` | COBOL file handling against catnip datasets (`zos.cobol.io`). Imports catnip and red-dragon; jackal and plain mode build on it. | |
 | `catnip/` | `catnip` | System catalog: datasets, clusters, alternate indexes, paths and GDG bases, shared by jackal and cicada; `catnip install` loads a data declaration. | [catnip](../catnip/README.md) |
 | `litter/` | `litter` | Package: COBOL programs lowered once and linked into one image, zipped with a manifest and mapsets; `build` writes it, `open_package` reads it. | [litter](../litter/README.md) |
 | `red_dragon_forge/` | `red_dragon_forge` | Composition layer: assembles several runtimes into one program. | this page |
@@ -44,7 +45,8 @@ CICS, SQL or JCL knowledge of its own.
 | `build_command.py` | `forge-build`: a `build.toml` into a litter package. See [Build](build.md). |
 | `run_command.py` | `forge-run`: a package run as `env.toml` says, `[plain]`, `[jcl]` or `[cics]`; `cics_region` assembles the `[cics]` region in process. See [Run](run.md). |
 | `coprocessors.py` | The coprocessors a build may name, each with its compile spec and the programs it requires linked. |
-| `coprocessing.py` | `Coprocessing`: what a package's `sql` adds to a run — squall's builtins, the three CICS unit-of-work hooks and the abend rollback. `db2_connection.py` builds it; with no `sql` a run gets none. `[plain]`/`[jcl]` compose its builtins into the job runner's table; `[cics]` passes them and the hooks to the region. |
+| `coprocessing.py` | `Coprocessing`: what a package's `sql` adds to a run — squall's builtins, the three CICS unit-of-work hooks and the abend rollback. `db2_connection.py` builds it; with no `sql` a run gets none. `[jcl]` composes its builtins into the job runner's table; `[plain]` runs the image directly, through `plain_mode.py`; `[cics]` passes them and the hooks to the region. |
+| `plain_mode.py` | `[plain]`: runs one program from the package image, with no job, step or DD, and reports RC, abend or budget exhaustion. |
 | `db2_connection.py` | The `[sql]` Db2 connection: installs squall's runtime over it and returns the `Coprocessing`. |
 | `run.py` | `run_program(linked, specs, …)` runs a compiled program through the one spec that owns execution. CICS owns execution; SQL is synchronous and owns none. |
 | `carddemo_db2_schema.py` | CardDemo's Db2 schema and seed data. |
@@ -61,6 +63,9 @@ Design records: [CICS + SQL composition](../../records/design/2026-07-04-cics-sq
 - `cics`, `squall` and `jackal` must not import each other.
 - `catnip` imports none of `cics`, `squall`, `jackal`, `cobble` or `red_dragon_forge`. `cics` and
   `jackal` import it.
+- `catnip` also imports no `interpreter` (`catnip-imports-no-runtime`).
+- `zos` imports none of `cics`, `squall`, `jackal`, `cobble`, `litter` or `red_dragon_forge` (`zos-imports-no-runtime`). It sits between catnip and the runtimes.
+- `red_dragon_forge.plain_mode` and `red_dragon_forge.plain_run` must not import `jackal` (`plain-mode-without-jackal`).
 - `litter` imports none of `cics`, `squall`, `jackal`, `cobble`, `catnip` or `red_dragon_forge`.
   `jackal` and `cics` import it: a job runs against a litter package, and a TN3270 region is
   assembled from one.

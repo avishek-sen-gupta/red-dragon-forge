@@ -243,7 +243,7 @@ def test_a_plain_program_that_calls_cee3abd_reports_the_user_abend(
     ) == (1, "U1234\n", "")
 
 
-def test_an_abend_wins_over_a_symbolic_return_code(
+def test_an_abend_after_a_tolerated_call_wins_over_the_return_code(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     package = _package(tmp_path, {"LOSTABND": _LOSTABND})

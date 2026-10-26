@@ -71,8 +71,8 @@ a `CALL` to a program the image does not hold stops a `[plain]` or `[jcl]` run:
 `forge-run: CALL to __entry_X, but nothing in this run unit is registered under it`, exit 1.
 Under `[cics]` it abends the task with code 4038, as LE's "module not found" (`CEE3501S`,
 `U4038`) does: the abend path runs (backout, `Transaction abended: 4038` on the terminal) without
-driving HANDLE ABEND, and the terminal and the region carry on. On, red-dragon's unresolved-call resolver returns a
-symbolic result and the program runs on. `permit_missing_host_variables` is squall's runtime
+driving HANDLE ABEND, and the terminal and the region carry on. On, red-dragon's unresolved-call
+resolver returns a symbolic result and the program runs on. `permit_missing_host_variables` is squall's runtime
 tolerance: a host variable missing from the data layout is skipped rather than raised.
 
 With `[sql]`, the run connects to `SQUALL_DB2_DSN` (`squall/db2/dsn-env.sh` exports it) before
@@ -109,7 +109,8 @@ stops it when the CALL runs.
 `tests/integration/test_plain_mode.py` covers each `[plain]` outcome and refusal, labelling on
 first OPEN, and two programs selecting the same name; `tests/integration/test_run_command.py`
 covers `[plain]` against the equivalent one-step `[jcl]` job, a multi-step `[jcl]` job against
-`jackal run`, the CardDemo sign-on screen served by `[cics]` over TN3270, and a `[plain]` Db2 program (needs `SQUALL_DB2_DSN`).
+`jackal run`, the CardDemo sign-on screen served by `[cics]` over TN3270, and a `[plain]` Db2
+program (needs `SQUALL_DB2_DSN`).
 `tests/integration/test_carddemo_forge.py` builds CardDemo's checked-in `config/carddemo/build.toml`
 and `build-db2.toml` (exact programs and CSD transactions), serves each with its `env.toml`, and
 drives it with `s3270`: a user signs on and views an account; an admin reaches the Db2

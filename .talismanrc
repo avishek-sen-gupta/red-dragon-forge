@@ -361,12 +361,8 @@ fileignoreconfig:
   checksum: 43e5a2992fa46cf93cdd1ebf2adb37a446b76df0f714fc6e14f37b8d8c282f72
 - filename: docs/records/design/2026-10-14-catnip-catalog-extraction.md
   checksum: 013b5c85f12a71df1e0aae34ca43f816db8ef167fde170f38a75a628e333d932
-- filename: jackal/jackal/record_key.py
-  checksum: 1385311efd556ef1d0575775507159d8175c3658666d6d40e3e0104c2a985e62
 - filename: jackal/tests/integration/test_cobol_path.py
   checksum: 70dbfafbb83596fd940ac3c6f095cefa900cb8dbf22bec3080a2b8688f7cb6f4
-- filename: jackal/jackal/label_field.py
-  checksum: 80fe7ab65a0a29459c9e92da2d317278ca4398b5f1b16b72925ae6ee2410d68e
 - filename: jackal/jackal/cobol_files.py
   checksum: 91b8d20c19c08fdb5ac96b5fa537caf73921560fab6327f20c897d2f2a055f80
 - filename: cicada/tests/unit/cics/test_vsam_dump.py
@@ -375,8 +371,6 @@ fileignoreconfig:
   checksum: 4553838ea11b000e48f964db3e7cbe633aee19f43f856506258631cd0f078151
 - filename: docs/superpowers/plans/2026-10-15-file-definitions-as-ir-data.md
   checksum: 73db18b0b575c4b47d1cf1af21c4b28e5e759d9de7ef135d585358b3867aac04
-- filename: jackal/tests/unit/test_file_definitions.py
-  checksum: b8e23f6d53c4dc58f2982bc6d70d8b4731fb95e8dc43954030d0fd1e1b783f3e
 - filename: cicada/tests/integration/cics/test_sign_on_flow.py
   checksum: de82c11f91f78729a1970450526c8e514eb8397f3d0919007689df8ae872be5e
 - filename: fp.json
