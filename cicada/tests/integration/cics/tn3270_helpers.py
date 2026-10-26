@@ -31,6 +31,7 @@ from cobol_asg.copybook_search import CopybookSearch
 from cobol_asg.subprocess_runner import RealSubprocessRunner
 from litter.build import build
 from litter.cics_file import CicsFile
+from litter.no_hlasm import NO_HLASM
 from litter.open import open_package
 from litter.transaction import Transaction
 
@@ -83,6 +84,7 @@ def carddemo_package(
         programs=programs,
         link=programs,
         sources={name: _source(app, name) for name in programs},
+        hlasm=NO_HLASM,
         parser=ProLeapCobolParser(
             RealSubprocessRunner(),
             bridge_jar,

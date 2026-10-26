@@ -28,15 +28,19 @@ coprocessor's name is its compile spec's strategy name, so a conversational CICS
 
 ## build
 
-`build(name=, programs=, link=, sources=, parser=, specs=, copybook_dirs=, work_dir=, out_dir=,
-transactions=, files=, mapsets=, tolerant=)` returns `out_dir/<name>.zip`.
+`build(name=, programs=, link=, sources=, hlasm=, parser=, specs=, copybook_dirs=, work_dir=,
+out_dir=, transactions=, files=, mapsets=, tolerant=)` returns `out_dir/<name>.zip`.
 
-- Each program in `programs` is lowered once, on its own, with red-dragon's `lower_program` and
-  the given `CoprocessorSpec`s. `sources` maps each program to its source file. A source holding
+- `programs` lists every program of both languages. Each is lowered once, on its own. `sources`
+  maps each COBOL program to its source file, lowered with red-dragon's `lower_program` and the
+  given `CoprocessorSpec`s. `hlasm` is `HlasmSources(sources, parser)`, mapping each HLASM
+  program to its source file, lowered with `lower_hlasm_program` and the parser, whose SYSLIB
+  holds the macro libraries; or `NO_HLASM` when there are none, which needs no HLASM bridge. A source holding
   several programs, batch or nested, lowers to a unit per program, and linking it links them
   all, so the image and the manifest's `programs` list each of them.
 - The programs in `link`, in that order, are linked into one image with red-dragon's
-  `link_units`. `link` may be a subset of `programs`; a name in `link` that is not in `programs`
+  `link_units`, or with `link_hlasm_units` under `HlasmSources`, which binds COBOL and
+  HLASM programs so a COBOL `CALL` reaches an HLASM one. `link` may be a subset of `programs`; a name in `link` that is not in `programs`
   raises `PackageError` (`<out_dir>/<name>.zip: link names <P>, which programs does not list`)
   before anything is lowered.
 - Nothing is discovered. A program reached by `CALL 'LITERAL'` or `CALL identifier` is in the
@@ -45,7 +49,7 @@ transactions=, files=, mapsets=, tolerant=)` returns `out_dir/<name>.zip`.
   reads a spec's `linked_subprogram_sources` or `source_search_dirs`.
 - `name` is letters, digits, `_`, `-` and `.`, starting with a letter or digit; anything else
   raises `PackageError` before anything is written. The manifest's `programs` are the image's
-  program names, its PROGRAM-IDs.
+  program names, its PROGRAM-IDs and CSECT names.
 - red-dragon's unit files and the image go in `work_dir`, named by a digest of their inputs. A
   rebuild with the same work directory reuses them.
 - `mapsets` maps each mapset name to the JSON file `hlasm_export` wrote for it.

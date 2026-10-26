@@ -130,12 +130,13 @@ def _sources(tmp_path: Path, programs: dict[str, str]) -> Path:
     return src
 
 
-def _built(tmp_path: Path, build: str, paths: str = "") -> Path:
+def _built(tmp_path: Path, programs: str, build: str, cobol: str = "") -> Path:
     toml = tmp_path / "build.toml"
     toml.write_text(
-        "[paths]\n"
+        "[cobol]\n"
         f'source_dirs = ["src", "{_APP / "cbl"}", "{_DB2_STUBS}"]\n'
-        f"{paths}"
+        f"programs = {programs}\n"
+        f"{cobol}"
         f'[build]\nname = "app"\nout_dir = "out"\n{build}'
     )
     package = tmp_path / "out" / "app.zip"
@@ -171,7 +172,7 @@ def test_plain_matches_a_one_step_job(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _sources(tmp_path, {"COPIER": _COPIER})
-    package = _built(tmp_path, 'programs = ["COPIER"]\nlink = ["COPIER"]\n')
+    package = _built(tmp_path, '["COPIER"]', 'link = ["COPIER"]\n')
     capsys.readouterr()
     records = "first record".ljust(80).encode("cp037") + "second".ljust(80).encode(
         "cp037"
@@ -225,7 +226,7 @@ def test_jcl_runs_a_multi_step_job_from_a_package(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _sources(tmp_path, {"SETRC": _SETRC})
-    package = _built(tmp_path, 'programs = ["SETRC"]\nlink = ["SETRC"]\n')
+    package = _built(tmp_path, '["SETRC"]', 'link = ["SETRC"]\n')
     capsys.readouterr()
     job = tmp_path / "steps.jcl"
     job.write_text(
@@ -261,7 +262,7 @@ def _loaded(script: str, env: Path) -> tuple[int, list[str]]:
 
 def test_a_jcl_run_loads_no_cics(tmp_path: Path) -> None:
     _sources(tmp_path, {"SETRC": _SETRC})
-    package = _built(tmp_path, 'programs = ["SETRC"]\nlink = ["SETRC"]\n')
+    package = _built(tmp_path, '["SETRC"]', 'link = ["SETRC"]\n')
     job = tmp_path / "one.jcl"
     job.write_text("//J JOB 1\n//A EXEC PGM=SETRC\n")
     env = _env(
@@ -279,8 +280,8 @@ def test_each_fault_in_a_run_stops_it_naming_the_fault(
     _sources(tmp_path, {"SELECTOR": _SELECTOR})
     package = _built(
         tmp_path,
-        'programs = ["SELECTOR", "DSNTIAC"]\nlink = ["SELECTOR", "DSNTIAC"]\n'
-        'coprocessors = ["sql"]\n',
+        '["SELECTOR", "DSNTIAC"]',
+        'link = ["SELECTOR", "DSNTIAC"]\ncoprocessors = ["sql"]\n',
         f'copybook_dirs = ["{_SQUALL_COPYBOOKS}"]\n',
     )
     capsys.readouterr()
@@ -289,7 +290,7 @@ def test_each_fault_in_a_run_stops_it_naming_the_fault(
     sql = _env(tmp_path, "b.toml", package, tmp_path / "system", plain)
     (tmp_path / "plain").mkdir()
     _sources(tmp_path / "plain", {"SETRC": _SETRC})
-    batch = _built(tmp_path / "plain", 'programs = ["SETRC"]\nlink = ["SETRC"]\n')
+    batch = _built(tmp_path / "plain", '["SETRC"]', 'link = ["SETRC"]\n')
     capsys.readouterr()
     no_job = _env(
         tmp_path, "c.toml", batch, tmp_path, f'[jcl]\njob = "{tmp_path}/none.jcl"\n'
@@ -370,7 +371,8 @@ def test_cics_serves_sign_on_from_a_package(
     shutil.copy(_APP / "bms" / "COSGN00.bms", bms / "COSGN00.bms")
     package = _built(
         tmp_path,
-        'programs = ["COSGN00C"]\nlink = ["COSGN00C"]\ncoprocessors = ["cics"]\n'
+        '["COSGN00C"]',
+        'link = ["COSGN00C"]\ncoprocessors = ["cics"]\n'
         f'[cics]\nbms_dirs = ["{bms}"]\n'
         f'csd_files = ["{_APP / "csd" / "CARDDEMO.CSD"}"]\n',
         f'copybook_dirs = ["{_APP / "cpy"}"]\n',
@@ -403,7 +405,8 @@ def test_a_cics_region_reads_its_datform_from_env_toml(
     shutil.copy(_APP / "bms" / "COSGN00.bms", bms / "COSGN00.bms")
     package = _built(
         tmp_path,
-        'programs = ["COSGN00C"]\nlink = ["COSGN00C"]\ncoprocessors = ["cics"]\n'
+        '["COSGN00C"]',
+        'link = ["COSGN00C"]\ncoprocessors = ["cics"]\n'
         f'[cics]\nbms_dirs = ["{bms}"]\n'
         f'csd_files = ["{_APP / "csd" / "CARDDEMO.CSD"}"]\n',
         f'copybook_dirs = ["{_APP / "cpy"}"]\n',
@@ -428,7 +431,8 @@ def test_a_cics_region_loads_no_jackal(tmp_path: Path, carddemo_system: Path) ->
     shutil.copy(_APP / "bms" / "COSGN00.bms", bms / "COSGN00.bms")
     package = _built(
         tmp_path,
-        'programs = ["COSGN00C"]\nlink = ["COSGN00C"]\ncoprocessors = ["cics"]\n'
+        '["COSGN00C"]',
+        'link = ["COSGN00C"]\ncoprocessors = ["cics"]\n'
         f'[cics]\nbms_dirs = ["{bms}"]\n'
         f'csd_files = ["{_APP / "csd" / "CARDDEMO.CSD"}"]\n',
         f'copybook_dirs = ["{_APP / "cpy"}"]\n',
@@ -460,8 +464,8 @@ def test_plain_sql_from_a_package(
     _sources(tmp_path, {"SELECTOR": _SELECTOR})
     package = _built(
         tmp_path,
-        'programs = ["SELECTOR", "DSNTIAC"]\nlink = ["SELECTOR", "DSNTIAC"]\n'
-        'coprocessors = ["sql"]\n',
+        '["SELECTOR", "DSNTIAC"]',
+        'link = ["SELECTOR", "DSNTIAC"]\ncoprocessors = ["sql"]\n',
         f'copybook_dirs = ["{_SQUALL_COPYBOOKS}"]\n',
     )
     capsys.readouterr()

@@ -1,4 +1,4 @@
-"""build.toml's [build]: the package's name, the programs lowered, those linked into its image, and its coprocessors."""
+"""build.toml's [build]: the package's name, the programs linked into its image, and its coprocessors."""
 
 from pathlib import Path
 
@@ -13,7 +13,6 @@ class BuildSection(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     name: PackageName
-    programs: tuple[MemberName, ...]
     link: tuple[MemberName, ...]
     coprocessors: tuple[CoprocessorName, ...] = ()
     tolerant: bool = False

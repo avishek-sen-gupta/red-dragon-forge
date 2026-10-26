@@ -1,4 +1,4 @@
-[paths]
+[cobol]
 source_dirs = [
     "../../vendor/carddemo/app/cbl",
     "../../vendor/carddemo/app/app-transaction-type-db2/cbl",
@@ -15,9 +15,6 @@ copybook_dirs = [
     "../../squall/squall/copybooks",
 ]
 copybook_exts = ["", "cpy", "CPY", "cob", "cbl", "copy", "COPY", "dcl"]
-
-[build]
-name = "carddemo-db2"
 programs = [
     "COSGN00C", "COMEN01C", "COADM01C",
     "COACTVWC", "COACTUPC", "COCRDLIC", "COCRDSLC", "COCRDUPC",
@@ -26,6 +23,9 @@ programs = [
     "COTRTLIC", "COTRTUPC",
     "CSUTLDTC", "CEEDAYS", "DSNTIAC",
 ]
+
+[build]
+name = "carddemo-db2"
 link = [
     "COSGN00C", "COMEN01C", "COADM01C",
     "COACTVWC", "COACTUPC", "COCRDLIC", "COCRDSLC", "COCRDUPC",

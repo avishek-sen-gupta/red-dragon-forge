@@ -15,6 +15,7 @@ from interpreter.project.program_entry import ProgramEntry
 from jackal.cobol_step import CompiledProgram
 from litter.build import build
 from litter.manifest import Manifest
+from litter.no_hlasm import NO_HLASM
 from litter.open import open_package
 from litter.package import Package
 from zos.cobol.io.file_definitions import program_files_of
@@ -49,6 +50,7 @@ def built(
         programs=programs,
         link=programs,
         sources={name: _source(name, cbl_dir) for name in programs},
+        hlasm=NO_HLASM,
         parser=ProLeapCobolParser(
             runner=RealSubprocessRunner(),
             bridge_jar=bridge_jar,

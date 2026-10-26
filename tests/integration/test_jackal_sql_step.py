@@ -18,6 +18,7 @@ from jackal.runner import JobRunner
 from jackal.unknown_return_code import RaiseUnknownReturnCode
 from jackal.unresolved import RaiseErrorStrategy
 from litter.build import build
+from litter.no_hlasm import NO_HLASM
 from litter.open import open_package
 from litter.package import Package
 from squall.backends.sqlite import SqliteBackend
@@ -34,6 +35,7 @@ def _package(tmp_path: Path, bridge_jar: str) -> Package:
             programs=("SQLRPT",),
             link=("SQLRPT",),
             sources={"SQLRPT": CBL / "SQLRPT.cbl"},
+            hlasm=NO_HLASM,
             parser=ProLeapCobolParser(
                 runner=RealSubprocessRunner(), bridge_jar=bridge_jar
             ),

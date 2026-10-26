@@ -26,6 +26,7 @@ from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.features import CobolFeature
 from litter.build import build
 from litter.cics_file import CicsFile
+from litter.no_hlasm import NO_HLASM
 from litter.open import open_package
 from litter.transaction import Transaction
 from tests.covers import covers
@@ -116,6 +117,7 @@ def _region(
         programs=programs,
         link=programs,
         sources=sources,
+        hlasm=NO_HLASM,
         parser=ProLeapCobolParser(
             RealSubprocessRunner(),
             bridge_jar,
@@ -249,6 +251,7 @@ def test_a_dispatcher_abend_without_an_on_abend_ends_the_task_quietly(
                 programs=("RTRNA",),
                 link=("RTRNA",),
                 sources=_written(tmp_path, {"RTRNA": _RTRNA}),
+                hlasm=NO_HLASM,
                 parser=ProLeapCobolParser(
                     RealSubprocessRunner(),
                     bridge_jar,

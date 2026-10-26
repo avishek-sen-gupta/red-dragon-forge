@@ -4,7 +4,7 @@
 
 - Python 3.13 and [uv](https://docs.astral.sh/uv/)
 - JDK 17+ and Maven (the two bridge JARs)
-- CMake, Ninja and a C++ toolchain (`hlasm_export`)
+- CMake, Ninja and a C++ toolchain (`hlasm_export`, `hlasm_ast_bridge`)
 - Docker, only for the Db2-backed tests and the Db2 CardDemo server
 - [bd](https://github.com/gastownhall/beads), only if you work on issues
 
@@ -17,7 +17,7 @@
    cd red-dragon-forge
    ```
 
-2. Build everything: submodules, `hlasm_export`, both bridge JARs, and the uv workspace.
+2. Build everything: submodules, `hlasm_export` and `hlasm_ast_bridge`, both bridge JARs, and the uv workspace.
 
    ```bash
    make setup

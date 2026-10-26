@@ -194,9 +194,8 @@ def _package(tmp_path: Path, programs: Mapping[str, str]) -> Path:
     names = ", ".join(f'"{name}"' for name in (*programs, "CEE3ABD"))
     toml = tmp_path / "build.toml"
     toml.write_text(
-        f'[paths]\nsource_dirs = ["src", "{LE_STUBS}"]\n'
-        f'[build]\nname = "app"\nout_dir = "out"\n'
-        f"programs = [{names}]\nlink = [{names}]\n"
+        f'[cobol]\nsource_dirs = ["src", "{LE_STUBS}"]\nprograms = [{names}]\n'
+        f'[build]\nname = "app"\nout_dir = "out"\nlink = [{names}]\n'
     )
     assert forge_build([str(toml)], os.environ) == 0
     return tmp_path / "out" / "app.zip"

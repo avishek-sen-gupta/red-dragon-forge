@@ -54,6 +54,7 @@ Runs a CardDemo batch job through jackal. Flags are in
    from cobol_asg.copybook_search import CopybookSearch
    from cobol_asg.subprocess_runner import RealSubprocessRunner
    from litter.build import build
+   from litter.no_hlasm import NO_HLASM
 
    app = Path(os.environ["CARDDEMO_HOME"]) / "app"
    programs = ("CBACT01C",)
@@ -62,6 +63,7 @@ Runs a CardDemo batch job through jackal. Flags are in
        programs=programs,
        link=programs,
        sources={p: app / "cbl" / f"{p}.cbl" for p in programs},
+       hlasm=NO_HLASM,
        parser=ProLeapCobolParser(
            runner=RealSubprocessRunner(),
            bridge_jar=os.environ["PROLEAP_BRIDGE_JAR"],
@@ -208,6 +210,7 @@ from squall.coprocessor import build_sql_spec
 from squall.runtime import install_sql_runtime
 from interpreter.vm.builtins import compose_builtins, core_builtins
 from litter.build import build
+from litter.no_hlasm import NO_HLASM
 from litter.open import open_package
 
 package = build(
@@ -215,6 +218,7 @@ package = build(
     programs=("RPTPGM",),
     link=("RPTPGM",),
     sources={"RPTPGM": Path("cbl/RPTPGM.cbl")},
+    hlasm=NO_HLASM,
     parser=ProLeapCobolParser(
         runner=RealSubprocessRunner(),
         bridge_jar=os.environ["PROLEAP_BRIDGE_JAR"],

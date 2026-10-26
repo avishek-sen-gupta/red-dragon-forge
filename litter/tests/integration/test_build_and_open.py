@@ -11,6 +11,7 @@ from interpreter.project.cobol_compile import link_units
 from interpreter.project.coprocessor_compile import lower_program
 from litter.build import build
 from litter.manifest import Manifest
+from litter.no_hlasm import NO_HLASM
 from litter.open import open_package
 from litter.package_error import PackageError
 
@@ -34,6 +35,7 @@ def _build(
         programs=PROGRAMS,
         link=link,
         sources={name: FIXTURES / f"{name}.cbl" for name in PROGRAMS},
+        hlasm=NO_HLASM,
         parser=parser,
         specs=(),
         copybook_dirs=(),
@@ -251,6 +253,7 @@ def test_build_refuses_a_program_name_that_is_a_path(
             programs=("../X",),
             link=("../X",),
             sources={},
+            hlasm=NO_HLASM,
             parser=parser,
             specs=(),
             copybook_dirs=(),
@@ -286,6 +289,7 @@ def test_the_manifest_names_the_programs_the_image_holds(
         programs=("MISNAMED",),
         link=("MISNAMED",),
         sources={"MISNAMED": FIXTURES / "OTHERPGM.cbl"},
+        hlasm=NO_HLASM,
         parser=parser,
         specs=(),
         copybook_dirs=(),
@@ -315,6 +319,7 @@ def test_a_linked_source_brings_every_program_it_holds(
         programs=("NESTPGM",),
         link=("NESTPGM",),
         sources={"NESTPGM": FIXTURES / "NESTPGM.cbl"},
+        hlasm=NO_HLASM,
         parser=parser,
         specs=(),
         copybook_dirs=(),
@@ -343,6 +348,7 @@ def test_build_refuses_a_package_name_that_is_a_path(
             programs=("MAINPGM",),
             link=("MAINPGM",),
             sources={"MAINPGM": FIXTURES / "MAINPGM.cbl"},
+            hlasm=NO_HLASM,
             parser=parser,
             specs=(),
             copybook_dirs=(),

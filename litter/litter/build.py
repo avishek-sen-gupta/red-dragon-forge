@@ -1,4 +1,4 @@
-"""Lowers each program once, links the link list into one image, and writes it, the manifest and the mapsets into one zip."""
+"""Lowers each COBOL and HLASM program once, links the link list into one image, and writes it, the manifest and the mapsets into one zip."""
 
 import logging
 import tempfile
@@ -7,13 +7,13 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from cobol_asg.cobol_parser import ProLeapCobolParser
-from interpreter.project.cobol_compile import link_units
 from interpreter.project.coprocessor_compile import CoprocessorSpec, lower_program
 from interpreter.project.ir_codec import IrCodec
 from interpreter.project.linked_codec import LinkedCodec
 from interpreter.project.types import LinkedProgram
 from litter.cics_file import CicsFile
 from litter.entries import IMAGE_ENTRY, MANIFEST_ENTRY, mapset_entry
+from litter.hlasm_programs import HlasmPrograms
 from litter.manifest import Manifest
 from litter.package_error import PackageError
 from litter.package_name import PackageName
@@ -32,6 +32,7 @@ def build(
     programs: Sequence[str],
     link: Sequence[str],
     sources: Mapping[str, Path],
+    hlasm: HlasmPrograms,
     parser: ProLeapCobolParser,
     specs: Sequence[CoprocessorSpec],
     copybook_dirs: Sequence[Path],
@@ -55,7 +56,13 @@ def build(
     _refuse_unlowered(package, programs, link)
     _refuse_repeated(package, link)
     image = _image(
-        programs, link, sources, parser, specs, copybook_dirs, work_dir, tolerant
+        link,
+        {
+            **_lowered_cobol(sources, parser, specs, copybook_dirs, work_dir, tolerant),
+            **hlasm.lowered(work_dir),
+        },
+        work_dir,
+        hlasm,
     )
     manifest = _manifest(
         package,
@@ -70,30 +77,38 @@ def build(
     return package
 
 
-def _image(
-    programs: Sequence[str],
-    link: Sequence[str],
+def _lowered_cobol(
     sources: Mapping[str, Path],
     parser: ProLeapCobolParser,
     specs: Sequence[CoprocessorSpec],
     copybook_dirs: Sequence[Path],
     work_dir: Path,
     tolerant: bool,
-) -> LinkedProgram:
+) -> dict[str, tuple[Path, ...]]:
     work_dir.mkdir(parents=True, exist_ok=True)
-    units = {
+    return {
         program: _lowered(
             program,
-            sources[program].read_bytes(),
+            source.read_bytes(),
             parser,
             specs,
             copybook_dirs,
             work_dir,
             tolerant,
         )
-        for program in programs
+        for program, source in sources.items()
     }
-    image = link_units([unit for program in link for unit in units[program]], work_dir)
+
+
+def _image(
+    link: Sequence[str],
+    units: Mapping[str, tuple[Path, ...]],
+    work_dir: Path,
+    hlasm: HlasmPrograms,
+) -> LinkedProgram:
+    image = hlasm.linked(
+        [unit for program in link for unit in units[program]], work_dir
+    )
     logger.info("linked %s into one image", ", ".join(link))
     return image
 

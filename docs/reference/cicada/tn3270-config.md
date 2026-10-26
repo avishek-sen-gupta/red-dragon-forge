@@ -11,8 +11,8 @@ CardDemo are in [run-carddemo.md](../../how-to/run-carddemo.md); its configs are
 
 | Setting | File | Section |
 |---|---|---|
-| programs lowered and linked, coprocessors | `build.toml` | `[build]` |
-| source, copybook and stub directories | `build.toml` | `[paths]` |
+| programs linked, coprocessors | `build.toml` | `[build]` |
+| programs lowered; source, copybook and stub directories | `build.toml` | `[cobol]`, `[hlasm]` |
 | BMS mapset directories, CSD files | `build.toml` | `[cics]` |
 | the system directory | `env.toml` | `[paths] system` |
 | first transaction, host, port, time zone, `DATFORM` | `env.toml` | `[cics]` |

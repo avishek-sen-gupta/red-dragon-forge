@@ -14,13 +14,23 @@ from cics.tn3270.region import CICS_COPYBOOKS
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.copybook_search import CopybookSearch
 from cobol_asg.subprocess_runner import RealSubprocessRunner
+from hlasm_asg.hlasm_bridge_failure import HlasmBridgeFailure
+from hlasm_asg.hlasm_bridge_not_found import HlasmBridgeNotFound
+from hlasm_asg.hlasm_bridge_parser import make_hlasm_parser
+from hlasm_asg.hlasm_parse_error import HlasmParseError
+from hlasm_asg.missing_syslib_directory import MissingSyslibDirectory
 from interpreter.project.duplicate_program_in_image import DuplicateProgramInImage
 from litter.build import build
 from litter.cics_file import CicsFile
+from litter.hlasm_programs import HlasmPrograms
+from litter.hlasm_sources import HlasmSources
+from litter.no_hlasm import NO_HLASM
 from litter.package_error import PackageError
 from litter.transaction import Transaction
 
+from red_dragon_forge.build_cobol import BuildCobol
 from red_dragon_forge.build_config import BuildConfig, load_build_config
+from red_dragon_forge.build_hlasm import BuildHlasm
 from red_dragon_forge.config_error import ConfigError
 from red_dragon_forge.coprocessors import COPROCESSORS, require_linked
 from red_dragon_forge.missing_required_program import MissingRequiredProgram
@@ -29,7 +39,8 @@ logger = logging.getLogger(__name__)
 
 _TOOLS = ("PROLEAP_BRIDGE_JAR", "HLASM_EXPORT")
 _LINK = "[build] link"
-_DEFAULT_SOURCE_EXTS = (".cbl",)
+_COBOL_EXTS = (".cbl",)
+_HLASM_EXTS = (".asm",)
 
 
 class _Unbuildable(Exception):
@@ -52,18 +63,39 @@ def _named(directory: Path, names: Sequence[str]) -> tuple[Path, ...]:
     return tuple(directory / name for name in names if name in present)
 
 
-def _source(base: Path, config: BuildConfig, program: str) -> Path:
-    exts = config.paths.source_exts or _DEFAULT_SOURCE_EXTS
+def _source(
+    base: Path,
+    section: BuildCobol | BuildHlasm,
+    label: str,
+    defaults: tuple[str, ...],
+    program: str,
+) -> Path:
+    exts = section.source_exts or defaults
     found = tuple(
         source
-        for d in config.paths.source_dirs
+        for d in section.source_dirs
         for source in _named(base / d, tuple(f"{program}{ext}" for ext in exts))
     )
     if not found:
         raise _Unbuildable(
-            f"program {program} is in no [paths] source_dirs as {', '.join(exts)}"
+            f"program {program} is in no {label} source_dirs as {', '.join(exts)}"
         )
     return found[0]
+
+
+def _sources(
+    base: Path, section: BuildCobol | BuildHlasm, label: str, defaults: tuple[str, ...]
+) -> dict[str, Path]:
+    return {p: _source(base, section, label, defaults, p) for p in section.programs}
+
+
+def _hlasm(base: Path, config: BuildConfig) -> HlasmPrograms:
+    if not config.hlasm.programs:
+        return NO_HLASM
+    return HlasmSources(
+        _sources(base, config.hlasm, "[hlasm]", _HLASM_EXTS),
+        make_hlasm_parser(tuple(base / d for d in config.hlasm.maclib_dirs)),
+    )
 
 
 def _transactions(base: Path, config: BuildConfig) -> tuple[Transaction, ...]:
@@ -83,7 +115,7 @@ def _files(base: Path, config: BuildConfig) -> tuple[CicsFile, ...]:
 
 
 def _copybook_dirs(base: Path, config: BuildConfig, sym: Path) -> tuple[Path, ...]:
-    own = tuple(base / d for d in config.paths.copybook_dirs)
+    own = tuple(base / d for d in config.cobol.copybook_dirs)
     return (sym, *own, CICS_COPYBOOKS) if config.uses_cics() else own
 
 
@@ -102,14 +134,15 @@ def _built(path: Path, environ: Mapping[str, str]) -> Path:
     copybook_dirs = _copybook_dirs(base, config, work / "sym")
     return build(
         name=config.build.name,
-        programs=config.build.programs,
+        programs=config.programs(),
         link=config.build.link,
-        sources={p: _source(base, config, p) for p in config.build.programs},
+        sources=_sources(base, config.cobol, "[cobol]", _COBOL_EXTS),
+        hlasm=_hlasm(base, config),
         parser=ProLeapCobolParser(
             RealSubprocessRunner(),
             bridge_jar,
             copybooks=CopybookSearch(
-                dirs=tuple(copybook_dirs), exts=tuple(config.paths.copybook_exts)
+                dirs=tuple(copybook_dirs), exts=tuple(config.cobol.copybook_exts)
             ),
         ),
         specs=tuple(COPROCESSORS[c].spec() for c in config.build.coprocessors),
@@ -138,7 +171,11 @@ def run(argv: Sequence[str], environ: Mapping[str, str]) -> int:
         _Unbuildable,
         ConfigError,
         DuplicateProgramInImage,
+        HlasmBridgeFailure,
+        HlasmBridgeNotFound,
+        HlasmParseError,
         MissingRequiredProgram,
+        MissingSyslibDirectory,
         PackageError,
     ) as unbuildable:
         sys.stderr.write(f"forge-build: {unbuildable}\n")

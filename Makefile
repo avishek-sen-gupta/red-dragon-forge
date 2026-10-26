@@ -3,6 +3,7 @@ PROLEAP_BRIDGE_JAR ?= $(CURDIR)/vendor/red-dragon/proleap-bridge/target/proleap-
 JCL_BRIDGE_JAR     ?= $(CURDIR)/jackal/jcl-bridge/target/jcl-bridge-0.1.0-shaded.jar
 HLASM_FORK         := $(CURDIR)/vendor/red-dragon/hlasm-bridge/che4z
 HLASM_EXPORT       := $(HLASM_FORK)/build/bin/hlasm_export
+HLASM_AST_BRIDGE   := $(HLASM_FORK)/build/bin/hlasm_ast_bridge
 
 PYTEST = uv run --no-sync python -m pytest
 # Make's /bin/sh is dash on Linux, which bridge-env.sh cannot locate itself from.
@@ -14,8 +15,8 @@ DB2_COMPOSE = docker compose -f squall/docker-compose.yml
 .PHONY: help setup hlasm jar jar-force python test test-all fmt partition-traces partition-graph partition-clusters partition-render db2-up db2-seed db2-status db2-restart db2-stop db2-clean
 
 help:
-	@echo "make setup     - init submodules + build hlasm_export + rebuild bridge JARs + uv sync"
-	@echo "make hlasm     - build hlasm_export from the HLASM fork (skipped if already built)"
+	@echo "make setup     - init submodules + build the HLASM binaries + rebuild bridge JARs + uv sync"
+	@echo "make hlasm     - build hlasm_export and hlasm_ast_bridge from the HLASM fork (skipped if already built)"
 	@echo "make jar       - build ProLeap + JCL bridge JARs (skipped if already built)"
 	@echo "make jar-force - force-rebuild both bridge JARs"
 	@echo "make python    - uv sync (all workspace members)"
@@ -45,7 +46,10 @@ $(HLASM_EXPORT):
 	done
 	cd $(HLASM_FORK) && BUILD_TYPE=Release ./build.sh --target hlasm_export
 
-hlasm: $(HLASM_EXPORT)
+$(HLASM_AST_BRIDGE):
+	cd $(HLASM_FORK) && BUILD_TYPE=Release ./build.sh --target hlasm_ast_bridge
+
+hlasm: $(HLASM_EXPORT) $(HLASM_AST_BRIDGE)
 
 $(PROLEAP_BRIDGE_JAR):
 	cd vendor/red-dragon/proleap-bridge && ./build.sh
@@ -66,7 +70,7 @@ python:
 	uv sync --all-packages
 	uv run --no-sync python -m playwright install chromium
 
-test: jar
+test: jar hlasm
 	$(BRIDGE_ENV) && export SQUALL_DIR=squall && . squall/db2/dsn-env.sh && $(PYTEST) tests/ $(PYTEST_ARGS)
 
 test-all: jar hlasm

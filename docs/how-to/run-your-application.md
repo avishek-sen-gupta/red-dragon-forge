@@ -74,20 +74,21 @@ directory to start clean.
 
 ## 2. Build the package
 
-`build.toml` names the programs to lower and the programs to link into the one image
+`build.toml` names the programs to lower, per language (`[cobol]`, `[hlasm]`), and the programs
+to link into the one image
 ([reference](../reference/forge/build.md)).
 
 ```toml
-[paths]
+[cobol]
 source_dirs = ["cbl", "../../cicada/cics/stubs", "../../squall/squall/stubs"]
 source_exts = [".cbl", ".CBL"]
 copybook_dirs = ["cpy", "cpy-bms", "../../squall/squall/copybooks"]
 copybook_exts = ["", "cpy", "CPY"]
+programs = ["APPMENU", "APPORDR", "APPDATE", "CEEDAYS", "DSNTIAC"]
 
 [build]
 name = "app"
-programs = ["APPMENU", "APPORDR", "APPDATE", "CEEDAYS", "DSNTIAC"]
-link     = ["APPMENU", "APPORDR", "APPDATE", "CEEDAYS", "DSNTIAC"]
+link = ["APPMENU", "APPORDR", "APPDATE", "CEEDAYS", "DSNTIAC"]
 coprocessors = ["cics", "sql"]
 out_dir = "/tmp/app-build"
 
@@ -210,9 +211,9 @@ The first is the usual sign that `link` is missing a program: fix `link` rather 
 | Symptom | Fix |
 |---|---|
 | `CICS file NAME: DSN is not cataloged` | declare and install that dataset (step 1) |
-| `program X is in no [paths] source_dirs as .cbl` | add the directory to `source_dirs`, or the extension to `source_exts` |
-| `transaction X runs P, which is not in <package>` | add `P` to `programs` and `link`, then rebuild |
-| `CALL to __entry_X, but nothing in this run unit is registered under it`, or a task abending 4038 | add `X` to `programs` and `link`, then rebuild |
+| `program X is in no [cobol] source_dirs as .cbl` | add the directory to `source_dirs`, or the extension to `source_exts` |
+| `transaction X runs P, which is not in <package>` | add `P` to its language's `programs` and to `link`, then rebuild |
+| `CALL to __entry_X, but nothing in this run unit is registered under it`, or a task abending 4038 | add `X` to its language's `programs` and to `link`, then rebuild |
 | The terminal drops after choosing an option | the option `XCTL`s to a program not linked (forge-6jj) |
 | A copybook or `.bms` edit has no effect | delete `<out_dir>/work/` and rebuild; unit reuse ignores copybook contents |
 | `[sql] is required: … was built with sql` | add `[sql]` to `env.toml` |

@@ -1,10 +1,7 @@
-[paths]
+[cobol]
 source_dirs = ["../../vendor/carddemo/app/cbl", "../../cicada/cics/stubs"]
 source_exts = [".cbl", ".CBL"]
 copybook_dirs = ["../../vendor/carddemo/app/cpy", "../../vendor/carddemo/app/cpy-bms"]
-
-[build]
-name = "carddemo"
 programs = [
     "COSGN00C", "COMEN01C", "COADM01C",
     "COACTVWC", "COACTUPC", "COCRDLIC", "COCRDSLC", "COCRDUPC",
@@ -12,6 +9,9 @@ programs = [
     "COUSR00C", "COUSR01C", "COUSR02C", "COUSR03C",
     "CSUTLDTC", "CEEDAYS",
 ]
+
+[build]
+name = "carddemo"
 link = [
     "COSGN00C", "COMEN01C", "COADM01C",
     "COACTVWC", "COACTUPC", "COCRDLIC", "COCRDSLC", "COCRDUPC",
