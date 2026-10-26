@@ -15,9 +15,12 @@ cobble-experimental-aggregate-decompose --matrix matrix.npz --meta meta.json
                                         [--max-iter 500] [--seed 42] --out-dir DIR
 cobble-experimental-aggregate-class-share --matrix matrix.npz --meta meta.json --unified unified.jsonl
                                           --graph graph.jsonl --min-occurrences N [N ...]
+cobble-experimental-aggregate-scorecard --matrix matrix.npz --meta meta.json --unified unified.jsonl
+                                        --min-occurrences N [N ...] --k K [K ...]
+                                        [--max-iter 500] [--seed 42]
 ```
 
-`class-share` is a diagnostic, not a stage: it reads the matrix and the classes and changes nothing.
+`class-share` and `scorecard` are diagnostics, not stages: they read the matrix and the classes and change nothing.
 
 ## Unify
 
@@ -91,6 +94,27 @@ without `--knowledge-graph`. On CardDemo: 263 slots, 653 exact and 350 possible 
 `overlapping-layouts`, 31 for `no-step` and 7 for `dd-unbound`; of
 470 fields linked by exact edges, 335 are in a class, 1 is blocked and 134 are neither; 100 fields
 are linked only by possible edges.
+
+## Scorecard
+
+`scorecard` runs decompose's rounds with the same arguments and logs, per round, a headline and the
+axes of its factors' quality, none of which needs labels:
+
+| Score | What it measures |
+|---|---|
+| held-out AUC (headline) | hide 10% of the round's entries, fit on the rest, and rank the hidden entries against as many empty cells: 0.5 is chance, 1.0 is perfect |
+| fidelity | the fit's reconstruction error over the size of what it factored: 0 rebuilds it exactly |
+| coverage | the share of entries inside some factor's top fields x top paragraphs |
+| stability | refit on four random 90% samples of the paragraphs, match factors one to one, and average their cosine similarity |
+| distinctness | the largest cosine similarity between two factors: low means separate aggregates |
+| focus | the median share of a factor's field loading in its top 20 fields |
+| reach | the share of factors whose top fields span two or more programs, a class counting every program its members are in, and the median programs spanned |
+| class share | the classes' share of the round's entries, as `class-share` reports it |
+
+On CardDemo, with `--min-occurrences 4 2 --k 30 10`, round 1 scores AUC 0.973, fidelity 0.310,
+coverage 70.4%, stability 0.955, distinctness 0.553, focus 1.000, reach 76.7% (median 5 programs),
+class share 19.2%; round 2 scores AUC 0.653 and coverage 15.5%. A random matrix scores AUC about
+0.5, fidelity about 1 and coverage about 0.
 
 ## On CardDemo
 

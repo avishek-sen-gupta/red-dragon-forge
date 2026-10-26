@@ -50,7 +50,7 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _steps(
+def steps_of(
     parser: argparse.ArgumentParser, arguments: argparse.Namespace
 ) -> tuple[RoundStep, ...]:
     thresholds: list[int] = arguments.min_occurrences
@@ -69,7 +69,7 @@ def main(argv: Sequence[str] = ()) -> int:
     configure_cli_logging()
     parser = _parser()
     arguments = parser.parse_args(tuple(argv) if argv else None)
-    steps = _steps(parser, arguments)
+    steps = steps_of(parser, arguments)
     logger.info("decompose: loading %s", arguments.matrix)
     loaded = load_matrix(arguments.matrix, arguments.meta)
     logger.info(

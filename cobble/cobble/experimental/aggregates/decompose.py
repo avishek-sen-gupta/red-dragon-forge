@@ -13,6 +13,7 @@ import numpy as np
 from cobble.experimental.aggregates.factor import Factor
 from cobble.experimental.aggregates.factor_field import FactorField
 from cobble.experimental.aggregates.factor_paragraph import FactorParagraph
+from cobble.experimental.aggregates.fitted_round import FittedRound
 from cobble.experimental.aggregates.k_result import KResult
 from cobble.experimental.aggregates.matrix import IncidenceMatrix
 from cobble.experimental.aggregates.nmf_settings import NmfSettings
@@ -37,15 +38,15 @@ _Entries = tuple[NDArray[np.int32], NDArray[np.int64]]
 _ROUNDS: TypeAdapter[tuple[RoundResult, ...]] = TypeAdapter(tuple[RoundResult, ...])
 
 
-def _ranked(column: _Loadings, top: int) -> tuple[int, ...]:
-    ranked = [int(i) for i in np.argsort(column, kind="stable")[::-1][:top]]
-    return tuple(takewhile(lambda i: column[i] > 0, ranked))
+def ranked(column: _Loadings, top: int) -> tuple[int, ...]:
+    order = [int(i) for i in np.argsort(column, kind="stable")[::-1][:top]]
+    return tuple(takewhile(lambda i: column[i] > 0, order))
 
 
 def _top_fields(column: _Loadings, fields: Sequence[str]) -> tuple[FactorField, ...]:
     return tuple(
         FactorField(field=fields[i], loading=round(float(column[i]), 4))
-        for i in _ranked(column, TOP_FIELDS)
+        for i in ranked(column, TOP_FIELDS)
     )
 
 
@@ -58,7 +59,7 @@ def _top_paragraphs(
             paragraph=paragraphs[i][1],
             loading=round(float(column[i]), 4),
         )
-        for i in _ranked(column, TOP_PARAGRAPHS)
+        for i in ranked(column, TOP_PARAGRAPHS)
     )
 
 
@@ -75,21 +76,27 @@ def _factor(index: int, used: _Loadings, made_of: _Loadings, names: _Names) -> F
     )
 
 
-def _fit(
-    target: csr_matrix, names: _Names, k: int, settings: NmfSettings
-) -> tuple[KResult, _Factors]:
+def factorised(
+    target: csr_matrix, k: int, settings: NmfSettings
+) -> tuple[_Factors, float, int]:
     model = NMF(init="nndsvda", max_iter=settings.max_iter, random_state=settings.seed)
     used: _Loadings = np.asarray(
         model.set_params(n_components=k).fit_transform(target), dtype=np.float64
     )
     made_of: _Loadings = np.asarray(model.components_, dtype=np.float64)
-    error = float(model.reconstruction_err_)
-    logger.info("k=%d  error=%.2f  iters=%d", k, error, model.n_iter_)
+    return (used, made_of), float(model.reconstruction_err_), int(model.n_iter_)
+
+
+def _fit(
+    target: csr_matrix, names: _Names, k: int, settings: NmfSettings
+) -> tuple[KResult, _Factors]:
+    (used, made_of), error, iterations = factorised(target, k, settings)
+    logger.info("k=%d  error=%.2f  iters=%d", k, error, iterations)
     return (
         KResult(
             k=k,
             reconstruction_error=error,
-            n_iterations=int(model.n_iter_),
+            n_iterations=iterations,
             factors=tuple(_factor(i, used[:, i], made_of[i], names) for i in range(k)),
         ),
         (used, made_of),
@@ -147,12 +154,15 @@ def _residual(target: csr_matrix, before: _Loadings) -> csr_matrix:
     return left
 
 
+def _earlier(done: Sequence[FittedRound]) -> tuple[_Earlier, ...]:
+    return tuple(((found.used, found.made_of), found.keep) for found in done)
+
+
 def _round(
-    state: tuple[tuple[RoundResult, ...], tuple[_Earlier, ...]],
+    done: tuple[FittedRound, ...],
     step: RoundStep,
     plan: tuple[IncidenceMatrix, NmfSettings, int],
-) -> tuple[tuple[RoundResult, ...], tuple[_Earlier, ...]]:
-    done, earlier = state
+) -> tuple[FittedRound, ...]:
     found, settings, total = plan
     keep = np.array(
         [i for i, n in enumerate(found.occurrences) if n >= step.min_occurrences],
@@ -161,9 +171,10 @@ def _round(
     _opening(len(done) + 1, total, step, len(keep))
     target = csr_matrix(found.matrix[:, keep], dtype=np.float64)
     entries = target.tocoo()
-    before = _explained_at(earlier, (entries.row, keep[entries.col]))
-    fit, factors = _fit(
-        _residual(target, before),
+    before = _explained_at(_earlier(done), (entries.row, keep[entries.col]))
+    residual = _residual(target, before)
+    fit, (used, made_of) = _fit(
+        residual,
         ([found.fields[i] for i in keep], found.paragraphs),
         step.k,
         settings,
@@ -171,29 +182,34 @@ def _round(
     share = _share(float(np.minimum(entries.data, before).sum()), float(target.sum()))
     _closing(len(done) + 1, total, share)
     return (
-        (
-            *done,
-            RoundResult(
+        *done,
+        FittedRound(
+            step=step,
+            keep=keep,
+            residual=residual,
+            used=used,
+            made_of=made_of,
+            result=RoundResult(
                 min_occurrences=step.min_occurrences,
                 explained_by_earlier=share,
                 fit=fit,
             ),
         ),
-        (*earlier, (factors, keep)),
     )
+
+
+def fitted_rounds(
+    found: IncidenceMatrix, steps: Sequence[RoundStep], settings: NmfSettings
+) -> tuple[FittedRound, ...]:
+    plan = (found, settings, len(steps))
+    return reduce(lambda done, step: _round(done, step, plan), steps, ())
 
 
 def rounds(
     found: IncidenceMatrix, steps: Sequence[RoundStep], settings: NmfSettings
 ) -> tuple[RoundResult, ...]:
     """Each step factors the fields written in at least its threshold of paragraphs, after subtracting what earlier rounds explain."""
-    plan = (found, settings, len(steps))
-    done, _ = reduce(
-        lambda state, step: _round(state, step, plan),
-        steps,
-        ((), ()),
-    )
-    return done
+    return tuple(done.result for done in fitted_rounds(found, steps, settings))
 
 
 def write_rounds(out_dir: Path, found: Sequence[RoundResult]) -> None:
