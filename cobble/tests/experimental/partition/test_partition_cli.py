@@ -11,7 +11,12 @@ from typing import TypedDict
 import pytest
 from tests.dataflow.fixpoint.fixpoint_dir import Row, fixpoint_dir, flow_row, sink_row
 
-from cobble.experimental.partition import clusters_cli, graph_cli, render_cli
+from cobble.experimental.partition import (
+    clusters_cli,
+    file_sites_cli,
+    graph_cli,
+    render_cli,
+)
 from cobble.experimental.partition.extent_row import ExtentRow
 from cobble.dataflow.combine.link_row import LinkRow
 
@@ -438,4 +443,30 @@ def test_with_a_knowledge_graph_file_sites_become_dataset_links(
         "partition graph: 3 slots, 5 dataset edges",
         "partition graph: dataset sites 2 exact, 0 possible, 1 unresolved",
         "partition graph: 3 slots, 5 dataset edges",
+    ]
+
+
+def test_file_sites_report_each_route_and_why_the_rest_resolve_to_no_dataset(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    _, fixpoint, graph, targets = _dataset_inputs(tmp_path)
+    untargeted = _jsonl(tmp_path / "untargeted.jsonl", [])
+    base = ["--fixpoint", str(fixpoint), "--knowledge-graph", str(graph)]
+
+    with caplog.at_level(logging.INFO):
+        assert file_sites_cli.main([*base, "--targets", str(targets)]) == 0
+        assert file_sites_cli.main([*base, "--targets", str(untargeted)]) == 0
+
+    assert [
+        record.getMessage()
+        for record in caplog.records
+        if record.getMessage().startswith("partition file sites: ")
+        and "reading provenance" not in record.getMessage()
+    ] == [
+        "partition file sites: 3 file sites: 1 resolved by a CICS file target, "
+        "2 by a SELECT, 0 unresolved-file",
+        "partition file sites: 3 file sites: 0 resolved by a CICS file target, "
+        "2 by a SELECT, 1 unresolved-file",
+        "partition file sites: 1 unresolved-file sites: selects-under-other-names, "
+        "e.g. R/9 LIT-ACCT",
     ]

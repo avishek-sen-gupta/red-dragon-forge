@@ -138,12 +138,16 @@ def _resolved(
     return (_unresolved(site, site.file, (UNRESOLVED_FILE,)),)
 
 
-def dataset_sites(
-    sites: Sequence[FileSite], graph: KnowledgeGraph, targets: Sequence[TargetSite]
-) -> tuple[DatasetSite, ...]:
-    files = {
+def file_targets(targets: Sequence[TargetSite]) -> Mapping[str, TargetSite]:
+    return {
         f"{target.caller}/{target.node}": target
         for target in targets
         if target.kind is TargetKind.FILE
     }
+
+
+def dataset_sites(
+    sites: Sequence[FileSite], graph: KnowledgeGraph, targets: Sequence[TargetSite]
+) -> tuple[DatasetSite, ...]:
+    files = file_targets(targets)
     return tuple(found for site in sites for found in _resolved(site, files, graph))

@@ -200,6 +200,20 @@ to `components` and selects its component.
 searches for it, and reports what each step showed. The render tests run it on a small graph; it
 can be pointed at any rendered page.
 
+## cobble-experimental-partition-file-sites
+
+```text
+cobble-experimental-partition-file-sites --fixpoint FIXPOINT --knowledge-graph GRAPH --targets TARGETS
+```
+
+A diagnostic over the graph's dataset inputs, without building the graph. It logs how many file
+sites a CICS file target resolves and how many a `SELECT` does, then the `unresolved-file` ones
+under the first gap that explains each, with three examples: `target-not-file` (a target sits at
+the site but names a program), `file-targets-at-other-nodes` (the program has file targets, none at
+this site), `selects-under-other-names` (the program has `SELECT`s, not this one),
+`only-non-file-targets` (the program has only program targets), `program-unknown` (neither table
+names the program). On CardDemo all 181 sites resolve: 37 by a CICS file target, 144 by a `SELECT`.
+
 ## Limits
 
 - The fixpoint merges paths: a move whose subscript takes several values reaches every candidate
