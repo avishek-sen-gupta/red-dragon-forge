@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import tracemalloc
 
 import numpy as np
 import pytest
@@ -86,3 +87,32 @@ def test_a_later_round_factors_what_the_strict_round_leaves_in_the_looser_fields
         "decompose: round 2 of 2: min-occurrences 2, 14 fields, k=1",
         f"decompose: round 2 of 2: {second.explained_by_earlier:.1%} of its matrix explained by earlier rounds",
     ]
+
+
+def test_rounds_hold_memory_for_the_matrix_non_zeros_not_its_every_cell() -> None:
+    planted = _planted().matrix.tocoo()
+    paragraphs, fields = 2000, 20000
+    wide = IncidenceMatrix(
+        matrix=csr_matrix(
+            (planted.data, (planted.row, planted.col)), shape=(paragraphs, fields)
+        ),
+        fields=tuple(f"FIELD-{i}" for i in range(fields)),
+        paragraphs=tuple(("P", f"PARA-{i}") for i in range(paragraphs)),
+        occurrences=(*_planted().occurrences, *(0 for _ in range(fields - 14))),
+    )
+
+    tracemalloc.start()
+    first, second = rounds(
+        wide,
+        (RoundStep(min_occurrences=4, k=2), RoundStep(min_occurrences=2, k=1)),
+        SETTINGS,
+    )
+    _, peak = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+
+    assert {_block(factor) for factor in first.fit.factors} == {
+        _planted_block(0),
+        _planted_block(1),
+    }
+    assert [_block(factor) for factor in second.fit.factors] == [_planted_block(2)]
+    assert peak < paragraphs * fields * 8 // 10

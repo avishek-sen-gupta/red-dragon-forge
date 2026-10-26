@@ -54,7 +54,9 @@ thresholds must strictly decrease. Round 1 factors the matrix's columns for the 
 least its threshold of paragraphs into its `k` factors. Each factor has a loading per field, what the
 candidate aggregate is made of, and a loading per paragraph, where it is used. Each later round takes the
 fields its own threshold admits, subtracts what all earlier rounds' factors rebuild of that part of
-the matrix, clips at zero, and factors what is left. The matrix holds every field, so the
+the matrix, clips at zero, and factors what is left. Factors never go negative, so what is left is
+zero wherever the matrix is: the rebuild is computed only at the matrix's entries and the matrix
+stays sparse, so memory grows with its entries, not with paragraphs times fields. The matrix holds every field, so the
 thresholds live in decompose alone: each round cuts the columns of the fields `meta.json` counts in
 at least its threshold of paragraphs. Matrices saved before this layout do not load; rebuild them.
 

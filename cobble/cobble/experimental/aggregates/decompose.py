@@ -20,7 +20,7 @@ from cobble.experimental.aggregates.round_result import RoundResult
 from cobble.experimental.aggregates.round_step import RoundStep
 from numpy.typing import NDArray
 from pydantic import TypeAdapter
-from scipy.sparse import coo_matrix, csr_matrix
+from scipy.sparse import csr_matrix
 from sklearn.decomposition import NMF
 
 logger = logging.getLogger(__name__)
@@ -31,6 +31,9 @@ PREFIX_SEPARATOR = "-"
 
 _Loadings = NDArray[np.float64]
 _Names = tuple[Sequence[str], Sequence[tuple[str, str]]]
+_Factors = tuple[_Loadings, _Loadings]
+_Earlier = tuple[_Factors, NDArray[np.int64]]
+_Entries = tuple[NDArray[np.int32], NDArray[np.int64]]
 _ROUNDS: TypeAdapter[tuple[RoundResult, ...]] = TypeAdapter(tuple[RoundResult, ...])
 
 
@@ -73,12 +76,11 @@ def _factor(index: int, used: _Loadings, made_of: _Loadings, names: _Names) -> F
 
 
 def _fit(
-    target: _Loadings, names: _Names, k: int, settings: NmfSettings
-) -> tuple[KResult, _Loadings]:
+    target: csr_matrix, names: _Names, k: int, settings: NmfSettings
+) -> tuple[KResult, _Factors]:
     model = NMF(init="nndsvda", max_iter=settings.max_iter, random_state=settings.seed)
     used: _Loadings = np.asarray(
-        model.set_params(n_components=k).fit_transform(csr_matrix(target)),
-        dtype=np.float64,
+        model.set_params(n_components=k).fit_transform(target), dtype=np.float64
     )
     made_of: _Loadings = np.asarray(model.components_, dtype=np.float64)
     error = float(model.reconstruction_err_)
@@ -90,18 +92,7 @@ def _fit(
             n_iterations=int(model.n_iter_),
             factors=tuple(_factor(i, used[:, i], made_of[i], names) for i in range(k)),
         ),
-        used @ made_of,
-    )
-
-
-def _lifted(
-    rebuilt: _Loadings, keep: NDArray[np.int64], shape: tuple[int, int]
-) -> _Loadings:
-    rows = np.repeat(np.arange(shape[0]), len(keep))
-    columns = np.tile(keep, shape[0])
-    return np.asarray(
-        coo_matrix((rebuilt.ravel(), (rows, columns)), shape=shape).toarray(),
-        dtype=np.float64,
+        (used, made_of),
     )
 
 
@@ -129,29 +120,55 @@ def _closing(number: int, total: int, share: float) -> None:
     )
 
 
-def _sliced(matrix: _Loadings, keep: NDArray[np.int64]) -> _Loadings:
-    return matrix[:, keep]
+def _rebuilt_at(earlier: _Earlier, entries: _Entries) -> _Loadings:
+    (used, made_of), kept = earlier
+    rows, columns = entries
+    place = np.minimum(np.searchsorted(kept, columns), len(kept) - 1)
+    hit = kept[place] == columns
+    return hit * sum(
+        (used[rows, i] * made_of[i, place] for i in range(used.shape[1])),
+        np.zeros(len(rows)),
+    )
+
+
+def _explained_at(earlier: Sequence[_Earlier], entries: _Entries) -> _Loadings:
+    return sum(
+        (_rebuilt_at(found, entries) for found in earlier), np.zeros(len(entries[0]))
+    )
+
+
+def _residual(target: csr_matrix, before: _Loadings) -> csr_matrix:
+    entries = target.tocoo()
+    left = csr_matrix(
+        (np.clip(entries.data - before, 0, None), (entries.row, entries.col)),
+        shape=target.shape,
+    )
+    left.eliminate_zeros()
+    return left
 
 
 def _round(
-    state: tuple[tuple[RoundResult, ...], _Loadings],
+    state: tuple[tuple[RoundResult, ...], tuple[_Earlier, ...]],
     step: RoundStep,
-    plan: tuple[_Loadings, IncidenceMatrix, NmfSettings, int],
-) -> tuple[tuple[RoundResult, ...], _Loadings]:
-    done, explained = state
-    whole, found, settings, total = plan
+    plan: tuple[IncidenceMatrix, NmfSettings, int],
+) -> tuple[tuple[RoundResult, ...], tuple[_Earlier, ...]]:
+    done, earlier = state
+    found, settings, total = plan
     keep = np.array(
-        [i for i, n in enumerate(found.occurrences) if n >= step.min_occurrences]
+        [i for i, n in enumerate(found.occurrences) if n >= step.min_occurrences],
+        dtype=np.int64,
     )
     _opening(len(done) + 1, total, step, len(keep))
-    target, before = _sliced(whole, keep), _sliced(explained, keep)
-    fit, rebuilt = _fit(
-        np.clip(target - before, 0, None),
+    target = csr_matrix(found.matrix[:, keep], dtype=np.float64)
+    entries = target.tocoo()
+    before = _explained_at(earlier, (entries.row, keep[entries.col]))
+    fit, factors = _fit(
+        _residual(target, before),
         ([found.fields[i] for i in keep], found.paragraphs),
         step.k,
         settings,
     )
-    share = _share(float(np.minimum(target, before).sum()), float(target.sum()))
+    share = _share(float(np.minimum(entries.data, before).sum()), float(target.sum()))
     _closing(len(done) + 1, total, share)
     return (
         (
@@ -162,7 +179,7 @@ def _round(
                 fit=fit,
             ),
         ),
-        explained + _lifted(rebuilt, keep, (explained.shape[0], explained.shape[1])),
+        (*earlier, (factors, keep)),
     )
 
 
@@ -170,12 +187,11 @@ def rounds(
     found: IncidenceMatrix, steps: Sequence[RoundStep], settings: NmfSettings
 ) -> tuple[RoundResult, ...]:
     """Each step factors the fields written in at least its threshold of paragraphs, after subtracting what earlier rounds explain."""
-    whole: _Loadings = np.asarray(found.matrix.toarray(), dtype=np.float64)
-    plan = (whole, found, settings, len(steps))
+    plan = (found, settings, len(steps))
     done, _ = reduce(
         lambda state, step: _round(state, step, plan),
         steps,
-        ((), np.zeros_like(whole)),
+        ((), ()),
     )
     return done
 
