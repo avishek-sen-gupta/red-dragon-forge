@@ -234,12 +234,10 @@ def with_datasets(
         **{node.id: node for found, _ in parts for node in found},
         **{node.id: node for node in graph.nodes},
     }
+    barrier = graph.barrier
     edges = (
         *graph.edges,
-        *(
-            _edge(ends, tuple(group), graph.barrier)
-            for ends, group in groupby(flows, _ends)
-        ),
+        *(_edge(ends, tuple(group), barrier) for ends, group in groupby(flows, _ends)),
     )
     return FieldGraph(
         nodes=tuple(nodes[name] for name in sorted(nodes)),
