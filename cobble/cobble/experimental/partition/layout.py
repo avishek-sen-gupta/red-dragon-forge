@@ -18,7 +18,7 @@ from cobble.experimental.partition.tally import RENDER, Tally
 from numpy.typing import NDArray
 
 LAYOUT_SEED = 7
-SPREAD = 2.2
+FORCE_STEPS = 100
 GAP = 4.0
 DOT = 1.4
 JITTER = 1.5
@@ -27,10 +27,6 @@ SETTLE_STEPS = 3000
 _Point = tuple[float, float]
 _Points = NDArray[np.float64]
 _Ends = Mapping[str, tuple[str, ...]]
-
-
-def _radius(size: int) -> float:
-    return SPREAD * math.sqrt(size) + 1.0
 
 
 def _programs(graph: FieldGraph) -> dict[str, tuple[str, ...]]:
@@ -76,11 +72,15 @@ def _local(ends: _Ends, members: Sequence[str]) -> nx.Graph[str]:
 def _region(ends: _Ends, members: Sequence[str]) -> dict[str, _Point]:
     if len(members) == 1:
         return {members[0]: (0.0, 0.0)}
-    placed = nx.spring_layout(_local(ends, members), seed=LAYOUT_SEED)
+    placed = nx.forceatlas2_layout(
+        _local(ends, members),
+        seed=LAYOUT_SEED,
+        max_iter=FORCE_STEPS,
+        strong_gravity=True,
+        node_size=dict.fromkeys(members, DOT),
+    )
     raw = np.array([placed[member] for member in members], dtype=np.float64)
-    spread = raw - raw.mean(axis=0)
-    reach = max(float(np.linalg.norm(spread, axis=1).max()), 1e-9)
-    scaled = spread * (_radius(len(members)) / reach)
+    scaled = raw - raw.mean(axis=0)
     return {
         member: (float(point[0]), float(point[1]))
         for member, point in zip(members, scaled, strict=True)

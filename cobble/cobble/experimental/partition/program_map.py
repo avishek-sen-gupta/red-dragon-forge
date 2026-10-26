@@ -9,7 +9,7 @@ from urllib.parse import quote
 
 import networkx as nx
 from cobble.experimental.partition.graph_index import GraphIndex
-from cobble.experimental.partition.layout import LAYOUT_SEED
+from cobble.experimental.partition.layout import FORCE_STEPS, LAYOUT_SEED
 from cobble.experimental.partition.map_data import MapData
 from cobble.experimental.partition.map_edge import MapEdge
 from cobble.experimental.partition.map_kind import MapKind
@@ -17,7 +17,7 @@ from cobble.experimental.partition.map_node import MapNode
 from cobble.experimental.partition.node_kind import NodeKind
 
 TEMPLATE = Path(__file__).with_name("program_map.html")
-SCALE = 100.0
+SPREAD = 10.0
 
 
 def _groups(index: GraphIndex) -> Mapping[str, str]:
@@ -35,15 +35,21 @@ def _links(index: GraphIndex, group: Mapping[str, str]) -> Counter[tuple[str, st
 
 
 def _placed(
-    names: Sequence[str], links: Counter[tuple[str, str]]
+    sizes: Counter[str], links: Counter[tuple[str, str]]
 ) -> Mapping[str, tuple[float, float]]:
     linked: nx.Graph[str] = nx.Graph()
-    linked.add_nodes_from(names)
+    linked.add_nodes_from(sorted(sizes))
     linked.add_weighted_edges_from((a, b, float(n)) for (a, b), n in links.items())
-    placed = nx.spring_layout(linked, seed=LAYOUT_SEED, weight="weight")
+    placed = nx.forceatlas2_layout(
+        linked,
+        seed=LAYOUT_SEED,
+        max_iter=FORCE_STEPS,
+        strong_gravity=True,
+        weight="weight",
+    )
     return {
-        name: (float(placed[name][0]) * SCALE, float(placed[name][1]) * SCALE)
-        for name in names
+        name: (float(placed[name][0]) * SPREAD, float(placed[name][1]) * SPREAD)
+        for name in sizes
     }
 
 
@@ -65,7 +71,7 @@ def program_map(index: GraphIndex) -> MapData:
     }
     names = sorted(kinds)
     links = _links(index, group)
-    at = _placed(names, links)
+    at = _placed(sizes, links)
     return MapData(
         nodes=tuple(_node(name, kinds[name], at[name], sizes[name]) for name in names),
         edges=tuple(

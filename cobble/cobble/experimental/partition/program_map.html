@@ -22,16 +22,18 @@ const DATA = /*DATA*/;
 const dim = getComputedStyle(document.documentElement).getPropertyValue("--dim").trim();
 const graph = new graphology.UndirectedGraph();
 DATA.nodes.forEach(n => graph.addNode(n.id, { ...n, y: -n.y,
-  size: 3 + 1.5 * Math.log2(1 + n.fields),
+  size: 1 + Math.log2(1 + n.fields),
   color: n.kind === "dataset" ? "#2e86de" : "#2c3e50" }));
 DATA.edges.forEach(e => graph.addEdge(e.source, e.target, { ...e,
-  size: 0.5 + 0.5 * Math.log2(e.links), color: "#ccc" }));
+  size: 0.1 + 0.1 * Math.log2(e.links), color: "#ccc" }));
+graphologyLibrary.layoutNoverlap.assign(graph, { maxIterations: 500, settings: { margin: 1 } });
 document.getElementById("stats").textContent =
   `${DATA.nodes.filter(n => n.kind === "program").length} programs · ${DATA.nodes.filter(n => n.kind === "dataset").length} datasets · ${DATA.edges.length} links`;
 let hover = null, selected = null;
 const near = id => new Set([id, ...graph.neighbors(id)]);
 const renderer = new Sigma(graph, document.getElementById("graph"), {
-  hideEdgesOnMove: true, labelRenderedSizeThreshold: 8,
+  labelRenderedSizeThreshold: 8,
+  itemSizesReference: "positions", zoomToSizeRatioFunction: x => x,
   nodeReducer: (id, d) => {
     const around = hover ?? (selected === null ? null : near(selected));
     if (around === null) return d;
@@ -60,7 +62,20 @@ const select = id => {
 };
 renderer.on("enterNode", ({ node }) => { hover = near(node); describe(node); renderer.refresh(); });
 renderer.on("leaveNode", () => { hover = null; renderer.refresh(); });
+let dragged = null, dragMoved = false;
+renderer.on("downNode", ({ node }) => {
+  dragged = node; dragMoved = false;
+  if (!renderer.getCustomBBox()) renderer.setCustomBBox(renderer.getBBox());
+});
+renderer.getMouseCaptor().on("mousemovebody", e => {
+  if (!dragged) return;
+  graph.mergeNodeAttributes(dragged, renderer.viewportToGraph(e));
+  dragMoved = true;
+  e.preventSigmaDefault(); e.original.preventDefault(); e.original.stopPropagation();
+});
+renderer.getMouseCaptor().on("mouseup", () => { dragged = null; });
 renderer.on("clickNode", ({ node }) => {
+  if (dragMoved) { dragMoved = false; return; }
   const href = graph.getNodeAttribute(node, "href");
   if (href) window.location.href = href; else select(node);
 });

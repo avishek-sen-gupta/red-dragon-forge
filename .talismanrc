@@ -123,6 +123,8 @@ fileignoreconfig:
   checksum: 6e440b5feac15fa73b0c1cf9532743b8e588ce6b8601bb0c2b4e33e497d76801
 - filename: cobble/cobble/knowledge_graph/vendor/vis-network.min.js
   checksum: 725b49cad8f203b9118a095c5cd0489cfb421e1c219f3d61fe7fb297d753494b
+- filename: cobble/cobble/knowledge_graph/vendor/graphology-library.min.js
+  checksum: e027d74dc7e87a695a793b943a4d8a5f7b0c9d015c495afb6764e8a318d113a7
 - filename: cobble/cobble/matching_files.py
   checksum: ba487ea58770b0f282b8df70f46730538296843fce39c4b2824ccb6f46b05f73
 - filename: cobble/tests/jackal/test_bridge_parser.py

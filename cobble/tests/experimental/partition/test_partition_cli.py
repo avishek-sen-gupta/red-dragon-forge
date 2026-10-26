@@ -498,6 +498,7 @@ def test_the_render_writes_a_map_shared_scripts_and_one_page_per_program(
         "programs/P.html",
         "programs/Q.html",
         "programs/S.html",
+        "scripts/graphology-library.min.js",
         "scripts/graphology.umd.min.js",
         "scripts/sigma.min.js",
     ]

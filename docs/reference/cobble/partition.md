@@ -176,15 +176,17 @@ cobble-experimental-partition-render --graph GRAPH --out OUT
 |---|---|
 | `index.html` | the program map |
 | `programs/<PROGRAM>.html` | one page per program, of its neighbourhood |
-| `scripts/graphology.umd.min.js`, `scripts/sigma.min.js` | the vendored builds, written once; every page loads them by relative `src` |
+| `scripts/graphology.umd.min.js`, `scripts/sigma.min.js`, `scripts/graphology-library.min.js` | the vendored builds, written once; every page loads them by relative `src` |
 
 The graph is read one line at a time, logging every tenth of the lines, into slotted records, and
 indexed once by node and by program, so no step scans the whole graph per program or per slot.
 
 **The program map** has one node per program and one per dataset record, sized by how many graph
 nodes it holds, and an edge between two of them when some graph edge links their nodes, thicker for
-more such edges. It is placed by a seeded weighted `spring_layout`. Clicking a program opens its
-page; hovering a node or searching its name (Enter) shows what it links to, with link counts.
+more such edges. It is placed by a seeded weighted networkx `forceatlas2_layout` with strong gravity,
+then graphology's noverlap layout runs in the page so no two dots overlap. Clicking a program opens
+its page; dragging a node moves it; hovering a node or searching its name (Enter) shows what it
+links to, with link counts.
 
 **A program's neighbourhood** is its own fields, origins and sinks; every node one edge from those;
 and, for each dataset slot among them, every node one edge from that slot, so following a dataset
@@ -192,8 +194,9 @@ still shows all its writers and readers. It keeps every edge with both ends insi
 every tenth of the pages and the largest neighbourhood.
 
 Each program page draws its neighbourhood with the sigma.js and graphology builds cobble vendors, dark on
-light. Each program is laid out on its own, by one seeded networkx `spring_layout` over the edges
-among its nodes, so linked fields pull together and a field nothing links drifts to the edge.
+light. Each program is laid out on its own, by one seeded networkx `forceatlas2_layout` over the
+edges among its nodes, with strong gravity and a node size, so linked fields pull together and dots
+keep apart; a region of exactly two fields still collapses to one spot (red-dragon-forge-liu0).
 Programs are then placed by a seeded `spring_layout` over what links them, call handovers
 and datasets they share, and pushed apart until none overlap, so programs that exchange bytes tend
 to sit near each other. A dataset slot sits at the mean of the fields it links, jittered. A
@@ -202,12 +205,12 @@ from the graph alone. The page folds a run of consecutive occurrences of one tab
 share a component and have exactly the same edges into one drawn node, `LK-COMMAREA(9:16)`, whose
 edges carry the largest site count among the edges they stand for; selecting it lists the
 occurrences. Only the page folds: `graph.jsonl` keeps every occurrence. Dot sizes are in layout units, so they keep their spacing when zoomed out.
-Labels show only for a hovered node and its neighbours, or the selected component. Colour shows the
+Labels show only for a hovered node and its neighbours, or for a clicked field and its neighbours; the rest of its component stays highlighted, unlabelled. Colour shows the
 component. The side panel lists components or datasets. Clicking one zooms to it and lists its
 fields and terminals. Hovering a
 node shows its edges. Edges are grey when clustered, pale orange when they cross programs, and red
-when a barrier blocked them. Dataset slots are blue dots in the outer rings. Dataset edges are not drawn until a dataset is
-followed: pick it in the `datasets` list (largest first, with its field and program counts), click
+when a barrier blocked them. Dataset slots are blue dots in the outer rings. Dataset edges are not drawn until the "dataset links"
+box is ticked, which draws every dataset's edges, or a dataset is followed: pick it in the `datasets` list (largest first, with its field and program counts), click
 one of its slots, or type its name in search and press Enter. Following a dataset fades every other
 node to light grey with no edges, draws its own edges (blue when `exact`, pale blue when `possible`) and opens its record layout
 over the graph: one row per slot in byte order, one column per program, each cell the fields that

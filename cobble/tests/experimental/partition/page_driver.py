@@ -17,6 +17,8 @@ PLAIN_FIELD = "graph.filterNodes((id, d) => d.kind === 'field' && d.component >=
 ISOLATED_FIELD = (
     "graph.filterNodes((id, d) => d.kind === 'field' && d.component < 0)[0]"
 )
+LABELLED = "graph.filterNodes(id => renderer.getNodeDisplayData(id).forceLabel).map(id => graph.getNodeAttribute(id, 'label'))"
+HIGHLIGHTED = "graph.filterNodes(id => inFocus(id)).length"
 CHAIN_DATASETS = "[...new Set([...chain].filter(isSlot).map(i => graph.getNodeAttribute(i, 'record')))].sort()"
 
 
@@ -30,6 +32,9 @@ def _drive(page: Page, url: str, errors: list[str]) -> PageReport:
     page.wait_for_function("typeof renderer !== 'undefined'")
     total = page.evaluate(f"{DATASET_EDGES}.length")
     before = page.evaluate(VISIBLE)
+    page.locator("#datasets").check()
+    toggled = page.evaluate(VISIBLE)
+    page.locator("#datasets").uncheck()
     page.locator("input[name=group][value=dataset]").check()
     rows = tuple(page.locator("#list .c").all_inner_texts())
     page.locator("#list .c").first.click()
@@ -44,6 +49,8 @@ def _drive(page: Page, url: str, errors: list[str]) -> PageReport:
     other_edges = page.evaluate(OTHER_EDGES)
     page.evaluate(f"renderer.emit('clickNode', {{ node: {PLAIN_FIELD} }})")
     field_click = (page.evaluate("grouping"), _headline(page))
+    click_labels = tuple(sorted(page.evaluate(LABELLED)))
+    highlighted = page.evaluate(HIGHLIGHTED)
     page.evaluate(f"renderer.emit('clickNode', {{ node: {ISOLATED_FIELD} }})")
     isolated_click = (page.evaluate("grouping"), _headline(page))
     page.evaluate("select(null)")
@@ -53,6 +60,7 @@ def _drive(page: Page, url: str, errors: list[str]) -> PageReport:
         errors=tuple(errors),
         dataset_edges=total,
         visible_before=before,
+        visible_toggled=toggled,
         rows=rows,
         followed=followed,
         chain_datasets=tuple(chained),
@@ -62,6 +70,8 @@ def _drive(page: Page, url: str, errors: list[str]) -> PageReport:
         other_colours=colours,
         other_edges_shown=other_edges,
         field_click=field_click,
+        click_labels=click_labels,
+        highlighted=highlighted,
         isolated_click=isolated_click,
         searched=_headline(page),
     )

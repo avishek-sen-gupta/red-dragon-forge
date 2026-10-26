@@ -48,6 +48,7 @@ def test_the_map_page_loads_and_each_program_links_to_its_page(tmp_path: Path) -
     (tmp_path / "scripts").mkdir()
     (tmp_path / SOURCES[0]).write_bytes(SCRIPTS[0].read_bytes())
     (tmp_path / SOURCES[1]).write_bytes(SCRIPTS[1].read_bytes())
+    (tmp_path / SOURCES[2]).write_bytes(SCRIPTS[2].read_bytes())
     (tmp_path / "programs").mkdir()
     (tmp_path / "programs" / "Q.html").write_text("<p>Q</p>", "utf-8")
     out = tmp_path / "index.html"
@@ -59,5 +60,7 @@ def test_the_map_page_loads_and_each_program_links_to_its_page(tmp_path: Path) -
         edges=3,
         hrefs=("programs/P.html", "programs/Q.html", "programs/S.html"),
         searched="Q",
+        dragged=(True, False),
+        stayed=True,
         clicked="programs/Q.html",
     )

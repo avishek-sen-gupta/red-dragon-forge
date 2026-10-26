@@ -20,7 +20,11 @@ from cobble.experimental.partition.tally import RENDER, tenths
 logger = logging.getLogger(__name__)
 
 VENDOR = Path(cobble.knowledge_graph.__file__).parent / "vendor"
-SCRIPTS = (VENDOR / "graphology.umd.min.js", VENDOR / "sigma.min.js")
+SCRIPTS = (
+    VENDOR / "graphology.umd.min.js",
+    VENDOR / "sigma.min.js",
+    VENDOR / "graphology-library.min.js",
+)
 SOURCES = tuple(f"scripts/{script.name}" for script in SCRIPTS)
 PAGE_SOURCES = tuple(f"../{source}" for source in SOURCES)
 
@@ -82,6 +86,7 @@ def main(argv: Sequence[str] = ()) -> int:
     )
     _write(out / SOURCES[0], SCRIPTS[0].read_text(encoding="utf-8"))
     _write(out / SOURCES[1], SCRIPTS[1].read_text(encoding="utf-8"))
+    _write(out / SOURCES[2], SCRIPTS[2].read_text(encoding="utf-8"))
     _write(out / "index.html", map_page(program_map(index), SOURCES))
     logger.info("partition render: program map -> %s", out / "index.html")
     _pages(out, index)

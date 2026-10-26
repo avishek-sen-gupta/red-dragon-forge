@@ -27,7 +27,8 @@ label { margin-right:10px; }
 <label><input type="radio" name="group" value="dataset"> datasets</label><br>
 <label><input type="checkbox" id="terminals" checked> origins and sinks</label>
 <label><input type="checkbox" id="blocked" checked> blocked edges</label>
-<div class="muted">grey: clustered · pale orange: cross-program · red: blocked by the barrier · blue dots: dataset slots; dataset links (blue exact, pale blue possible) show only for a followed dataset: pick one under "datasets", click a slot, or type a dataset name and press Enter</div>
+<label><input type="checkbox" id="datasets"> dataset links</label>
+<div class="muted">grey: clustered · pale orange: cross-program · red: blocked by the barrier · blue dots: dataset slots; dataset links (blue exact, pale blue possible) show with "dataset links" ticked, else only for a followed dataset: pick one under "datasets", click a slot, or type a dataset name and press Enter</div>
 </div>
 <input type="text" id="search" placeholder="search a field or program">
 <div id="list"></div><div id="detail"></div>
@@ -53,14 +54,14 @@ DATA.edges.forEach(e => graph.addEdge(e.source, e.target, { ...e,
   size: Math.min(0.5, 0.1 + 0.1 * Math.log2(e.sites)),
   color: isSlot(e.source) || isSlot(e.target) ? (e.certainty === "exact" ? SLOT : "#aed6f1")
     : !e.clustered ? "#c0392b" : e.cross_program ? "#f5cba7" : "#bbb" }));
-let grouping = "component", showTerminals = true, showBlocked = true, focus = null, focusTerminals = null, hover = null, matching = null, chain = null, followed = null;
+let grouping = "component", showTerminals = true, showBlocked = true, showDatasets = false, focus = null, focusTerminals = null, near = new Set(), hover = null, matching = null, chain = null, followed = null;
 const groupOf = d => d.component;
 const isField = id => graph.getNodeAttribute(id, "kind") === "field";
 const isStorage = id => isField(id) || isSlot(id);
 const inFocus = id => isField(id) && groupOf(graph.getNodeAttributes(id)) === focus;
 const Arrow = Sigma.rendering.createEdgeArrowProgram({ lengthToThicknessRatio: 6, widenessToThicknessRatio: 4 });
 const renderer = new Sigma(graph, document.getElementById("graph"), {
-  edgeProgramClasses: { arrow: Arrow }, defaultEdgeType: "arrow", hideEdgesOnMove: true,
+  edgeProgramClasses: { arrow: Arrow }, defaultEdgeType: "arrow",
   itemSizesReference: "positions", zoomToSizeRatioFunction: x => x,
   labelRenderedSizeThreshold: 7,
   nodeReducer: (id, d) => {
@@ -72,11 +73,12 @@ const renderer = new Sigma(graph, document.getElementById("graph"), {
     if (chain) return chain.has(id) ? shown : { ...faded, size: Math.min(d.size, 0.6) };
     if (matching && !matching.has(id)) return faded;
     if (focus === null) return shown;
-    return inFocus(id) || focusTerminals.has(id) ? labelled : faded;
+    if (!inFocus(id) && !focusTerminals.has(id)) return faded;
+    return near.has(id) ? labelled : shown;
   },
   edgeReducer: (id, d) => {
     const [s, t] = graph.extremities(id);
-    if (d.dataset && !(chain && chain.has(s) && chain.has(t))) return { ...d, hidden: true };
+    if (d.dataset && !showDatasets && !(chain && chain.has(s) && chain.has(t))) return { ...d, hidden: true };
     if (!d.clustered && !d.dataset && !showBlocked) return { ...d, hidden: true };
     if (!showTerminals && (!isStorage(s) || !isStorage(t))) return { ...d, hidden: true };
     if (hover) return hover.has(s) && hover.has(t) ? { ...d, color: "#444" } : { ...d, hidden: true };
@@ -218,6 +220,7 @@ function render() {
 }
 function select(k, node) {
   focus = k; chain = null; followed = null;
+  near = node ? new Set([node, ...graph.neighbors(node)]) : new Set();
   document.getElementById("layout").replaceChildren();
   if (grouping === "dataset" && k !== null) return followDataset(k);
   const detail = document.getElementById("detail");
@@ -236,6 +239,7 @@ function select(k, node) {
 document.querySelectorAll("input[name=group]").forEach(el => el.onchange = () => { grouping = el.value; select(null); });
 document.getElementById("terminals").onchange = e => { showTerminals = e.target.checked; refresh(); };
 document.getElementById("blocked").onchange = e => { showBlocked = e.target.checked; refresh(); };
+document.getElementById("datasets").onchange = e => { showDatasets = e.target.checked; refresh(); };
 document.getElementById("search").oninput = e => {
   const q = e.target.value.trim().toLowerCase();
   matching = q ? new Set(graph.filterNodes((id, d) => d.label.toLowerCase().includes(q) || d.program.toLowerCase() === q)) : null;
