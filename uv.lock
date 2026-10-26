@@ -17,6 +17,7 @@ members = [
     "litter",
     "red-dragon-forge",
     "squall",
+    "zos",
 ]
 
 [[package]]
@@ -943,6 +944,7 @@ dependencies = [
     { name = "lark" },
     { name = "litter" },
     { name = "red-dragon" },
+    { name = "zos" },
 ]
 
 [package.dev-dependencies]
@@ -961,6 +963,7 @@ requires-dist = [
     { name = "lark", specifier = ">=1.1" },
     { name = "litter", editable = "litter" },
     { name = "red-dragon", editable = "vendor/red-dragon" },
+    { name = "zos", editable = "zos" },
 ]
 
 [package.metadata.requires-dev]
@@ -2572,4 +2575,35 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/b9/d8/eab98a517c14134c0b2eb4e2387bc5f457334293ec5d2dd3857ec2966802/zipp-4.1.0.tar.gz", hash = "sha256:4cb57381f544315db7688e976e922a2b18cdb513d21cc194eb42232ba2a3e602", size = 26214, upload-time = "2026-05-18T20:08:57.967Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/3a/13/547360d81e6d88d58492968ffda9f9542854f11310ee556fef14260cc886/zipp-4.1.0-py3-none-any.whl", hash = "sha256:25ad4e16390cd314347dd8f1de67a2ac538ae658ed4ab9db16029c07c188e97f", size = 10238, upload-time = "2026-05-18T20:08:57.045Z" },
+]
+
+[[package]]
+name = "zos"
+version = "0.1.0"
+source = { editable = "zos" }
+dependencies = [
+    { name = "catnip" },
+    { name = "red-dragon" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "black" },
+    { name = "pre-commit" },
+    { name = "pyright" },
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "catnip", editable = "catnip" },
+    { name = "red-dragon", editable = "vendor/red-dragon" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "black", specifier = ">=26.5.1" },
+    { name = "pre-commit", specifier = ">=4.6.0" },
+    { name = "pyright", specifier = ">=1.1.410" },
+    { name = "pytest", specifier = ">=9.1.1" },
 ]

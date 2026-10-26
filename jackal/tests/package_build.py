@@ -9,15 +9,15 @@ from pathlib import Path
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.copybook_search import CopybookSearch
 from cobol_asg.subprocess_runner import RealSubprocessRunner
+from interpreter.cobol.cee3abd_abend import LE_STUBS
 from interpreter.project.cobol_compile import link_units
 from interpreter.project.program_entry import ProgramEntry
 from jackal.cobol_step import CompiledProgram
-from jackal.file_definitions import program_files_of
-from jackal.le_abend import LE_STUBS
 from litter.build import build
 from litter.manifest import Manifest
 from litter.open import open_package
 from litter.package import Package
+from zos.cobol.io.file_definitions import program_files_of
 
 FIXTURE_CBL = Path(__file__).parent / "integration" / "fixtures" / "cbl"
 

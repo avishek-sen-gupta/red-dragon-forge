@@ -1,3 +1,4 @@
+from infrastructure.zos.abend.system_abend import SystemAbend
 from jackal.cond import Run, gate
 from jackal.model import (
     AbendMode,
@@ -23,7 +24,6 @@ from jackal.results import (
     Completed,
     Flushed,
     StepResult,
-    SystemAbend,
 )
 from tests.covers import NotLanguageFeature, covers
 from tests.model_build import ran

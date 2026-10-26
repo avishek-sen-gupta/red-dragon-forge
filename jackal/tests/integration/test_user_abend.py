@@ -3,12 +3,12 @@
 from pathlib import Path
 
 import pytest
+from infrastructure.zos.abend.user_abend import UserAbend
 from interpreter.vm.builtins import core_builtins
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.parser import parse_jcl
 from jackal.missing_data import StrictAllocation
 from jackal.missing_program import AbendMissingProgram
-from jackal.model import UserAbend
 from jackal.results import Abended, AfterAbend, Completed, Flushed
 from jackal.runner import JobRunner
 from jackal.unknown_return_code import RaiseUnknownReturnCode

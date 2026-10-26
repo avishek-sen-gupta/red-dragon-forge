@@ -1,36 +1,24 @@
-"""jackal's COBOL file handler: red-dragon's, opening each file as its DD was allocated and its label allows."""
+"""jackal's COBOL file handler: zos's dataset handler, bound by a step's DDs and reading concatenations too."""
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
 from functools import partial
 from itertools import chain
 from pathlib import Path
 
-from catnip.catalog_stores import Table
-from catnip.dataset import Dataset, Relabeller
-from catnip.labels import (
-    CARDS,
-    VARIABLE,
-    DatasetLabel,
-    Label,
-    LabelPending,
-    PathView,
-    SequentialLabel,
-)
+from catnip.dataset import Relabeller
+from catnip.labels import CARDS, DatasetLabel, LabelPending
 from catnip.variable_records import VariableRecordDriver
-from cobol_asg.cobol_statements import FileControlEntry
 from cobol_asg.file_enums import FileOrganization, OpenMode
-from interpreter.cobol.io_provider import IOResult
-from interpreter.cobol.real_file_provider import RealFileIOProvider, to_ioresult
-from interpreter.record_io.access_result import AccessCondition, AccessResult
-from interpreter.record_io.file_drivers import FileOrganizationDriver, open_driver
+from infrastructure.zos.access_methods.file_drivers import (
+    FileOrganizationDriver,
+    open_driver,
+)
+from infrastructure.zos.access_methods.prime_key import PrimeKey
+from infrastructure.zos.access_methods.record_shape import RecordShape
 from interpreter.record_io.file_frame import FileFrame
-from interpreter.record_io.prime_key import PrimeKey
-from interpreter.record_io.record_shape import RecordShape
-from interpreter.record_io.run_inputs import RunInputs
 from jackal.allocation import (
     ConcatenatedAllocation,
     DatasetAllocation,
@@ -41,36 +29,14 @@ from jackal.allocation import (
     SysoutAllocation,
 )
 from jackal.concatenated_records import ConcatenatedDriver
-from jackal.label_conflict import LabelConflict
-from jackal.record_format import (
-    FixedFormat,
-    ProgramFormat,
-    VariableFormat,
-    conflicting,
-    indexed_conflicts,
-    joining,
-    label_for,
-)
-from jackal.record_key import RecordKey
+from zos.cobol.io.dataset_files import DatasetFileIOProvider, variable
+from zos.cobol.io.file_bindings import FileBindings
+from zos.cobol.io.label_conflict import LabelConflict
+from zos.cobol.io.program_file import ProgramFile
+from zos.cobol.io.record_format import ProgramFormat, conflicting, joining
+from zos.cobol.io.record_key import RecordKey
 
 logger = logging.getLogger(__name__)
-
-_LABELLING = frozenset({OpenMode.OUTPUT.value, OpenMode.EXTEND.value})
-
-
-@dataclass(frozen=True)
-class ProgramFile:
-    program: str
-    entry: FileControlEntry
-    fmt: ProgramFormat
-
-
-def _variable(label: DatasetLabel) -> bool:
-    match label:
-        case SequentialLabel():
-            return label.recfm in VARIABLE
-        case _:
-            return False
 
 
 def _logged(found: Sequence[tuple[str, LabelConflict]]) -> bool:
@@ -79,38 +45,20 @@ def _logged(found: Sequence[tuple[str, LabelConflict]]) -> bool:
     return not found
 
 
-def _agrees(dataset: Dataset, found: Sequence[LabelConflict]) -> bool:
-    return _logged(tuple((dataset.dsn, conflict) for conflict in found))
+def _bindings(env: DdEnvironment) -> FileBindings:
+    return FileBindings(
+        paths=env.paths(),
+        appended=frozenset(name.text for name in env.appended()),
+        datasets={
+            ddname.text: allocation.dataset
+            for ddname, allocation in env.entries
+            if isinstance(allocation, DatasetAllocation)
+        },
+    )
 
 
-def _through_path(label: DatasetLabel) -> bool:
-    match label:
-        case PathView():
-            return True
-        case _:
-            return False
-
-
-def _supported(label: DatasetLabel, mode: str) -> bool:
-    return not (_through_path(label) and mode == OpenMode.OUTPUT.value)
-
-
-def _dataset_driver(
-    dataset: Dataset,
-    path: Path,
-    mode: OpenMode,
-    record_length: int,
-    by_organization: Callable[[], FileOrganizationDriver],
-) -> FileOrganizationDriver:
-    if _through_path(dataset.label):
-        return dataset.opened(mode)
-    if _variable(dataset.label):
-        return VariableRecordDriver(path, mode, record_length)
-    return by_organization()
-
-
-class AllocatedFileIOProvider(RealFileIOProvider):
-    """Opens a file as its DD was allocated: DISP=MOD appends; a label the FD contradicts fails with status 39."""
+class AllocatedFileIOProvider(DatasetFileIOProvider):
+    """Opens a file as its DD was allocated: DISP=MOD appends; a label the FD contradicts fails with status 39; a concatenation reads its members in turn."""
 
     def __init__(
         self,
@@ -119,70 +67,22 @@ class AllocatedFileIOProvider(RealFileIOProvider):
         env: DdEnvironment,
         relabeller: Relabeller,
     ) -> None:
-        super().__init__(
-            base_dir,
-            inputs=RunInputs(
-                file_control=tuple(f.entry for f in files),
-                path_overrides=env.paths(),
-            ),
-        )
-        appended = {name.text for name in env.appended()}
-        self._appended_files = frozenset(
-            f.entry.file_name for f in files if f.entry.assign_to in appended
-        )
-        self._program_files: Mapping[str, ProgramFile] = {
-            f.entry.file_name: f for f in files
-        }
-        self._relabeller = relabeller
-        self._datasets: Table[str, Dataset] = Table()
-        for name, dataset in _datasets(files, env):
-            self._datasets.put(name, dataset)
+        super().__init__(base_dir, files, _bindings(env), relabeller)
         self._concatenations: Mapping[str, tuple[MemberAllocation, ...]] = dict(
             _concatenations(files, env)
         )
 
-    def _opened_as(self, filename: str, mode: str) -> str:
-        if mode == OpenMode.OUTPUT.value and filename in self._appended_files:
-            return OpenMode.EXTEND.value
-        return mode
-
     def _supports(self, filename: str, mode: str) -> bool:
         if filename in self._concatenations:
             return mode == OpenMode.INPUT.value
-        if self._datasets.has(filename):
-            return _supported(self._datasets.get(filename).label, mode)
-        return True
+        return super()._supports(filename, mode)
 
-    def _admits(self, filename: str, mode: str, key: RecordKey) -> bool:
+    def _admits(self, filename: str, mode: str, prime: RecordKey) -> bool:
         if filename in self._concatenations:
             return _concatenation_admitted(
                 self._program_files[filename].fmt, self._concatenations[filename]
             )
-        return self._admits_dataset(filename, mode, key)
-
-    def _admits_dataset(self, filename: str, mode: str, key: RecordKey) -> bool:
-        if not self._datasets.has(filename):
-            return True
-        file = self._program_files[filename]
-        if file.entry.organization is FileOrganization.INDEXED:
-            dataset = self._datasets.get(filename)
-            return _agrees(dataset, indexed_conflicts(file.fmt, key, dataset.label))
-        return self._admits_sequential(filename, file.fmt, mode)
-
-    def _admits_sequential(self, filename: str, fmt: ProgramFormat, mode: str) -> bool:
-        dataset = self._datasets.get(filename)
-        match (dataset.label, fmt):
-            case (LabelPending(), FixedFormat() | VariableFormat()) if (
-                mode in _LABELLING
-            ):
-                self._labelled(filename, dataset, label_for(fmt))
-                return True
-            case _:
-                return _agrees(dataset, conflicting(fmt, dataset.label))
-
-    def _labelled(self, filename: str, dataset: Dataset, label: Label) -> None:
-        self._relabeller.relabel(dataset, label)
-        self._datasets.put(filename, Dataset(dataset.dsn, dataset.path, label))
+        return super()._admits(filename, mode, prime)
 
     def _driver_for(
         self, frame: FileFrame, path: Path, mode: OpenMode
@@ -193,38 +93,7 @@ class AllocatedFileIOProvider(RealFileIOProvider):
             return ConcatenatedDriver(
                 tuple(partial(_member_driver, m, frame.record_length) for m in members)
             )
-        by_organization = partial(super()._driver_for, frame, path, mode)
-        if not self._datasets.has(filename):
-            return by_organization()
-        return _dataset_driver(
-            self._datasets.get(filename),
-            path,
-            mode,
-            frame.record_length,
-            by_organization,
-        )
-
-    def _open_file(self, filename: str, mode: str, program: str) -> IOResult:
-        opened = self._opened_as(filename, mode)
-        if not self._supports(filename, opened):
-            return to_ioresult(AccessResult(AccessCondition.OPEN_MODE_NOT_SUPPORTED))
-        key = self._frames[filename].prime_key
-        if not self._admits(filename, opened, RecordKey(key.offset, key.length)):
-            return to_ioresult(AccessResult(AccessCondition.ATTRIBUTE_CONFLICT))
-        return super()._open_file(filename, opened, program)
-
-
-def _datasets(
-    files: Sequence[ProgramFile], env: DdEnvironment
-) -> tuple[tuple[str, Dataset], ...]:
-    allocations = dict(env.entries)
-    return tuple(
-        (f.entry.file_name, allocation.dataset)
-        for f in files
-        for ddname, allocation in allocations.items()
-        if ddname.text == f.entry.assign_to
-        and isinstance(allocation, DatasetAllocation)
-    )
+        return super()._driver_for(frame, path, mode)
 
 
 def _concatenations(
@@ -287,7 +156,7 @@ def _concatenation_admitted(
 def _member_driver(
     member: MemberAllocation, record_length: int
 ) -> FileOrganizationDriver:
-    if _variable(_member_label(member)):
+    if variable(_member_label(member)):
         return VariableRecordDriver(member.path(), OpenMode.INPUT, record_length)
     return open_driver(
         member.path(),

@@ -51,8 +51,9 @@ csd_files = ["app/csd/CARDDEMO.CSD"]
 - `link` names exactly the programs in the image and may be a subset of `programs`. Nothing is
   discovered: a program reached by `CALL 'LITERAL'` or `CALL identifier` is in the image only
   if it is in `link`.
-- Stubs are ordinary programs. Language Environment stubs (`CEE3ABD` in `jackal/jackal/le_stubs/`,
-  `CEEDAYS` in `cicada/cics/stubs/`) are listed when a program CALLs them; nothing checks.
+- Stubs are ordinary programs. Language Environment stubs (`CEE3ABD` in red-dragon's
+  `interpreter/cobol/le_stubs/`, `CEEDAYS` in `cicada/cics/stubs/`) are listed when a program
+  CALLs them; nothing checks.
 - A coprocessor's own stubs are required. With `sql`, every name in
   `squall.db2_stubs.DB2_STUB_PROGRAMS` (`DSNTIAC`) must be in `link`; a build without it stops
   before lowering: `forge-build: coprocessor sql requires DSNTIAC in [build] link`, exit 1, and no

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from jackal.label_field import LabelField
+from zos.cobol.io.label_field import LabelField
 
 
 @dataclass(frozen=True)

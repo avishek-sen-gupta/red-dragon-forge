@@ -8,6 +8,8 @@ root_packages =
     litter
     red_dragon_forge
     interpreter
+    infrastructure
+    zos
 
 [importlinter:contract:cicada-squall-jackal-independence]
 name = Cicada, Squall, and Jackal must not import each other
@@ -186,6 +188,7 @@ forbidden_modules =
     jackal
     cobble
     red_dragon_forge
+    interpreter
 
 [importlinter:contract:litter-imports-no-runtime]
 name = litter is the package of linked programs — it imports no runtime
@@ -198,4 +201,17 @@ forbidden_modules =
     jackal
     cobble
     catnip
+    red_dragon_forge
+
+[importlinter:contract:zos-imports-no-runtime]
+name = zos is the z/OS layer between catnip and the runtimes — it imports no runtime
+type = forbidden
+source_modules =
+    zos
+forbidden_modules =
+    cics
+    squall
+    jackal
+    cobble
+    litter
     red_dragon_forge

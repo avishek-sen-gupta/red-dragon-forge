@@ -119,7 +119,7 @@ only what `programs` lists.
 |---|---|---|---|
 | `DSNTIAC` | `coprocessors` has `sql` | `squall/squall/stubs` | yes: the build stops with `coprocessor sql requires DSNTIAC in [build] link` |
 | `CEEDAYS` | a program does `CALL 'CEEDAYS'` | `cicada/cics/stubs` | no |
-| `CEE3ABD` | a program does `CALL 'CEE3ABD'` | `jackal/jackal/le_stubs` | no |
+| `CEE3ABD` | a program does `CALL 'CEE3ABD'` | `vendor/red-dragon/interpreter/cobol/le_stubs` | no |
 | each `CALL` target | a program CALLs it, by literal or identifier | the application's | no |
 | each `LINK`/`XCTL` target | a CICS program transfers to it | the application's | no |
 | each CSD transaction's program | the transaction should run | the application's | only the initial transaction, at `forge-run` startup |

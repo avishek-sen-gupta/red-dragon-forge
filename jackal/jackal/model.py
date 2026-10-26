@@ -7,6 +7,8 @@ from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Generic, TypeAlias, TypeVar
 
+from infrastructure.zos.abend.system_abend import SystemAbend
+from infrastructure.zos.abend.user_abend import UserAbend
 from jackal.value_parts import SymbolName, Value, resolve
 
 R = TypeVar("R", bound="StepRef | StepReference")
@@ -664,22 +666,6 @@ class DD(Generic[R]):
             self.dcb.substituted(substitution),
             _substituted_value(self.gdg_order, substitution),
         )
-
-
-@dataclass(frozen=True)
-class SystemAbend:
-    code: int
-
-    def rendered(self) -> str:
-        return f"S{self.code:03X}"
-
-
-@dataclass(frozen=True)
-class UserAbend:
-    code: int
-
-    def rendered(self) -> str:
-        return f"U{self.code:04d}"
 
 
 @dataclass(frozen=True)

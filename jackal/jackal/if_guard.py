@@ -7,6 +7,8 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 
+from infrastructure.zos.abend.system_abend import SystemAbend
+from infrastructure.zos.abend.user_abend import UserAbend
 from jackal.model import (
     AbendCodeTest,
     AbendTest,
@@ -20,8 +22,6 @@ from jackal.model import (
     RcTest,
     RunTest,
     StepReference,
-    SystemAbend,
-    UserAbend,
 )
 from jackal.results import Abended, Completed, StepResult
 

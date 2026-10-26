@@ -51,6 +51,7 @@ Then:
 | [`squall/`](squall/) | EXEC SQL runtime for Db2 programs |
 | [`jackal/`](jackal/) | JCL/batch engine |
 | [`catnip/`](catnip/) | System catalog: the datasets jobs and CICS regions share |
+| [`zos/`](zos/) | z/OS layer between catnip and the runtimes: COBOL's file handling against catalogued datasets (`zos.cobol.io`) |
 | [`litter/`](litter/) | Package: COBOL programs lowered once and linked into one image in a zip; `forge-build` writes one, `forge-run` runs it |
 | [`red_dragon_forge/`](red_dragon_forge/) | `forge-build` and `forge-run`: build a package from `build.toml`, run it from `env.toml`, composing the runtimes it needs |
 | [`cobble/`](cobble/) | Static analyser: knowledge graph, control flow, field dataflow |

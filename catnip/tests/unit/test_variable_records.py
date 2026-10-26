@@ -8,7 +8,7 @@ docs/records/design/2026-10-12-jackal-variable-records.md.
 
 from catnip.variable_records import VariableRecordDriver
 from cobol_asg.file_enums import OpenMode
-from interpreter.record_io.access_result import AccessCondition
+from infrastructure.zos.access_methods.access_result import AccessCondition
 from tests.covers import NotLanguageFeature, covers
 
 

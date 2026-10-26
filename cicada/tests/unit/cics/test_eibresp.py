@@ -6,7 +6,7 @@ from cics.vsam.eibresp import (
     RESP_NOTFND,
     to_eibresp,
 )
-from interpreter.record_io.access_result import AccessCondition
+from infrastructure.zos.access_methods.access_result import AccessCondition
 from tests.covers import NotLanguageFeature, covers
 
 

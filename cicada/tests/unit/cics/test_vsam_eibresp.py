@@ -1,8 +1,8 @@
 """CICS file control's RESP for each access-method condition."""
 
 from cics.vsam.eibresp import to_eibresp
+from infrastructure.zos.access_methods.access_result import AccessCondition
 from interpreter.cobol.features import CobolFeature
-from interpreter.record_io.access_result import AccessCondition
 from tests.covers import covers
 
 

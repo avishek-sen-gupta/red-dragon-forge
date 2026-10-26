@@ -138,15 +138,17 @@ coprocessor. `JobRunner`'s required `builtins` is the table every step's run is 
 into it for a package built with `sql`.
 
 Each lowered program carries a file-definitions `Data` directive, and every COBOL file call
-names the program that made it. `jackal.file_definitions` reads every program's records from
+names the program that made it. The handling that needs no DD lives in forge's `zos.cobol.io`;
+jackal builds on it. `zos.cobol.io.file_definitions` reads every program's records from
 the image, each with its `program`: the `FILE-CONTROL` entry, and the record format its FD asks
 for, or the dataset's own where the `SELECT` has no FD. `jackal.cobol_step.run_cobol_step` runs
-the image on the red-dragon VM with a `ProgramFilesIOProvider`, which hands each file call to
-the `AllocatedFileIOProvider` of the program that made it, built from that program's own
-declarations. Two programs that declare the same `SELECT` name each open their own DD with
+the image on the red-dragon VM with `zos.cobol.io`'s `ProgramFilesIOProvider`, which hands each
+file call to jackal's `AllocatedFileIOProvider` of the program that made it, built from that
+program's own declarations. `AllocatedFileIOProvider` adds concatenations to `zos.cobol.io`'s
+`DatasetFileIOProvider`, and binds each ASSIGN name from the step's DDs (`FileBindings`). Two programs that declare the same `SELECT` name each open their own DD with
 their own FD, and their open files never meet; a program with no declaration for a `SELECT`
-takes the dataset its DD names as labelled. At each `OPEN` (`jackal.cobol_files`), the record format the FD asks for
-(`jackal.record_format`: Enterprise COBOL's default rule, a variable format's LRECL being its
+takes the dataset its DD names as labelled. At each `OPEN` (`zos.cobol.io.dataset_files`), the record format the FD asks for
+(`zos.cobol.io.record_format`: Enterprise COBOL's default rule, a variable format's LRECL being its
 largest record plus 4) meets the dataset's label: a pending label is written from it on
 `OUTPUT` or `EXTEND`; a label that contradicts it in organization, fixed against variable, or
 length fails the `OPEN` with file status 39. An indexed FD is checked against a cluster's or a
@@ -167,9 +169,10 @@ of interpreter steps, `JobRunner`'s `program_step_budget` (the CLI gives 500,000
 that ends gives `Completed` with the return code read back from the VM. One still running
 when its budget runs out abends `S322`, as z/OS ends a step that exceeds its CPU time.
 A program that calls LE's `CEE3ABD` abends with that user code (`Unnnn`; a bare call gives
-U0000). `CEE3ABD` is a COBOL stub jackal links from `jackal/le_stubs/`, last on the CALL search
-path. It records the code in its WORKING-STORAGE and `STOP RUN`s, and `jackal.le_abend` reads the
-code from the finished VM
+U0000). `CEE3ABD` is a COBOL stub in red-dragon's `interpreter/cobol/le_stubs/`, last on the CALL
+search path. It records the code in its WORKING-STORAGE and `STOP RUN`s, and red-dragon's
+`interpreter.cobol.cee3abd_abend` reads the code from the finished VM as an
+`infrastructure.zos.abend.UserAbend`
 ([decision record](../../records/design/2026-10-12-jackal-user-abend.md)).
 
 ## Datasets and the catalog
@@ -259,11 +262,8 @@ needed. The grammar's source and licence are recorded in
 | `jackal/jackal/cli.py` | The `jackal` command. |
 | `jackal/jackal/runner.py` | `JobRunner`: step sequencing, `COND=`, referbacks, dispatch. |
 | `jackal/jackal/allocation.py` | A step's DD allocations, made before and disposed after its program. |
-| `jackal/jackal/file_definitions.py` | The files each program in an image declares, read from its file-definitions `Data` directives, each with its `program`. |
-| `jackal/jackal/program_files_provider.py` | `ProgramFilesIOProvider`: hands each COBOL file call to the provider of the program that made it. |
 | `jackal/jackal/cobol_step.py` | Runs a COBOL step on the red-dragon VM. |
-| `jackal/jackal/cobol_files.py` | jackal's COBOL file handler: red-dragon's, with a `DISP=MOD` file opened to append and each `OPEN` checked against the dataset's label. |
-| `jackal/jackal/record_format.py` | The record format a COBOL FD asks for, and its fit with a label. |
+| `jackal/jackal/cobol_files.py` | jackal's COBOL file handler: `zos.cobol.io`'s, bound by the step's DDs, with concatenations. |
 | `jackal/jackal/utilities.py` | The utility table: IEFBR14, IDCAMS. |
 | `jackal/jackal/tso_step.py` | A TSO monitor step's DSN session: one RUN PROGRAM after another. |
 | `jackal/jackal/catalog.py` | One job's dataset catalog: the system's datasets, temps, `PASS`, DISP lifecycle. |
@@ -283,6 +283,7 @@ needed. The grammar's source and licence are recorded in
 | `jackal/jackal/jcl/` | JCL parsing through the bridge JAR; procedure expansion. |
 | `jackal/jackal/idcams/` | The IDCAMS grammar (`grammar/ams.lark`), parser, command types and executor. |
 | `jackal/jcl-bridge/` | The Java JCL bridge (Maven project, vendored mapa grammar). |
+| `zos/zos/cobol/io/` (outside jackal) | Moved out of jackal: each program's FDs read from the image, the FD-against-label matching, `ProgramFile`, `DatasetFileIOProvider` (an `OPEN` against a catalogued dataset) and `ProgramFilesIOProvider` (each call to its program's provider). |
 | `jackal/tests/` | `unit/` and `integration/`. CardDemo end-to-end tests carry the `carddemo_e2e` marker. |
 
 `.importlinter` layers the package as `cli` → `runner` → `cobol_step` / `utilities` →

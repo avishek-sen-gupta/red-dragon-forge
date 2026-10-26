@@ -24,9 +24,9 @@ from cobol_asg.cobol_statements import (
     RecordVarying,
 )
 from cobol_asg.file_enums import RecordingMode
-from jackal.label_conflict import LabelConflict
-from jackal.label_field import LabelField
-from jackal.record_key import RecordKey
+from zos.cobol.io.label_conflict import LabelConflict
+from zos.cobol.io.label_field import LabelField
+from zos.cobol.io.record_key import RecordKey
 
 _RDW = 4
 

@@ -13,8 +13,11 @@ from catnip.dataset import Dataset
 from catnip.labels import DatasetLabel, KsdsLabel, LabelPending
 from catnip.system_catalog import NotCataloged
 from cobol_asg.file_enums import OpenMode
-from interpreter.record_io.access_result import AccessCondition, AccessResult
-from interpreter.record_io.file_drivers import FileOrganizationDriver
+from infrastructure.zos.access_methods.access_result import (
+    AccessCondition,
+    AccessResult,
+)
+from infrastructure.zos.access_methods.file_drivers import FileOrganizationDriver
 from jackal.allocation import (
     ConcatenatedAllocation,
     DatasetAllocation,

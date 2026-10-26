@@ -4,6 +4,8 @@ from pathlib import Path
 import pytest
 from catnip.labels import KsdsLabel, LabelPending, RecordFormat, SequentialLabel
 from catnip.system_catalog import CATALOG_FILE, NotCataloged, SystemCatalog
+from infrastructure.zos.abend.system_abend import SystemAbend
+from infrastructure.zos.abend.user_abend import UserAbend
 from interpreter.vm.builtins import core_builtins
 from jackal.catalog import Dataset
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
@@ -42,9 +44,7 @@ from jackal.model import (
     StepRef,
     TempRef,
     UnresolvedDd,
-    UserAbend,
 )
-from jackal.model import SystemAbend as ModelSystemAbend
 from jackal.results import (
     Abended,
     AfterAbend,
@@ -62,7 +62,6 @@ from jackal.results import (
     JobResult,
     SkippedUnresolved,
     StepOutcome,
-    SystemAbend,
 )
 from jackal.runner import JobRunner
 from jackal.unknown_return_code import RaiseUnknownReturnCode
@@ -728,7 +727,7 @@ def test_after_an_abend_only_steps_whose_if_tests_an_abend_run(
                 StepName("T3"),
                 AllOf(
                     (
-                        AbendCodeTest(ref("S1"), ModelSystemAbend(0x806)),
+                        AbendCodeTest(ref("S1"), SystemAbend(0x806)),
                         Negated(AbendCodeTest(AllPriorSteps(), UserAbend(100))),
                     )
                 ),

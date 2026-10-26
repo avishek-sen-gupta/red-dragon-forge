@@ -21,8 +21,11 @@ from cics.vsam.no_record import NoRecord
 from cics.vsam.read_outcome import ReadOutcome
 from cics.vsam.record_read import RecordRead
 from cobol_asg.file_enums import OpenMode
-from interpreter.record_io.access_result import AccessCondition, AccessResult
-from interpreter.record_io.file_drivers import FileOrganizationDriver
+from infrastructure.zos.access_methods.access_result import (
+    AccessCondition,
+    AccessResult,
+)
+from infrastructure.zos.access_methods.file_drivers import FileOrganizationDriver
 
 logger = logging.getLogger(__name__)
 

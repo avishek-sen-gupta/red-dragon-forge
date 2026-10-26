@@ -16,7 +16,7 @@ bug as something the program would mishandle.
 
 from __future__ import annotations
 
-from interpreter.record_io.access_result import AccessCondition
+from infrastructure.zos.access_methods.access_result import AccessCondition
 
 RESP_NORMAL = 0
 RESP_NOTFND = 13

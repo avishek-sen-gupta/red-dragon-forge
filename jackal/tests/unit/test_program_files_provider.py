@@ -1,22 +1,24 @@
 """A file call goes to its own program's declarations; a program that declares none for a SELECT takes the dataset as its label says."""
 
+from functools import partial
 from pathlib import Path
 
 from catnip.dataset import Dataset
 from catnip.labels import Label, RecordFormat, SequentialLabel
 from cobol_asg.cobol_statements import FileControlEntry
 from cobol_asg.file_enums import FileOrganization
+from infrastructure.zos.access_methods.access_result import AccessCondition
+from infrastructure.zos.access_methods.prime_key import PrimeKey
 from interpreter.cobol.io_provider import IOResult
 from interpreter.data_value import DataRecord
-from interpreter.record_io.access_result import AccessCondition
 from interpreter.record_io.file_frame import FileFrame
-from interpreter.record_io.prime_key import PrimeKey
 from jackal.allocation import DatasetAllocation, DdEnvironment, Positioning
-from jackal.cobol_files import ProgramFile
+from jackal.cobol_files import AllocatedFileIOProvider
 from jackal.model import DdName, DispAbnormal, DispNormal, ResolvedDisp
-from jackal.program_files_provider import ProgramFilesIOProvider
-from jackal.record_format import FixedFormat
 from tests.covers import NotLanguageFeature, covers
+from zos.cobol.io.program_file import ProgramFile
+from zos.cobol.io.program_files import ProgramFilesIOProvider
+from zos.cobol.io.record_format import FixedFormat
 
 _RECORD = "R" * 120
 
@@ -56,7 +58,9 @@ def test_an_undeclared_select_takes_the_dataset_its_dd_names_as_labelled(
         "DECLARER", FileControlEntry("INDD", "INDD"), FixedFormat(80)
     )
     provider = ProgramFilesIOProvider(
-        tmp_path, ("DECLARER", "BARE"), (declared,), env, _Unrelabelled()
+        ("DECLARER", "BARE"),
+        partial(AllocatedFileIOProvider, tmp_path, env=env, relabeller=_Unrelabelled()),
+        (declared,),
     )
 
     assert (

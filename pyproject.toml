@@ -26,9 +26,10 @@ forge-run = "red_dragon_forge.run_command:main"
 red-dragon = { path = "vendor/red-dragon", editable = true }
 litter = { workspace = true }
 catnip = { workspace = true }
+zos = { workspace = true }
 
 [tool.uv.workspace]
-members = ["cicada", "squall", "jackal", "cobble", "catnip", "litter"]
+members = ["cicada", "squall", "jackal", "cobble", "catnip", "litter", "zos"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["red_dragon_forge"]

@@ -17,7 +17,6 @@ from jackal.catalog import DatasetCatalog
 from jackal.cobol_step import CompiledProgram, run_cobol_step
 from jackal.cond import Run, gate
 from jackal.expansion import DirectoryProcLibrary, expand_or_fail
-from jackal.file_definitions import program_files_of
 from jackal.missing_data import MissingDataStrategy
 from jackal.missing_program import MissingProgramStrategy
 from jackal.model import (
@@ -55,6 +54,7 @@ from jackal.unknown_return_code import UnknownReturnCodeStrategy
 from jackal.unresolved import UnresolvedReferenceStrategy, referbacks_resolved
 from jackal.utilities import UTILITIES
 from litter.package import Package
+from zos.cobol.io.file_definitions import program_files_of
 
 Entry = QualifiedStep | UnexpandedCall
 

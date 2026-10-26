@@ -6,7 +6,9 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import TypeAlias
 
-from jackal.model import DdName, QualifiedStep, SystemAbend, UnexpandedCall, UserAbend
+from infrastructure.zos.abend.system_abend import SystemAbend
+from infrastructure.zos.abend.user_abend import UserAbend
+from jackal.model import DdName, QualifiedStep, UnexpandedCall
 
 
 @dataclass(frozen=True)

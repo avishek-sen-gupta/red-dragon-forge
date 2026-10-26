@@ -45,7 +45,7 @@ repos:
         entry: bash -c 'uv run --no-sync python -m black "$@" && git add -- "$@"' --
         language: system
         types: [python]
-        files: ^(cicada/cics|cicada/tests|squall/squall|squall/tests|catnip/catnip|catnip/tests|litter/litter|litter/tests|jackal/jackal|jackal/tests|red_dragon_forge|cobble/cobble|cobble/tests|tools|tests)/
+        files: ^(cicada/cics|cicada/tests|squall/squall|squall/tests|catnip/catnip|catnip/tests|zos/zos|zos/tests|litter/litter|litter/tests|jackal/jackal|jackal/tests|red_dragon_forge|cobble/cobble|cobble/tests|tools|tests)/
 
       - id: pyright
         name: Pyright type check
@@ -56,7 +56,7 @@ repos:
         language: system
         types: [python]
         require_serial: true
-        files: ^(cicada/cics|cicada/bms_copybook_gen|squall/squall|catnip/catnip|litter/litter|jackal/jackal|red_dragon_forge|cobble/cobble|cobble/tests)/
+        files: ^(cicada/cics|cicada/bms_copybook_gen|squall/squall|catnip/catnip|zos/zos|litter/litter|jackal/jackal|red_dragon_forge|cobble/cobble|cobble/tests)/
 
       - id: import-linter
         name: import-linter architectural contracts
@@ -89,6 +89,14 @@ repos:
         files: ^(catnip/|vendor/(red-dragon|carddemo|bank-of-z)(/|$)|squall/testbed/db2-samples(/|$)|\.gitmodules$)
         types: []
 
+      - id: tests-zos
+        name: zos test suite
+        entry: bash -c 'cd zos && uv run --no-sync python -m pytest -x -q'
+        language: system
+        pass_filenames: false
+        files: ^(zos/|catnip/|vendor/red-dragon(/|$)|\.gitmodules$)
+        types: []
+
       - id: tests-litter
         name: litter test suite
         entry: bash -c '. ./bridge-env.sh && cd litter && uv run --no-sync python -m pytest -x -q'
@@ -102,7 +110,7 @@ repos:
         entry: bash -c '. ./bridge-env.sh && uv run --no-sync pytest jackal/tests -x -q'
         language: system
         pass_filenames: false
-        files: ^(jackal/|catnip/|litter/|config/|vendor/(red-dragon|carddemo|bank-of-z)(/|$)|squall/testbed/db2-samples(/|$)|\.gitmodules$)
+        files: ^(jackal/|catnip/|zos/|litter/|config/|vendor/(red-dragon|carddemo|bank-of-z)(/|$)|squall/testbed/db2-samples(/|$)|\.gitmodules$)
         types: []
 
       - id: tests-forge
@@ -110,7 +118,7 @@ repos:
         entry: bash -c 'make db2-restart && make test PYTEST_ARGS="-x -q"'
         language: system
         pass_filenames: false
-        files: ^(red_dragon_forge/|cicada/|squall/|catnip/|litter/|jackal/|tests/|config/|vendor/|\.gitmodules$)
+        files: ^(red_dragon_forge/|cicada/|squall/|catnip/|zos/|litter/|jackal/|tests/|config/|vendor/|\.gitmodules$)
         types: []
 
       - id: tests-cobble

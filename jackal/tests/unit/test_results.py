@@ -1,3 +1,4 @@
+from infrastructure.zos.abend.system_abend import SystemAbend
 from jackal.model import DdName
 from jackal.results import (
     Abended,
@@ -16,7 +17,6 @@ from jackal.results import (
     JobResult,
     SkippedUnresolved,
     StepResult,
-    SystemAbend,
 )
 from tests.covers import NotLanguageFeature, covers
 from tests.model_build import ran

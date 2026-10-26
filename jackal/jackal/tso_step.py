@@ -5,7 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from functools import reduce
 
-from jackal.model import DD, ProgramRef, ProgramStep, StepReference, SystemAbend
+from infrastructure.zos.abend.system_abend import SystemAbend
+from jackal.model import DD, ProgramRef, ProgramStep, StepReference
 from jackal.results import Abended, Completed, ProgramResult
 from jackal.tso import TSO_COMMAND_DD, TsoRun, is_tso_monitor, tso_runs
 

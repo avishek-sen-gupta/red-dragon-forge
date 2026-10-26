@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 
 import pytest
+from infrastructure.zos.abend.system_abend import SystemAbend
 from interpreter.vm.builtins import core_builtins
 from jackal.cli import run
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
@@ -13,7 +14,7 @@ from jackal.missing_program import (
     MissingProgramStrategy,
     StubMissingProgram,
 )
-from jackal.results import Abended, Completed, StepOutcome, SystemAbend
+from jackal.results import Abended, Completed, StepOutcome
 from jackal.runner import JobRunner
 from jackal.unknown_return_code import RaiseUnknownReturnCode
 from jackal.unresolved import RaiseErrorStrategy

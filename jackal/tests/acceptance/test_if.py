@@ -32,6 +32,8 @@ def test_if_structure_parses(parse_fixture):
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_if_terms_parse(parse_fixture):
+    from infrastructure.zos.abend.system_abend import SystemAbend
+    from infrastructure.zos.abend.user_abend import UserAbend
     from jackal.model import (
         AbendCodeTest,
         AbendTest,
@@ -44,8 +46,6 @@ def test_if_terms_parse(parse_fixture):
         Negated,
         RcTest,
         RunTest,
-        SystemAbend,
-        UserAbend,
     )
     from tests.acceptance import build as b
 

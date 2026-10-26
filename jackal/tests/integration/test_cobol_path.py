@@ -4,21 +4,19 @@ import logging
 from pathlib import Path
 
 import pytest
+from catnip.alternate_index import AlternateIndex
+from catnip.catalog_path import CatalogPath
+from catnip.labels import KsdsLabel
 from interpreter.encoding.ebcdic_table import EbcdicTable
 from interpreter.project.ir_codec import IrCodec
 from interpreter.project.linked_codec import LinkedCodec
 from interpreter.vm.builtins import core_builtins
-
-from catnip.alternate_index import AlternateIndex
-from catnip.catalog_path import CatalogPath
-from catnip.labels import KsdsLabel
+from jackal.catalog import DatasetCatalog
 from jackal.cobol_step import (
     DEFAULT_PROGRAM_STEP_BUDGET,
     CompiledProgram,
     run_cobol_step,
 )
-from jackal.file_definitions import program_files_of
-from jackal.catalog import DatasetCatalog
 from jackal.model import DD, StepRef
 from jackal.results import Completed, ProgramResult
 from litter.package import Package
@@ -26,6 +24,7 @@ from tests.covers import NotLanguageFeature, covers
 from tests.model_build import allocated, dd, disp, program
 from tests.package_build import compiled, package
 from tests.system_build import job_catalog, system, upload
+from zos.cobol.io.file_definitions import program_files_of
 
 
 def _ebcdic(text: bytes) -> bytes:
@@ -139,11 +138,11 @@ def test_an_fd_that_contradicts_a_keyed_label_gets_status_39_and_logs_each_field
     cat = _path_catalog(tmp_path)
     compiled = _compiled(packaged, "KEYCHK")
     read_back = _read_back(compiled, tmp_path / "KEYCHK.linked.json")
-    with caplog.at_level(logging.WARNING, logger="jackal.cobol_files"):
+    with caplog.at_level(logging.WARNING, logger="zos.cobol.io.dataset_files"):
         rc = _ran_compiled(cat, read_back, "KEYCHK", (dd("XREFDD", dsn, disp("SHR")),))
 
     assert read_back.files == compiled.files
     assert rc == Completed(39)
     assert [
-        r.getMessage() for r in caplog.records if r.name == "jackal.cobol_files"
+        r.getMessage() for r in caplog.records if r.name == "zos.cobol.io.dataset_files"
     ] == messages

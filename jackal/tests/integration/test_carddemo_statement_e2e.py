@@ -11,7 +11,6 @@ from catnip.declaration import Declaration, KsdsEntry
 from catnip.install import install
 from catnip.labels import RecordFormat, SequentialLabel
 from interpreter.vm.builtins import core_builtins
-from jackal.file_definitions import program_files_of
 from jackal.jcl.parser import parse_jcl
 from jackal.missing_data import StrictAllocation
 from jackal.missing_program import AbendMissingProgram
@@ -23,6 +22,7 @@ from litter.package import Package
 from tests.covers import NotLanguageFeature, covers
 from tests.package_build import package
 from tests.system_build import job_catalog, system
+from zos.cobol.io.file_definitions import program_files_of
 
 _DATA = "data/EBCDIC/AWS.M2.CARDDEMO"
 _TRAN_LRECL = 350

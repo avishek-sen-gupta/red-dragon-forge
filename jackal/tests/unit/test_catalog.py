@@ -5,7 +5,7 @@ from catnip.dataset import Dataset
 from catnip.labels import KsdsLabel, RecordFormat, SequentialLabel
 from catnip.system_catalog import NotCataloged, SystemCatalog
 from cobol_asg.file_enums import OpenMode
-from interpreter.record_io.access_result import AccessCondition
+from infrastructure.zos.access_methods.access_result import AccessCondition
 from jackal.catalog import Allocated, DatasetCatalog, Unallocated
 from jackal.model import (
     DD,

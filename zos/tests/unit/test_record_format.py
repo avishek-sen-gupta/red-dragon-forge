@@ -15,7 +15,8 @@ from cobol_asg.cobol_statements import (
     RecordVarying,
 )
 from cobol_asg.file_enums import RecordingMode
-from jackal.record_format import (
+from tests.covers import NotLanguageFeature, covers
+from zos.cobol.io.record_format import (
     FdRecords,
     FixedFormat,
     FormatFromDataset,
@@ -26,7 +27,6 @@ from jackal.record_format import (
     label_for,
     program_format,
 )
-from tests.covers import NotLanguageFeature, covers
 
 
 def _fd(mode: RecordingMode, clause) -> FileDescription:

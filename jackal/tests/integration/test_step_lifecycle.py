@@ -6,20 +6,14 @@ from pathlib import Path
 import pytest
 from catnip.labels import RecordFormat, SequentialLabel
 from catnip.system_catalog import NotCataloged
+from infrastructure.zos.abend.system_abend import SystemAbend
 from interpreter.encoding.ebcdic_table import EbcdicTable
 from interpreter.vm.builtins import core_builtins
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.bridge_parser import JclBridgeParser, JclSubprocessRunner
 from jackal.missing_data import StrictAllocation
 from jackal.missing_program import AbendMissingProgram
-from jackal.results import (
-    Abended,
-    AfterAbend,
-    Completed,
-    Flushed,
-    JobAbended,
-    SystemAbend,
-)
+from jackal.results import Abended, AfterAbend, Completed, Flushed, JobAbended
 from jackal.runner import JobRunner
 from jackal.unknown_return_code import RaiseUnknownReturnCode
 from jackal.unresolved import RaiseErrorStrategy
@@ -199,7 +193,7 @@ def test_a_cobol_open_labels_a_new_dataset_and_fails_status_39_on_a_conflicting_
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         builtins=core_builtins(),
     )
-    with caplog.at_level(logging.WARNING, logger="jackal.cobol_files"):
+    with caplog.at_level(logging.WARNING, logger="zos.cobol.io.dataset_files"):
         result = runner.run_job(job, catalog)
     reloaded = system(tmp_path)
     var, copy = reloaded.lookup("J.VAR"), reloaded.lookup("J.COPY")
@@ -215,7 +209,7 @@ def test_a_cobol_open_labels_a_new_dataset_and_fails_status_39_on_a_conflicting_
         (SequentialLabel(RecordFormat.F, 100), VARYING),
     )
     assert [
-        r.getMessage() for r in caplog.records if r.name == "jackal.cobol_files"
+        r.getMessage() for r in caplog.records if r.name == "zos.cobol.io.dataset_files"
     ] == ["J.FIX: LRECL: declared 80, FD 50"]
 
 

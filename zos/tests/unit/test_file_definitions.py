@@ -8,10 +8,10 @@ from interpreter.data_literals import boolean, integer, named, text
 from interpreter.data_value import DataList, DataRecord, DataValue
 from interpreter.instructions import Data
 from interpreter.var_name import VarName
-from jackal.cobol_files import ProgramFile
-from jackal.file_definitions import program_files_in
-from jackal.record_format import FixedFormat, FormatFromDataset, VariableFormat
 from tests.covers import NotLanguageFeature, covers
+from zos.cobol.io.file_definitions import program_files_in
+from zos.cobol.io.program_file import ProgramFile
+from zos.cobol.io.record_format import FixedFormat, FormatFromDataset, VariableFormat
 
 
 def _fd(

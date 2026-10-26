@@ -20,8 +20,8 @@ from interpreter.data_value import DataList, DataRecord, DataScalar, DataValue
 from interpreter.field_name import FieldName
 from interpreter.instructions import Data, InstructionBase
 from interpreter.project.types import LinkedProgram
-from jackal.cobol_files import ProgramFile
-from jackal.record_format import (
+from zos.cobol.io.program_file import ProgramFile
+from zos.cobol.io.record_format import (
     FdRecords,
     FormatFromDataset,
     ProgramFormat,
