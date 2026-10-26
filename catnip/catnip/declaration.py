@@ -21,7 +21,7 @@ class Unseeded:
 @dataclass(frozen=True)
 class SequentialEntry:
     dsn: str
-    seed: Path
+    seed: Path | Unseeded
     recfm: RecordFormat
     lrecl: int
 
@@ -66,14 +66,22 @@ class _Wire(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
 
-class _SequentialWire(_Wire):
+class _Seeded(_Wire):
+    seed: str = Field(alias="from", default="")
+
+    def _seed(self, data_dir: Path) -> Path | Unseeded:
+        if "seed" in self.model_fields_set:
+            return data_dir / self.seed
+        return Unseeded()
+
+
+class _SequentialWire(_Seeded):
     dsn: str
-    seed: str = Field(alias="from")
     recfm: RecordFormat
     lrecl: int = Field(gt=0)
 
     def model(self, data_dir: Path) -> SequentialEntry:
-        return SequentialEntry(self.dsn, data_dir / self.seed, self.recfm, self.lrecl)
+        return SequentialEntry(self.dsn, self._seed(data_dir), self.recfm, self.lrecl)
 
 
 class _AixWire(_Wire):
@@ -89,9 +97,8 @@ class _AixWire(_Wire):
         )
 
 
-class _KsdsWire(_Wire):
+class _KsdsWire(_Seeded):
     dsn: str
-    seed: str = Field(alias="from", default="")
     lrecl: int = Field(gt=0)
     key_offset: int = Field(ge=0)
     key_length: int = Field(gt=0)
@@ -106,11 +113,6 @@ class _KsdsWire(_Wire):
             self.key_length,
             tuple(aix.model() for aix in self.aix),
         )
-
-    def _seed(self, data_dir: Path) -> Path | Unseeded:
-        if "seed" in self.model_fields_set:
-            return data_dir / self.seed
-        return Unseeded()
 
 
 class _GdgWire(_Wire):

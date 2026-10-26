@@ -5,9 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from catnip.dataset import Dataset
-from catnip.declaration import Declaration, load_declaration
+from catnip.declaration import Declaration, Unseeded, load_declaration
 from catnip.install import install
-from catnip.labels import KsdsLabel, PathView, SequentialLabel
+from catnip.labels import KsdsLabel, PathView, RecordFormat, SequentialLabel
 from catnip.system_catalog import SystemCatalog
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.copybook_search import CopybookSearch
@@ -41,6 +41,12 @@ _COPYBOOKS: dict[str, str] = {
     "AWS.M2.CARDDEMO.TRANCATG.PS": "CVTRA04Y",
     "AWS.M2.CARDDEMO.TRANTYPE.PS": "CVTRA03Y",
     "AWS.M2.CARDDEMO.TCATBALF.PS": "CVTRA01Y",
+}
+
+_OUTPUTS: dict[str, SequentialLabel] = {
+    "AWS.M2.CARDDEMO.ACCTDATA.PSCOMP": SequentialLabel(RecordFormat.FB, 107),
+    "AWS.M2.CARDDEMO.ACCTDATA.ARRYPS": SequentialLabel(RecordFormat.FB, 110),
+    "AWS.M2.CARDDEMO.ACCTDATA.VBPS": SequentialLabel(RecordFormat.VB, 84),
 }
 
 UNDECLARED: dict[str, str] = {
@@ -82,8 +88,15 @@ def test_every_declared_carddemo_dataset_agrees_with_its_copybook_and_its_file(
     )
     declaration = _declaration()
     data = carddemo_home / "data" / "EBCDIC"
-    seeded = [(s.dsn, s.seed, s.lrecl) for s in declaration.sequential] + [
-        (k.dsn, k.seed, k.lrecl) for k in declaration.ksds if isinstance(k.seed, Path)
+    seeded = [
+        (s.dsn, s.seed, s.lrecl)
+        for s in declaration.sequential
+        if isinstance(s.seed, Path)
+    ] + [(k.dsn, k.seed, k.lrecl) for k in declaration.ksds if isinstance(k.seed, Path)]
+    unseeded = [
+        (s.dsn, SequentialLabel(s.recfm, s.lrecl))
+        for s in declaration.sequential
+        if isinstance(s.seed, Unseeded)
     ]
     checks = [
         (
@@ -98,13 +111,15 @@ def test_every_declared_carddemo_dataset_agrees_with_its_copybook_and_its_file(
     assert (
         declaration.data_dir.resolve(),
         [s.dsn for s in declaration.sequential],
+        unseeded,
         len(seeded),
         checks,
         data_files,
     ) == (
         data.resolve(),
-        list(_COPYBOOKS),
-        len(declaration.sequential) + len(declaration.ksds),
+        [*_COPYBOOKS, *_OUTPUTS],
+        list(_OUTPUTS.items()),
+        len(_COPYBOOKS) + len(declaration.ksds),
         [(dsn, 0, 0) for dsn, _, _ in seeded],
         sorted(declared),
     )
@@ -156,7 +171,7 @@ def test_an_installed_carddemo_system_holds_each_dataset_and_runs_acctfile(
             Dataset(s.dsn, root / "datasets" / s.dsn, SequentialLabel(s.recfm, s.lrecl))
             for s in sequential
         ],
-        [(data / s.dsn).read_bytes() for s in sequential],
+        [(data / dsn).read_bytes() for dsn in _COPYBOOKS] + [b""] * len(_OUTPUTS),
         b"".join(sorted(_records(xref_source, 50), key=lambda r: r[:16])),
         PathView(
             "AWS.M2.CARDDEMO.CARDXREF.VSAM.KSDS", KsdsLabel(50, 0, 16), 25, 11, False

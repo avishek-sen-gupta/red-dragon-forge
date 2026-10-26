@@ -410,7 +410,7 @@ fileignoreconfig:
 - filename: docs/how-to/run-your-application.md
   checksum: 6d5d5f0273a0a960819cae601d400e61fe6ed8da9372b6f99e25bba55b619bfa
 - filename: .github/workflows/ci.yml
-  checksum: c13a891403b820defd117dfcaadc1330aab037b840860c1e3d67c9ee5b36955d
+  checksum: 66880360aeb542a0f3029632b0956c1c99e512113ecec11b6d40af01861e46b6
 - filename: cobble/cobble/dataflow/depgraph/flows.py
   checksum: c4281f7c9c55f0f323effc01be8ed5761fda2799a1da47535d144fcc462b4d1a
 - filename: cobble/cobble/dataflow/fields/transfer.py
@@ -463,4 +463,6 @@ fileignoreconfig:
   checksum: 147baa05d253c77e4daa0fdf9fc5575c521afc979602ab7862d0effb41a108f9
 - filename: zos/zos/cobol/io/program_files.py
   checksum: 3e89b0c0dbb5fad6f3c410161b671b52e04a08065992db77ce9acb41b411893c
+- filename: tests/integration/fixtures/readacct/stdout.txt
+  checksum: c25d48077584e449f3b251f5f9cf0e30dc58f2cb514dc31993884ce7e44990c1
 version: "1.0"

@@ -354,6 +354,22 @@ def test_an_hlasm_program_with_no_source_stops_the_build(
     )
 
 
+def test_a_maclib_entry_that_is_not_a_directory_stops_the_build(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = _mixed_build_toml(tmp_path, {})
+    (tmp_path / "mac").rmdir()
+    (tmp_path / "mac").write_text("")
+
+    rc = run([str(path)], os.environ)
+
+    assert (rc, capsys.readouterr().err, (tmp_path / "out" / "app.zip").exists()) == (
+        1,
+        f"forge-build: SYSLIB directory {tmp_path / 'mac'} does not exist\n",
+        False,
+    )
+
+
 def test_an_unfound_hlasm_bridge_stops_the_build(tmp_path: Path) -> None:
     path = _mixed_build_toml(tmp_path, {"ASMEQU.mac": _ASMEQU})
     absent = tmp_path / "absent-bridge"

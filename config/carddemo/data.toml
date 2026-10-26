@@ -66,6 +66,21 @@ from  = "AWS.M2.CARDDEMO.TCATBALF.PS"
 recfm = "FB"
 lrecl = 50
 
+[[sequential]]
+dsn   = "AWS.M2.CARDDEMO.ACCTDATA.PSCOMP"
+recfm = "FB"
+lrecl = 107
+
+[[sequential]]
+dsn   = "AWS.M2.CARDDEMO.ACCTDATA.ARRYPS"
+recfm = "FB"
+lrecl = 110
+
+[[sequential]]
+dsn   = "AWS.M2.CARDDEMO.ACCTDATA.VBPS"
+recfm = "VB"
+lrecl = 84
+
 [[ksds]]
 dsn        = "AWS.M2.CARDDEMO.USRSEC.VSAM.KSDS"
 from       = "AWS.M2.CARDDEMO.USRSEC.PS"

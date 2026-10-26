@@ -48,18 +48,20 @@ jobs:
         run: make jar
       - name: Install build dependencies for hlasm_export
         run: sudo apt-get install -y cmake ninja-build clang libc++-dev libc++abi-dev
-      # hlasm_export is a long C++ build; it changes only when the HLASM fork's pin does.
+      # hlasm_export and hlasm_ast_bridge are long C++ builds; they change only when the HLASM fork's pin does.
       - name: Read the HLASM fork's pinned commit
         id: hlasm-pin
         working-directory: ${{ github.workspace }}
         run: echo "sha=$(git -C vendor/red-dragon rev-parse HEAD:hlasm-bridge/che4z)" >> "$GITHUB_OUTPUT"
-      - name: Restore hlasm_export
+      - name: Restore hlasm_export and hlasm_ast_bridge
         id: hlasm-cache
         uses: actions/cache@v5
         with:
-          path: vendor/red-dragon/hlasm-bridge/che4z/build/bin/hlasm_export
-          key: hlasm-export-${{ runner.os }}-${{ steps.hlasm-pin.outputs.sha }}
-      - name: Build hlasm_export
+          path: |
+            vendor/red-dragon/hlasm-bridge/che4z/build/bin/hlasm_export
+            vendor/red-dragon/hlasm-bridge/che4z/build/bin/hlasm_ast_bridge
+          key: hlasm-bridges-${{ runner.os }}-${{ steps.hlasm-pin.outputs.sha }}
+      - name: Build hlasm_export and hlasm_ast_bridge
         if: steps.hlasm-cache.outputs.cache-hit != 'true'
         working-directory: ${{ github.workspace }}
         env:
@@ -155,18 +157,20 @@ jobs:
       - name: Build the bridge JARs (ProLeap + JCL)
         working-directory: ${{ github.workspace }}
         run: make jar
-      # hlasm_export is a long C++ build; it changes only when the HLASM fork's pin does.
+      # hlasm_export and hlasm_ast_bridge are long C++ builds; they change only when the HLASM fork's pin does.
       - name: Read the HLASM fork's pinned commit
         id: hlasm-pin
         working-directory: ${{ github.workspace }}
         run: echo "sha=$(git -C vendor/red-dragon rev-parse HEAD:hlasm-bridge/che4z)" >> "$GITHUB_OUTPUT"
-      - name: Restore hlasm_export
+      - name: Restore hlasm_export and hlasm_ast_bridge
         id: hlasm-cache
         uses: actions/cache@v5
         with:
-          path: vendor/red-dragon/hlasm-bridge/che4z/build/bin/hlasm_export
-          key: hlasm-export-${{ runner.os }}-${{ steps.hlasm-pin.outputs.sha }}
-      - name: Build hlasm_export
+          path: |
+            vendor/red-dragon/hlasm-bridge/che4z/build/bin/hlasm_export
+            vendor/red-dragon/hlasm-bridge/che4z/build/bin/hlasm_ast_bridge
+          key: hlasm-bridges-${{ runner.os }}-${{ steps.hlasm-pin.outputs.sha }}
+      - name: Build hlasm_export and hlasm_ast_bridge
         if: steps.hlasm-cache.outputs.cache-hit != 'true'
         working-directory: ${{ github.workspace }}
         env:
@@ -206,18 +210,20 @@ jobs:
       # forge-run TN3270 tests drive a real s3270 and fail without it.
       - name: Install the hlasm_export build dependencies and s3270
         run: sudo apt-get update && sudo apt-get install -y cmake ninja-build clang libc++-dev libc++abi-dev s3270
-      # hlasm_export is a long C++ build; it changes only when the HLASM fork's pin does.
+      # hlasm_export and hlasm_ast_bridge are long C++ builds; they change only when the HLASM fork's pin does.
       - name: Read the HLASM fork's pinned commit
         id: hlasm-pin
         working-directory: ${{ github.workspace }}
         run: echo "sha=$(git -C vendor/red-dragon rev-parse HEAD:hlasm-bridge/che4z)" >> "$GITHUB_OUTPUT"
-      - name: Restore hlasm_export
+      - name: Restore hlasm_export and hlasm_ast_bridge
         id: hlasm-cache
         uses: actions/cache@v5
         with:
-          path: vendor/red-dragon/hlasm-bridge/che4z/build/bin/hlasm_export
-          key: hlasm-export-${{ runner.os }}-${{ steps.hlasm-pin.outputs.sha }}
-      - name: Build hlasm_export
+          path: |
+            vendor/red-dragon/hlasm-bridge/che4z/build/bin/hlasm_export
+            vendor/red-dragon/hlasm-bridge/che4z/build/bin/hlasm_ast_bridge
+          key: hlasm-bridges-${{ runner.os }}-${{ steps.hlasm-pin.outputs.sha }}
+      - name: Build hlasm_export and hlasm_ast_bridge
         if: steps.hlasm-cache.outputs.cache-hit != 'true'
         env:
           CC: clang

@@ -46,8 +46,18 @@ def _seed_problems(dsn: str, data_dir: Path, seed: Path, lrecl: int) -> Iterator
         )
 
 
-def _sequential_problems(data_dir: Path, entry: SequentialEntry) -> Iterator[str]:
-    return _seed_problems(entry.dsn, data_dir, entry.seed, entry.lrecl)
+def _declared_seed_problems(
+    dsn: str, data_dir: Path, seed: Path | Unseeded, lrecl: int
+) -> Iterable[str]:
+    match seed:
+        case Unseeded():
+            return ()
+        case Path():
+            return _seed_problems(dsn, data_dir, seed, lrecl)
+
+
+def _sequential_problems(data_dir: Path, entry: SequentialEntry) -> Iterable[str]:
+    return _declared_seed_problems(entry.dsn, data_dir, entry.seed, entry.lrecl)
 
 
 def _overrun(dsn: str, key_offset: int, key_length: int, lrecl: int) -> Iterable[str]:
@@ -82,16 +92,8 @@ def _repeats(what: str, keys: tuple[bytes, ...]) -> Iterator[str]:
     return (f"{what} {key!r} repeats" for key in keys if counts[key] > 1)
 
 
-def _cluster_seed_problems(data_dir: Path, entry: KsdsEntry) -> Iterable[str]:
-    match entry.seed:
-        case Unseeded():
-            return ()
-        case Path():
-            return _seed_problems(entry.dsn, data_dir, entry.seed, entry.lrecl)
-
-
 def _ksds_problems(data_dir: Path, entry: KsdsEntry) -> Iterator[str]:
-    yield from _cluster_seed_problems(data_dir, entry)
+    yield from _declared_seed_problems(entry.dsn, data_dir, entry.seed, entry.lrecl)
     yield from _overrun(entry.dsn, entry.key_offset, entry.key_length, entry.lrecl)
     yield from _repeats(
         f"{entry.dsn}: from: primary key",
@@ -152,7 +154,12 @@ def _logged(dsn: str) -> str:
 
 
 def _add_sequential(system: SystemCatalog, entry: SequentialEntry) -> str:
-    system.add(entry.dsn, entry.seed, SequentialLabel(entry.recfm, entry.lrecl))
+    label = SequentialLabel(entry.recfm, entry.lrecl)
+    match entry.seed:
+        case Unseeded():
+            system.create(entry.dsn, label)
+        case Path():
+            system.add(entry.dsn, entry.seed, label)
     return _logged(entry.dsn)
 
 

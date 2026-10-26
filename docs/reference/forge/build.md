@@ -78,7 +78,8 @@ csd_files = ["app/csd/CARDDEMO.CSD"]
 - Intermediate files go in `<out_dir>/work/`; a rebuild reuses red-dragon's units, keyed by
   source and settings. Reuse ignores a copybook's contents, including a regenerated BMS
   symbolic map (red-dragon-o819): after editing a copybook or a `.bms`, delete
-  `<out_dir>/work/` before rebuilding.
+  `<out_dir>/work/` before rebuilding. HLASM units are keyed on the `maclib_dirs` paths, not
+  the members' contents: after editing a `.mac` member, delete `<out_dir>/work/` too.
 - `link` naming a program twice, or two members declaring one PROGRAM-ID, stops the build.
 - The manifest lists the programs the image holds, by PROGRAM-ID or CSECT name. A COBOL
   `CALL 'X'` reaches an HLASM program `X` with standard linkage.

@@ -47,6 +47,9 @@ $(HLASM_EXPORT):
 	cd $(HLASM_FORK) && BUILD_TYPE=Release ./build.sh --target hlasm_export
 
 $(HLASM_AST_BRIDGE):
+	@for tool in cmake ninja $${CXX:-c++}; do \
+	  command -v $$tool >/dev/null || { echo "error: hlasm_ast_bridge needs $$tool (CMake + Ninja + a C++ toolchain, e.g. LLVM@18)" >&2; exit 1; }; \
+	done
 	cd $(HLASM_FORK) && BUILD_TYPE=Release ./build.sh --target hlasm_ast_bridge
 
 hlasm: $(HLASM_EXPORT) $(HLASM_AST_BRIDGE)

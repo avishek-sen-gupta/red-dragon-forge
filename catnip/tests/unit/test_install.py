@@ -25,6 +25,11 @@ from = "seq.ps"
 recfm = "FB"
 lrecl = 4
 
+[[sequential]]
+dsn = "T.NEWSEQ"
+recfm = "VB"
+lrecl = 84
+
 [[ksds]]
 dsn = "T.KSDS"
 from = "ksds.ps"
@@ -74,8 +79,14 @@ def test_a_declaration_installs_sorted_clusters_indexes_and_paths(tmp_path):
     path = system.lookup("T.PATH")
     through = _read_three(path)
 
-    assert installed == ("T.SEQ", "T.KSDS", "T.AIX", "T.PATH", "T.EMPTY")
+    assert installed == ("T.SEQ", "T.NEWSEQ", "T.KSDS", "T.AIX", "T.PATH", "T.EMPTY")
     assert system.lookup("T.SEQ").label == SequentialLabel(RecordFormat.FB, 4)
+    assert system.lookup("T.NEWSEQ") == Dataset(
+        "T.NEWSEQ",
+        tmp_path / "system" / "datasets" / "T.NEWSEQ",
+        SequentialLabel(RecordFormat.VB, 84),
+    )
+    assert (tmp_path / "system" / "datasets" / "T.NEWSEQ").read_bytes() == b""
     assert system.lookup("T.KSDS").path.read_bytes() == b"001BBBxx002AAAyy003AAAzz"
     assert system.lookup("T.EMPTY").path.read_bytes() == b""
     assert path.label == PathView("T.KSDS", KsdsLabel(8, 0, 3), 3, 3, False)
@@ -113,11 +124,6 @@ def test_a_declaration_installs_sorted_clusters_indexes_and_paths(tmp_path):
             ('from = "seq.ps"', 'from = "nope.ps"'),
             _FILES,
             "T.SEQ: from: nope.ps does not exist",
-        ),
-        (
-            ('from = "seq.ps"\n', ""),
-            _FILES,
-            "[[sequential]] T.SEQ: from: Field required",
         ),
         (
             ('dsn = "T.SEQ"\n', ""),
@@ -158,11 +164,11 @@ def test_a_declaration_installs_sorted_clusters_indexes_and_paths(tmp_path):
         ),
         (
             (
-                '[[sequential]]\ndsn = "T.SEQ"\nfrom = "seq.ps"\n',
-                'gdg = [1]\n\n[[sequential]]\ndsn = "T.SEQ"\n',
+                '[[sequential]]\ndsn = "T.SEQ"\nfrom = "seq.ps"\nrecfm = "FB"\n',
+                'gdg = [1]\n\n[[sequential]]\ndsn = "T.SEQ"\nfrom = "seq.ps"\n',
             ),
             _FILES,
-            "[[sequential]] entry 1: from: Field required",
+            "[[sequential]] entry 1: recfm: Field required",
         ),
     ],
 )

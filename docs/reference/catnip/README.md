@@ -93,7 +93,7 @@ seeds and leaves every other dataset as it is. Seed files are only read.
 Install validates the whole declaration before writing anything, and stops at the first
 failure with exit status 1. It then:
 
-1. copies each sequential seed in, labelled as declared;
+1. copies each sequential seed in, or catalogs the dataset empty without `from`, labelled as declared;
 2. writes each KSDS sorted by its primary key, or empty without `from`;
 3. catalogs each AIX and its path;
 4. catalogs each GDG base, with no generations.
@@ -139,7 +139,7 @@ unique     = false
 | Table | Keys |
 |---|---|
 | top level | `data_dir`: the directory `from` paths are relative to; relative to the declaration's own directory |
-| `[[sequential]]` | `dsn`, `from`, `recfm` (`F`, `FB`, `V`, `VB`), `lrecl`; all required |
+| `[[sequential]]` | `dsn`, `recfm` (`F`, `FB`, `V`, `VB`), `lrecl`; `from` optional (without it the dataset is cataloged empty) |
 | `[[ksds]]` | `dsn`, `lrecl`, `key_offset`, `key_length`; `from` optional (without it the cluster is cataloged empty) |
 | `[[ksds.aix]]` | `dsn`, `path` (the path's DSN), `key_offset`, `key_length`, `unique`; all required. Belongs to the `[[ksds]]` above it |
 | `[[gdg]]` | `name`, `limit`, `empty` (`EMPTY`/`NOEMPTY`), `scratch` (`SCRATCH`/`NOSCRATCH`), `order` (`FIFO`/`LIFO`); all required |
