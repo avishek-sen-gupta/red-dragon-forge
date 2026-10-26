@@ -18,12 +18,15 @@ from cobble.experimental.aggregates.matrix import (
 )
 from cobble.experimental.aggregates.nmf_settings import NmfSettings
 from cobble.experimental.aggregates.round_step import RoundStep
-from cobble.experimental.aggregates.scorecard import round_scores
+from cobble.experimental.aggregates.scorecard import (
+    program_columns,
+    round_scores,
+    same_program_negatives,
+)
 from cobble.experimental.aggregates.unify import read_unified, write_unified
 
 FIELDS = (
-    *(f"A:R.F{i}" for i in range(5)),
-    *(f"B:R.F{i}" for i in range(5, 10)),
+    *(f"A:R.F{i}" for i in range(10)),
     *(f"C:R.F{i}" for i in range(10, 14)),
 )
 BLOCKS = (
@@ -41,7 +44,7 @@ def _planted(tmp_path: Path) -> None:
         IncidenceMatrix(
             matrix=csr_matrix(cells),
             fields=FIELDS,
-            paragraphs=tuple(("P", f"PARA-{i}") for i in range(14)),
+            paragraphs=tuple(("A" if i < 12 else "C", f"PARA-{i}") for i in range(14)),
             occurrences=(*(6 for _ in range(10)), *(2 for _ in range(4))),
         ),
         tmp_path / "matrix.npz",
@@ -88,9 +91,34 @@ def test_planted_blocks_score_as_accurate_complete_stable_distinct_focused_facto
         for record in caplog.records
         if record.getMessage().startswith("aggregate scorecard: round")
     ] == [
-        "aggregate scorecard: round 1 (min-occurrences 4, k=2): held-out AUC 1.000",
+        "aggregate scorecard: round 1 (min-occurrences 4, k=2): "
+        "held-out AUC 1.000 against same-program empty cells",
         "aggregate scorecard: round 1: fidelity 0.000 relative error, coverage 100.0%, "
         "stability 1.000, distinctness 0.000, focus 1.000, "
         "reach 50.0% of factors across programs (median 1.5 programs), "
         "class share 10.0%",
     ]
+
+
+def test_held_out_empty_cells_come_from_the_paragraphs_own_program() -> None:
+    names = ("A:R.F0", "A:R.F1", "A:R.F2", "B:R.F3", "B:R.F4", "B:R.F5")
+    paragraphs = (("A", "P0"), ("A", "P1"), ("B", "P2"), ("B", "P3"))
+    cells = np.zeros((4, 6), dtype=np.float64)
+    cells[0, 0] = cells[1, 1] = cells[2, 3] = cells[3, 4] = 1.0
+    residual = csr_matrix(cells)
+    owned = program_columns(paragraphs, names, {})
+
+    rows, columns = same_program_negatives(
+        residual,
+        np.repeat(np.arange(4, dtype=np.int64), 25),
+        owned,
+        np.random.default_rng(7),
+    )
+
+    assert sorted(
+        {
+            (paragraphs[r][0], names[c].split(":")[0], float(cells[r, c]))
+            for r, c in zip(rows, columns, strict=True)
+        }
+    ) == [("A", "A", 0.0), ("B", "B", 0.0)]
+    assert len(rows) == 100

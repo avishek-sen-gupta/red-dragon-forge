@@ -102,7 +102,7 @@ axes of its factors' quality, none of which needs labels:
 
 | Score | What it measures |
 |---|---|
-| held-out AUC (headline) | hide 10% of the round's entries, fit on the rest, and rank the hidden entries against as many empty cells: 0.5 is chance, 1.0 is perfect |
+| held-out AUC (headline) | hide 10% of the round's entries, fit on the rest, and rank each hidden entry against an empty cell of its paragraph's own program, a class counting for every program its members are in: 0.5 is chance, 1.0 is perfect, `nan` when no paragraph has an empty cell in its own program |
 | fidelity | the fit's reconstruction error over the size of what it factored: 0 rebuilds it exactly |
 | coverage | the share of entries inside some factor's top fields x top paragraphs |
 | stability | refit on four random 90% samples of the paragraphs, match factors one to one, and average their cosine similarity |
@@ -111,10 +111,14 @@ axes of its factors' quality, none of which needs labels:
 | reach | the share of factors whose top fields span two or more programs, a class counting every program its members are in, and the median programs spanned |
 | class share | the classes' share of the round's entries, as `class-share` reports it |
 
-On CardDemo, with `--min-occurrences 4 2 --k 30 10`, round 1 scores AUC 0.973, fidelity 0.310,
-coverage 70.4%, stability 0.955, distinctness 0.553, focus 1.000, reach 76.7% (median 5 programs),
-class share 19.2%; round 2 scores AUC 0.653 and coverage 15.5%. A random matrix scores AUC about
-0.5, fidelity about 1 and coverage about 0.
+Empty cells come from the paragraph's own program because a corpus matrix is close to one block per
+program: an empty cell drawn from anywhere is almost always another program's field, and ranking a real
+entry above that is easy, so the AUC would reward one factor per program. On CardDemo, with
+`--min-occurrences 4 2 --k 30 10`, round 1 scores AUC 0.891 (0.979 against empty cells from anywhere),
+fidelity 0.310, coverage 70.2%, stability 0.976, distinctness 0.553, focus 1.000, reach 76.7% (median 6.5
+programs), class share 19.3%; round 2 scores AUC 0.437 and coverage 15.4%. A matrix of 3,000 programs whose
+paragraphs touch their own program's fields at random scores AUC 0.499, where empty cells from anywhere
+would have rated it highly.
 
 ## On CardDemo
 

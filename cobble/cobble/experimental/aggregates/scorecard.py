@@ -19,6 +19,7 @@ from cobble.experimental.aggregates.decompose import (
 from cobble.experimental.aggregates.fitted_round import FittedRound
 from cobble.experimental.aggregates.matrix import IncidenceMatrix
 from cobble.experimental.aggregates.nmf_settings import NmfSettings
+from cobble.experimental.aggregates.program_columns import ProgramColumns
 from cobble.experimental.aggregates.round_score import RoundScore
 from cobble.experimental.aggregates.round_step import RoundStep
 from numpy.typing import NDArray
@@ -30,7 +31,7 @@ HELD_OUT = 0.1
 SEEDS = 5
 SUBSAMPLE = 0.9
 PROGRAM_SEPARATOR = ":"
-NEGATIVE_DRAWS = 4
+DRAWS = 8
 
 _Loadings = NDArray[np.float64]
 _Tops = tuple[tuple[int, ...], ...]
@@ -47,30 +48,63 @@ def _scored(
     )
 
 
-def _negatives(
-    residual: csr_matrix, count: int, rng: np.random.Generator
+def program_columns(
+    paragraphs: Sequence[tuple[str, str]],
+    names: Sequence[str],
+    programs: Mapping[str, frozenset[str]],
+) -> ProgramColumns:
+    owned = sorted(
+        (program, column)
+        for column, name in enumerate(names)
+        for program in programs.get(name, frozenset({_program(name)}))
+    )
+    order = {program: i for i, program in enumerate(sorted({p for p, _ in owned}))}
+    counts = np.bincount(
+        np.array([order[p] for p, _ in owned], dtype=np.int64), minlength=len(order)
+    ).astype(np.int64)
+    return ProgramColumns(
+        rows=np.array([order.get(p, -1) for p, _ in paragraphs], dtype=np.int64),
+        starts=(np.cumsum(counts) - counts).astype(np.int64),
+        counts=counts,
+        columns=np.array([c for _, c in owned], dtype=np.int64),
+    )
+
+
+def same_program_negatives(
+    residual: csr_matrix,
+    rows: NDArray[np.int64],
+    owned: ProgramColumns,
+    rng: np.random.Generator,
 ) -> tuple[NDArray[np.int64], NDArray[np.int64]]:
     entries = residual.tocoo()
-    height, width = residual.get_shape()
+    width = residual.get_shape()[1]
+    usable = rows[owned.rows[rows] >= 0]
+    program = owned.rows[usable]
+    picks = rng.integers(0, owned.counts[program][:, None], size=(len(usable), DRAWS))
+    columns = owned.columns[owned.starts[program][:, None] + picks]
     occupied = entries.row.astype(np.int64) * width + entries.col
-    drawn = rng.integers(0, height * width, size=NEGATIVE_DRAWS * count)
-    free = np.unique(drawn[~np.isin(drawn, occupied)])[:count]
-    return free // width, free % width
+    free = ~np.isin(usable[:, None] * width + columns, occupied)
+    found = free.any(axis=1)
+    return usable[found], columns[found, free.argmax(axis=1)[found]]
 
 
-def _auc(residual: csr_matrix, k: int, settings: NmfSettings) -> float:
+def _auc(fitted: FittedRound, settings: NmfSettings, owned: ProgramColumns) -> float:
     rng = np.random.default_rng(settings.seed)
-    entries = residual.tocoo()
+    entries = fitted.residual.tocoo()
     count = max(1, round(entries.nnz * HELD_OUT))
     hidden = np.isin(
         np.arange(entries.nnz), rng.choice(entries.nnz, count, replace=False)
     )
     train = csr_matrix(
         (entries.data[~hidden], (entries.row[~hidden], entries.col[~hidden])),
-        shape=residual.shape,
+        shape=fitted.residual.shape,
     )
-    used, made_of = factorised(train, k, settings)[0]
-    rows, columns = _negatives(residual, count, rng)
+    used, made_of = factorised(train, fitted.step.k, settings)[0]
+    rows, columns = same_program_negatives(
+        fitted.residual, entries.row[hidden].astype(np.int64), owned, rng
+    )
+    if not len(rows):
+        return float("nan")
     positive = _scored(used, made_of, entries.row[hidden], entries.col[hidden])
     negative = _scored(used, made_of, rows, columns)
     labels = np.concatenate((np.ones(len(positive)), np.zeros(len(negative))))
@@ -171,7 +205,8 @@ def _score(
     names = tuple(found.fields[i] for i in fitted.keep)
     fields = tuple(ranked(row, TOP_FIELDS) for row in fitted.made_of)
     paragraphs = tuple(ranked(column, TOP_PARAGRAPHS) for column in fitted.used.T)
-    spans = _spans(fields, names, _class_programs(unified))
+    programs = _class_programs(unified)
+    spans = _spans(fields, names, programs)
     mass = float(np.sqrt((fitted.residual.data**2).sum()))
     (share,) = class_shares(
         found, frozenset(unified.values()), (fitted.step.min_occurrences,)
@@ -179,7 +214,7 @@ def _score(
     return RoundScore(
         min_occurrences=fitted.step.min_occurrences,
         k=fitted.step.k,
-        auc=_auc(fitted.residual, fitted.step.k, settings),
+        auc=_auc(fitted, settings, program_columns(found.paragraphs, names, programs)),
         fidelity=fitted.result.fit.reconstruction_error / mass if mass else 0.0,
         coverage=_coverage(fitted.residual, fields, paragraphs),
         stability=_stability(fitted, settings),

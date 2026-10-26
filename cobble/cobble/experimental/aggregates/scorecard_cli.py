@@ -64,7 +64,8 @@ def _parser() -> argparse.ArgumentParser:
 
 def _logged(number: int, score: RoundScore) -> None:
     logger.info(
-        "%s: round %d (min-occurrences %d, k=%d): held-out AUC %.3f",
+        "%s: round %d (min-occurrences %d, k=%d): "
+        "held-out AUC %.3f against same-program empty cells",
         STAGE,
         number,
         score.min_occurrences,
