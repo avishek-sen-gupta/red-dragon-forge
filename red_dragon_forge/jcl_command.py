@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from catnip.system_catalog import SystemCatalog
@@ -24,6 +24,11 @@ from red_dragon_forge.config_error import ConfigError
 from red_dragon_forge.coprocessing import Coprocessing
 from red_dragon_forge.env_config import EnvConfig
 from red_dragon_forge.jcl_run import JclRun
+from red_dragon_forge.run_preparation import prepared
+
+
+class JclEnv(EnvConfig):
+    jcl: JclRun
 
 
 def _runner(
@@ -60,13 +65,9 @@ def _job_text(job: Path) -> str:
         raise ConfigError(f"{job}: {exc.strerror}") from exc
 
 
-def run_jcl_mode(
-    base: Path,
-    config: EnvConfig,
-    jcl: JclRun,
-    package: Package,
-    coprocessing: Coprocessing,
-) -> int:
+def run_jcl_mode(path: Path, environ: Mapping[str, str]) -> int:
+    config, package, coprocessing = prepared(path, environ, JclEnv)
+    base, jcl = path.parent, config.jcl
     runner = _runner(
         package,
         config,

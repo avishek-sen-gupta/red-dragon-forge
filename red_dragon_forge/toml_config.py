@@ -29,3 +29,11 @@ def toml_config(model: type[M], path: Path) -> M:
         raise ConfigError(f"{path.name}: {exc}") from exc
     except ValidationError as invalid:
         raise ConfigError(f"{path.name}: {validation_message(invalid)}") from invalid
+
+
+def toml_sections(path: Path) -> frozenset[str]:
+    text = _text(path)
+    try:
+        return frozenset(tomllib.loads(text))
+    except tomllib.TOMLDecodeError as exc:
+        raise ConfigError(f"{path.name}: {exc}") from exc

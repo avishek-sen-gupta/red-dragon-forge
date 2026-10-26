@@ -1,35 +1,45 @@
-"""What every forge-run mode starts from: the env.toml config and mode, the opened package, and its coprocessing."""
+"""What every forge-run mode starts from: its env.toml config, the opened package, and its coprocessing."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from types import MappingProxyType
+from typing import TypeVar
 from zipfile import BadZipFile
 
-from cics.transaction_hooks import TransactionHooks
+from interpreter.types.typed_value import TypedValue
+from interpreter.vm.vm_types import BuiltinResult, VMState
 from litter.open import open_package
 from litter.package import Package
+from squall.sql_runtime import SqlRuntime
 
 from red_dragon_forge.config_error import ConfigError
 from red_dragon_forge.coprocessing import Coprocessing
 from red_dragon_forge.db2_connection import connected
-from red_dragon_forge.env_config import (
-    EnvConfig,
-    RunMode,
-    check_against,
-    load_env_config,
-)
+from red_dragon_forge.env_config import EnvConfig, load_env_config
 
 _DSN = "SQUALL_DB2_DSN"
+
+E = TypeVar("E", bound=EnvConfig)
 
 
 def _noop() -> None:
     return None
 
 
+def _no_hook(args: Sequence[TypedValue], vm: VMState) -> BuiltinResult:
+    return BuiltinResult(value=None)
+
+
 _NO_COPROCESSING = Coprocessing(
-    on_abend=_noop, hooks=TransactionHooks(), builtins=MappingProxyType({})
+    on_abend=_noop,
+    sql=SqlRuntime(
+        entries=MappingProxyType({}),
+        reset_session=_no_hook,
+        syncpoint=_no_hook,
+        rollback=_no_hook,
+    ),
 )
 
 
@@ -53,9 +63,9 @@ def _package(path: Path, config: EnvConfig) -> Package:
 
 
 def prepared(
-    path: Path, environ: Mapping[str, str]
-) -> tuple[EnvConfig, RunMode, Package, Coprocessing]:
-    config, mode = load_env_config(path)
+    path: Path, environ: Mapping[str, str], model: type[E]
+) -> tuple[E, Package, Coprocessing]:
+    config = load_env_config(path, model)
     package = _package(path, config)
-    check_against(path, config, mode, package.manifest)
-    return config, mode, package, _coprocessing(config, package, environ)
+    config.check_against(path, package.manifest)
+    return config, package, _coprocessing(config, package, environ)

@@ -108,10 +108,11 @@ stops it when the CALL runs.
 
 `tests/unit/test_env_config.py` covers mode selection and each fault;
 `tests/integration/test_plain_mode.py` covers each `[plain]` outcome and refusal, labelling on
-first OPEN, and two programs selecting the same name; `tests/integration/test_run_command.py`
-covers `[plain]` against the equivalent one-step `[jcl]` job, a multi-step `[jcl]` job against
-`jackal run`, the CardDemo sign-on screen served by `[cics]` over TN3270, and a `[plain]` Db2
-program (needs `SQUALL_DB2_DSN`).
+first OPEN, two programs selecting the same name, and a run loading neither jackal nor cics;
+`tests/integration/test_run_command.py` covers `[plain]` against the equivalent one-step `[jcl]`
+job, a multi-step `[jcl]` job against `jackal run`, the CardDemo sign-on screen served by `[cics]`
+over TN3270, a `[jcl]` run loading no cics, a `[cics]` region loading no jackal, and a `[plain]`
+Db2 program (needs `SQUALL_DB2_DSN`).
 `tests/integration/test_carddemo_forge.py` builds CardDemo's checked-in `config/carddemo/build.toml`
 and `build-db2.toml` (exact programs and CSD transactions), serves each with its `env.toml`, and
 drives it with `s3270`: a user signs on and views an account; an admin reaches the Db2

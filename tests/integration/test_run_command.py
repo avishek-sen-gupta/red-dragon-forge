@@ -30,6 +30,21 @@ _APP = _REPO_ROOT / "vendor" / "carddemo" / "app"
 _DB2_STUBS = _REPO_ROOT / "squall" / "squall" / "stubs"
 _SQUALL_COPYBOOKS = _REPO_ROOT / "squall" / "squall" / "copybooks"
 _FB80 = SequentialLabel(RecordFormat.FB, 80)
+_TOP_PACKAGES = (
+    "print(*sorted({name.split('.')[0] for name in sys.modules}), sep='\\n')\n"
+)
+_RUN_LOADED = (
+    "import os, sys\n"
+    "from red_dragon_forge.run_command import run\n"
+    "rc = run(sys.argv[1:], os.environ)\n" + _TOP_PACKAGES + "raise SystemExit(rc)\n"
+)
+_REGION_LOADED = (
+    "import os, sys\n"
+    "from pathlib import Path\n"
+    "import red_dragon_forge.run_command\n"
+    "from red_dragon_forge.cics_command import cics_region\n"
+    "cics_region(Path(sys.argv[1]), os.environ)\n" + _TOP_PACKAGES
+)
 
 _COPIER = """\
        IDENTIFICATION DIVISION.
@@ -234,6 +249,30 @@ def test_jcl_runs_a_multi_step_job_from_a_package(
     )
 
 
+def _loaded(script: str, env: Path) -> tuple[int, list[str]]:
+    ran = subprocess.run(
+        [sys.executable, "-c", script, str(env)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return ran.returncode, ran.stdout.splitlines()
+
+
+def test_a_jcl_run_loads_no_cics(tmp_path: Path) -> None:
+    _sources(tmp_path, {"SETRC": _SETRC})
+    package = _built(tmp_path, 'programs = ["SETRC"]\nlink = ["SETRC"]\n')
+    job = tmp_path / "one.jcl"
+    job.write_text("//J JOB 1\n//A EXEC PGM=SETRC\n")
+    env = _env(
+        tmp_path, "env.toml", package, tmp_path / "system", f'[jcl]\njob = "{job}"\n'
+    )
+
+    rc, (report, *loaded) = _loaded(_RUN_LOADED, env)
+
+    assert (rc, report, {"cics"} & set(loaded)) == (1, "A: RC=8", set())
+
+
 def test_each_fault_in_a_run_stops_it_naming_the_fault(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -381,6 +420,30 @@ def test_a_cics_region_reads_its_datform_from_env_toml(
 
     datform = region.builtins[FuncName("__cics_datform")]([], VMState())
     assert datform.value == "YYMMDD"
+
+
+def test_a_cics_region_loads_no_jackal(tmp_path: Path, carddemo_system: Path) -> None:
+    bms = tmp_path / "bms"
+    bms.mkdir()
+    shutil.copy(_APP / "bms" / "COSGN00.bms", bms / "COSGN00.bms")
+    package = _built(
+        tmp_path,
+        'programs = ["COSGN00C"]\nlink = ["COSGN00C"]\ncoprocessors = ["cics"]\n'
+        f'[cics]\nbms_dirs = ["{bms}"]\n'
+        f'csd_files = ["{_APP / "csd" / "CARDDEMO.CSD"}"]\n',
+        f'copybook_dirs = ["{_APP / "cpy"}"]\n',
+    )
+    env = _env(
+        tmp_path,
+        "env.toml",
+        package,
+        carddemo_system,
+        '[cics]\ninitial_transid = "CC00"\n',
+    )
+
+    rc, loaded = _loaded(_REGION_LOADED, env)
+
+    assert (rc, {"jackal"} & set(loaded)) == (0, set())
 
 
 @pytest.mark.usefixtures("db2_dsn")

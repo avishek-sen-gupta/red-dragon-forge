@@ -1,5 +1,6 @@
 """env.toml picks its mode by the one section present, and stops naming any fault before anything runs."""
 
+from collections.abc import Mapping
 from datetime import timedelta
 from pathlib import Path
 
@@ -9,11 +10,15 @@ from cics.region_clock import LOCAL_CLOCK
 from litter.manifest import Manifest
 from litter.transaction import Transaction
 
+from red_dragon_forge.cics_command import CicsEnv
 from red_dragon_forge.cics_run import CicsRun
 from red_dragon_forge.config_error import ConfigError
-from red_dragon_forge.env_config import check_against, load_env_config
+from red_dragon_forge.env_config import EnvConfig, load_env_config, run_mode
+from red_dragon_forge.jcl_command import JclEnv
 from red_dragon_forge.jcl_run import JclRun
+from red_dragon_forge.plain_command import PlainEnv
 from red_dragon_forge.plain_run import PlainRun
+from red_dragon_forge.run_mode import RunMode
 from red_dragon_forge.tolerant_section import TolerantSection
 
 _TOP = 'package = "out/app.zip"\n[paths]\nsystem = "system"\n'
@@ -32,10 +37,33 @@ _MANIFEST = Manifest(
 )
 
 
+_ENV_OF: Mapping[RunMode, type[PlainEnv | JclEnv | CicsEnv]] = {
+    RunMode.PLAIN: PlainEnv,
+    RunMode.JCL: JclEnv,
+    RunMode.CICS: CicsEnv,
+}
+
+
 def _written(tmp_path: Path, text: str) -> Path:
     path = tmp_path / "env.toml"
     path.write_text(text)
     return path
+
+
+def _loaded(path: Path) -> EnvConfig:
+    return load_env_config(path, _ENV_OF[run_mode(path)])
+
+
+def _section(path: Path) -> PlainRun | JclRun | CicsRun:
+    match _loaded(path):
+        case PlainEnv(plain=plain):
+            return plain
+        case JclEnv(jcl=jcl):
+            return jcl
+        case CicsEnv(cics=cics):
+            return cics
+        case _:
+            raise AssertionError(f"{path} names no mode")
 
 
 @pytest.mark.parametrize(
@@ -54,15 +82,15 @@ def test_an_env_toml_without_one_runnable_mode_names_its_fault(
     tmp_path: Path, sections: str, message: str
 ) -> None:
     with pytest.raises(ConfigError) as refused:
-        load_env_config(_written(tmp_path, _TOP + sections))
+        _loaded(_written(tmp_path, _TOP + sections))
 
     assert str(refused.value) == message
 
 
 def test_the_section_present_picks_the_mode(tmp_path: Path) -> None:
-    plain = load_env_config(_written(tmp_path, _TOP + _PLAIN))[1]
-    jcl = load_env_config(_written(tmp_path, _TOP + _JCL))[1]
-    cics = load_env_config(_written(tmp_path, _TOP + _CICS))[1]
+    plain = _section(_written(tmp_path, _TOP + _PLAIN))
+    jcl = _section(_written(tmp_path, _TOP + _JCL))
+    cics = _section(_written(tmp_path, _TOP + _CICS))
 
     assert (plain, jcl, cics) == (
         PlainRun(program="CBXXXX", files={"ACCTFILE": "APP.ACCT"}),
@@ -72,8 +100,8 @@ def test_the_section_present_picks_the_mode(tmp_path: Path) -> None:
 
 
 def test_tolerances_are_off_unless_named(tmp_path: Path) -> None:
-    unnamed = load_env_config(_written(tmp_path, _TOP + _PLAIN))[0].tolerant
-    named = load_env_config(
+    unnamed = _loaded(_written(tmp_path, _TOP + _PLAIN)).tolerant
+    named = _loaded(
         _written(
             tmp_path,
             _TOP
@@ -81,7 +109,7 @@ def test_tolerances_are_off_unless_named(tmp_path: Path) -> None:
             + "permit_missing_host_variables = true\n"
             + _PLAIN,
         )
-    )[0].tolerant
+    ).tolerant
 
     assert (unnamed, named) == (
         TolerantSection(
@@ -111,7 +139,7 @@ def test_an_env_toml_that_does_not_parse_names_its_fault(
     tmp_path: Path, text: str, message: str
 ) -> None:
     with pytest.raises(ConfigError) as refused:
-        load_env_config(_written(tmp_path, text))
+        _loaded(_written(tmp_path, text))
 
     assert str(refused.value) == message
 
@@ -135,21 +163,21 @@ def test_an_env_toml_the_package_cannot_satisfy_names_its_fault(
     tmp_path: Path, sections: str, message: str
 ) -> None:
     path = _written(tmp_path, _TOP + sections)
-    config, mode = load_env_config(path)
+    config = _loaded(path)
 
     with pytest.raises(ConfigError) as refused:
-        check_against(path, config, mode, _MANIFEST)
+        config.check_against(path, _MANIFEST)
 
     assert str(refused.value) == message
 
 
 def test_a_cics_region_clock_follows_its_timezone_and_datform(tmp_path: Path) -> None:
-    named = load_env_config(
+    named = _section(
         _written(
             tmp_path, _TOP + _CICS + 'timezone = "Asia/Kolkata"\ndatform = "DDMMYY"\n'
         )
-    )[1]
-    unnamed = load_env_config(_written(tmp_path, _TOP + _CICS))[1]
+    )
+    unnamed = _section(_written(tmp_path, _TOP + _CICS))
 
     assert isinstance(named, CicsRun) and isinstance(unnamed, CicsRun)
     clock, local = named.clock(), unnamed.clock()
@@ -163,6 +191,6 @@ def test_a_cics_region_clock_follows_its_timezone_and_datform(tmp_path: Path) ->
 
 def test_an_unknown_timezone_is_refused(tmp_path: Path) -> None:
     with pytest.raises(ConfigError) as refused:
-        load_env_config(_written(tmp_path, _TOP + _CICS + 'timezone = "Mars/Base"\n'))
+        _loaded(_written(tmp_path, _TOP + _CICS + 'timezone = "Mars/Base"\n'))
 
     assert str(refused.value) == "env.toml: cics.timezone: invalid timezone: Mars/Base"

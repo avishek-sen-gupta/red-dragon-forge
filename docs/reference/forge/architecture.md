@@ -43,13 +43,14 @@ CICS, SQL or JCL knowledge of its own.
 | Module | Purpose |
 |---|---|
 | `build_command.py` | `forge-build`: a `build.toml` into a litter package. See [Build](build.md). |
-| `run_command.py` | `forge-run`: reads `env.toml` and imports only its mode's command. See [Run](run.md). |
-| `run_preparation.py` | What every mode starts from: the config, the mode, the opened package and its `Coprocessing`. |
-| `plain_command.py` | `[plain]`, through `plain_mode.py`. Imports no jackal. |
-| `jcl_command.py` | `[jcl]`: the job, run by jackal's `JobRunner`. |
-| `cics_command.py` | `[cics]`: the region served over TN3270; `cics_region` assembles it in process. |
+| `run_command.py` | `forge-run`: finds `env.toml`'s mode section and imports only that mode's command. See [Run](run.md). |
+| `env_config.py` | `EnvConfig`: the settings every mode shares, `run_mode`, and the `[sql]` check against the manifest. Each command extends it with its section and checks. |
+| `run_preparation.py` | What every mode starts from: its config, the opened package and its `Coprocessing`. |
+| `plain_command.py` | `[plain]` (`PlainEnv`), through `plain_mode.py`. Imports neither jackal nor cics. |
+| `jcl_command.py` | `[jcl]` (`JclEnv`): the job, run by jackal's `JobRunner`. Imports no cics. |
+| `cics_command.py` | `[cics]` (`CicsEnv`): the region served over TN3270; `cics_region` assembles it in process. Imports no jackal. |
 | `coprocessors.py` | The coprocessors a build may name, each with its compile spec and the programs it requires linked. |
-| `coprocessing.py` | `Coprocessing`: what a package's `sql` adds to a run — squall's builtins, the three CICS unit-of-work hooks and the abend rollback. `db2_connection.py` builds it; with no `sql` a run gets none. `[jcl]` composes its builtins into the job runner's table; `[plain]` runs the image directly, through `plain_mode.py`; `[cics]` passes them and the hooks to the region. |
+| `coprocessing.py` | `Coprocessing`: what a package's `sql` adds to a run — squall's `SqlRuntime` (its builtins and three unit-of-work hooks) and the abend rollback. `db2_connection.py` builds it; with no `sql` the runtime is empty and its hooks are no-ops. `[plain]` and `[jcl]` compose its builtins into their table; `[cics]` also packs its hooks into cicada's `TransactionHooks`. |
 | `plain_mode.py` | `[plain]`: runs one program from the package image, with no job, step or DD, and reports RC, abend or budget exhaustion. |
 | `db2_connection.py` | The `[sql]` Db2 connection: installs squall's runtime over it and returns the `Coprocessing`. |
 | `run.py` | `run_program(linked, specs, …)` runs a compiled program through the one spec that owns execution. CICS owns execution; SQL is synchronous and owns none. |
@@ -69,7 +70,8 @@ Design records: [CICS + SQL composition](../../records/design/2026-07-04-cics-sq
   `jackal` import it.
 - `catnip` also imports no `interpreter` (`catnip-imports-no-runtime`).
 - `zos` imports none of `cics`, `squall`, `jackal`, `cobble`, `litter` or `red_dragon_forge` (`zos-imports-no-runtime`). It sits between catnip and the runtimes.
-- `red_dragon_forge.plain_command`, `red_dragon_forge.plain_mode` and `red_dragon_forge.plain_run` must not import `jackal` (`plain-mode-without-jackal`).
+- forge-run's shared modules (`run_preparation`, `env_config`, `coprocessing`, `db2_connection`, `config_error`, `run_mode`) import neither `jackal` nor `cics` (`forge-run-shared-without-runtimes`).
+- `plain_command`, `plain_mode` and `plain_run` import neither `jackal` nor `cics` (`plain-mode-without-runtimes`); `jcl_command` and `jcl_run` import no `cics` (`jcl-mode-without-cics`); `cics_command` and `cics_run` import no `jackal` (`cics-mode-without-jackal`). `run_command` imports each mode only inside its branch.
 - `litter` imports none of `cics`, `squall`, `jackal`, `cobble`, `catnip` or `red_dragon_forge`.
   `jackal` and `cics` import it: a job runs against a litter package, and a TN3270 region is
   assembled from one.

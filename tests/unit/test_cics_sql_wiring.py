@@ -14,6 +14,7 @@ from litter.manifest import Manifest
 from litter.package import Package
 from squall.backend import SqlBackend, SqlResult
 
+from red_dragon_forge.cics_command import transaction_hooks
 from red_dragon_forge.db2_connection import Db2Connection
 
 
@@ -57,7 +58,7 @@ def test_the_backend_commits_at_syncpoint_and_rolls_back_on_abend(
         _empty(tmp_path),
         SystemCatalog(tmp_path / "system"),
         on_abend=coprocessing.on_abend,
-        hooks=coprocessing.hooks,
+        hooks=transaction_hooks(coprocessing.sql),
         other_builtins=coprocessing.builtins,
     )
 

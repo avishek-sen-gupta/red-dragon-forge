@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import ibm_db
-from cics.transaction_hooks import TransactionHooks
 from squall.backend import SqlBackend
 from squall.backends.db2 import Db2Backend
 from squall.connector import NamedDbConnector
@@ -23,19 +22,13 @@ class Db2Connection:
     backend: SqlBackend
 
     def install(self, tolerant: bool) -> Coprocessing:
-        runtime = install_sql_runtime(
-            {self.database: self.backend},
-            NamedDbConnector(self.database),
-            tolerant=tolerant,
-        )
         return Coprocessing(
             on_abend=self.backend.rollback,
-            hooks=TransactionHooks(
-                task_end=runtime.reset_session,
-                syncpoint=runtime.syncpoint,
-                rollback=runtime.rollback,
+            sql=install_sql_runtime(
+                {self.database: self.backend},
+                NamedDbConnector(self.database),
+                tolerant=tolerant,
             ),
-            builtins=runtime.entries,
         )
 
 

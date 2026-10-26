@@ -5,80 +5,44 @@ from __future__ import annotations
 import logging
 import os
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 from interpreter.handlers.calls import UnresolvedProgramError
-from litter.package import Package
 from litter.package_error import PackageError
 
-from red_dragon_forge.cics_run import CicsRun
 from red_dragon_forge.config_error import ConfigError
-from red_dragon_forge.coprocessing import Coprocessing
-from red_dragon_forge.env_config import EnvConfig
-from red_dragon_forge.jcl_run import JclRun
-from red_dragon_forge.plain_run import PlainRun
-from red_dragon_forge.run_preparation import prepared
+from red_dragon_forge.env_config import run_mode
+from red_dragon_forge.run_mode import RunMode
 
 
-def _cics(
-    base: Path,
-    config: EnvConfig,
-    cics: CicsRun,
-    package: Package,
-    coprocessing: Coprocessing,
-) -> int:
+def _cics(path: Path, environ: Mapping[str, str]) -> int:
     from red_dragon_forge.cics_command import run_cics_mode
 
-    return run_cics_mode(base, config, cics, package, coprocessing)
+    return run_cics_mode(path, environ)
 
 
-def _plain(
-    base: Path,
-    config: EnvConfig,
-    plain: PlainRun,
-    package: Package,
-    coprocessing: Coprocessing,
-) -> int:
+def _plain(path: Path, environ: Mapping[str, str]) -> int:
     from red_dragon_forge.plain_command import run_plain_mode
 
-    return run_plain_mode(base, config, plain, package, coprocessing)
+    return run_plain_mode(path, environ)
 
 
-def _jcl(
-    base: Path,
-    config: EnvConfig,
-    jcl: JclRun,
-    package: Package,
-    coprocessing: Coprocessing,
-) -> int:
+def _jcl(path: Path, environ: Mapping[str, str]) -> int:
     from red_dragon_forge.jcl_command import run_jcl_mode
 
-    return run_jcl_mode(base, config, jcl, package, coprocessing)
+    return run_jcl_mode(path, environ)
+
+
+_COMMAND_OF: Mapping[RunMode, Callable[[Path, Mapping[str, str]], int]] = {
+    RunMode.PLAIN: _plain,
+    RunMode.JCL: _jcl,
+    RunMode.CICS: _cics,
+}
 
 
 def _run(path: Path, environ: Mapping[str, str]) -> int:
-    config, mode, package, coprocessing = prepared(path, environ)
-    base = path.parent
-    match mode:
-        case CicsRun():
-            return _cics(base, config, mode, package, coprocessing)
-        case _:
-            return _batch(base, config, mode, package, coprocessing)
-
-
-def _batch(
-    base: Path,
-    config: EnvConfig,
-    mode: PlainRun | JclRun,
-    package: Package,
-    coprocessing: Coprocessing,
-) -> int:
-    match mode:
-        case PlainRun():
-            return _plain(base, config, mode, package, coprocessing)
-        case JclRun():
-            return _jcl(base, config, mode, package, coprocessing)
+    return _COMMAND_OF[run_mode(path)](path, environ)
 
 
 def run(argv: Sequence[str], environ: Mapping[str, str]) -> int:

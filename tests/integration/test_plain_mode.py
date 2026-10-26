@@ -406,7 +406,7 @@ def test_an_unresolved_call_stops_the_run_unless_tolerated(
     )
 
 
-def test_a_plain_run_loads_no_jackal(tmp_path: Path) -> None:
+def test_a_plain_run_loads_neither_jackal_nor_cics(tmp_path: Path) -> None:
     package = _package(tmp_path, {"RCFOUR": _RCFOUR})
     env = tmp_path / "env.toml"
     env.write_text(
@@ -422,4 +422,8 @@ def test_a_plain_run_loads_no_jackal(tmp_path: Path) -> None:
     )
     report, *loaded = ran.stdout.splitlines()
 
-    assert (ran.returncode, report, {"jackal"} & set(loaded)) == (0, "RC 4", set())
+    assert (ran.returncode, report, {"jackal", "cics"} & set(loaded)) == (
+        0,
+        "RC 4",
+        set(),
+    )

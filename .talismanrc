@@ -382,13 +382,13 @@ fileignoreconfig:
 - filename: bridge-env.sh
   checksum: 4849b249704973f3ac9d4067a3b2f9b4e8ba23ceb6304a3fe0605c756e538067
 - filename: red_dragon_forge/env_config.py
-  checksum: dde6f60c871524c7dbba5fad1af8365c8aa484f714d4ba8233d982a7eb629a56
+  checksum: 399b95832f375447b2d5892d3ae5af515b0d3293aa525f7b019a611aafcac6a8
 - filename: red_dragon_forge/env_paths.py
   checksum: dbd39668f3a46e89d6ab958688e3f15afcbe0a7d3f54b1490d69bda3654d3432
 - filename: red_dragon_forge/sql_section.py
   checksum: 7018a0b20bddda06c6c8b2904ea3c85ee609945597392b0059a71ad6b16b4b55
 - filename: tests/unit/test_env_config.py
-  checksum: 87bdb65fc7b8678f2f3e6e890e62265ab0d4508237cafbbf04b502125ddd5434
+  checksum: 84fa3a5ba940b539c47254c1dca61c29edf557899d964151689fea81a6fd7649
 - filename: red_dragon_forge/db2_connection.py
   checksum: aaf5f28d418c5e935c9610b13f9f7dc68c43fb804adc1805ea821112aba5c75b
 - filename: cicada/tests/integration/cics/test_region_from_package.py

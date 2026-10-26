@@ -216,12 +216,45 @@ forbidden_modules =
     litter
     red_dragon_forge
 
-[importlinter:contract:plain-mode-without-jackal]
-name = forge-run's plain mode and its command run the image directly — they import no jackal
+[importlinter:contract:forge-run-shared-without-runtimes]
+name = What every forge-run mode shares imports neither jackal nor cics
+type = forbidden
+source_modules =
+    red_dragon_forge.run_preparation
+    red_dragon_forge.env_config
+    red_dragon_forge.coprocessing
+    red_dragon_forge.db2_connection
+    red_dragon_forge.config_error
+    red_dragon_forge.run_mode
+forbidden_modules =
+    jackal
+    cics
+
+[importlinter:contract:plain-mode-without-runtimes]
+name = forge-run's plain mode runs the image directly — it imports neither jackal nor cics
 type = forbidden
 source_modules =
     red_dragon_forge.plain_command
     red_dragon_forge.plain_mode
     red_dragon_forge.plain_run
+forbidden_modules =
+    jackal
+    cics
+
+[importlinter:contract:jcl-mode-without-cics]
+name = forge-run's jcl mode runs a job through jackal — it imports no cics
+type = forbidden
+source_modules =
+    red_dragon_forge.jcl_command
+    red_dragon_forge.jcl_run
+forbidden_modules =
+    cics
+
+[importlinter:contract:cics-mode-without-jackal]
+name = forge-run's cics mode serves a region — it imports no jackal
+type = forbidden
+source_modules =
+    red_dragon_forge.cics_command
+    red_dragon_forge.cics_run
 forbidden_modules =
     jackal
