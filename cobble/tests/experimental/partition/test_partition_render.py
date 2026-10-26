@@ -20,7 +20,7 @@ from cobble.experimental.partition.extent_row import ExtentRow
 from cobble.experimental.partition.field_components import component_of
 from cobble.experimental.partition.file_site import FileSite
 from cobble.experimental.partition.leaf_index import leaf_index
-from cobble.experimental.partition.render_cli import SCRIPTS
+from cobble.experimental.partition.render_cli import SCRIPTS, SOURCES
 from cobble.experimental.partition.field_graph import FieldGraph
 from cobble.experimental.partition.graph_edge import GraphEdge
 from cobble.experimental.partition.graph_node import GraphNode
@@ -152,11 +152,11 @@ def test_each_program_keeps_to_its_own_region_and_slots_sit_among_their_fields(
 
 
 def test_the_page_embeds_the_graph_with_each_field_s_component() -> None:
-    html = page(GRAPH, scripts=("/*one*/", "/*two*/"))
+    html = page(GRAPH, sources=("one.js", "two.js"))
     payload = json.loads(html.split("const DATA = ", 1)[1].split(";\n", 1)[0])
 
-    assert html.count("<script>/*one*/</script>") == 1
-    assert html.count("<script>/*two*/</script>") == 1
+    assert html.count('<script src="one.js"></script>') == 1
+    assert html.count('<script src="two.js"></script>') == 1
     assert payload["barrier"] == "fanout-8"
     assert [
         (n["id"], n["kind"], n["component"], n["degree"]) for n in payload["nodes"]
@@ -231,7 +231,7 @@ def test_the_page_draws_a_run_of_occurrences_with_the_same_neighbours_as_one_nod
             )
         ),
     )
-    html = page(graph, scripts=())
+    html = page(graph, sources=())
     payload = json.loads(html.split("const DATA = ", 1)[1].split(";\n", 1)[0])
 
     assert sorted(
@@ -298,7 +298,7 @@ def test_the_page_embeds_dataset_slots_and_their_edge_labels() -> None:
             ),
         ),
     )
-    html = page(slotted, scripts=())
+    html = page(slotted, sources=())
     payload = json.loads(html.split("const DATA = ", 1)[1].split(";\n", 1)[0])
 
     assert sorted((n["id"], n["kind"]) for n in payload["nodes"]) == [
@@ -337,14 +337,11 @@ def test_the_page_follows_one_dataset_at_a_time_and_hides_dataset_links_otherwis
             _dataset_site("R", "RREC", 14, "DS.B"),
         ),
     )
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / SOURCES[0]).write_bytes(SCRIPTS[0].read_bytes())
+    (tmp_path / SOURCES[1]).write_bytes(SCRIPTS[1].read_bytes())
     out = tmp_path / "page.html"
-    out.write_text(
-        page(
-            linked,
-            tuple(script.read_text(encoding="utf-8") for script in SCRIPTS),
-        ),
-        encoding="utf-8",
-    )
+    out.write_text(page(linked, SOURCES), encoding="utf-8")
 
     assert drive(out) == PageReport(
         errors=(),

@@ -12,7 +12,7 @@ from cobble.experimental.partition.field_graph import FieldGraph
 from cobble.experimental.partition.graph_index import graph_index
 from cobble.experimental.partition.map_kind import MapKind
 from cobble.experimental.partition.program_map import map_page, program_map
-from cobble.experimental.partition.render_cli import SCRIPTS
+from cobble.experimental.partition.render_cli import SCRIPTS, SOURCES
 
 
 def test_the_map_has_one_node_per_program_and_dataset_record_and_an_edge_per_linked_pair() -> (
@@ -46,13 +46,12 @@ def test_the_map_has_one_node_per_program_and_dataset_record_and_an_edge_per_lin
 
 def test_the_map_page_loads_and_each_program_links_to_its_page(tmp_path: Path) -> None:
     (tmp_path / "scripts").mkdir()
-    sources = tuple(f"scripts/{script.name}" for script in SCRIPTS)
-    (tmp_path / sources[0]).write_bytes(SCRIPTS[0].read_bytes())
-    (tmp_path / sources[1]).write_bytes(SCRIPTS[1].read_bytes())
+    (tmp_path / SOURCES[0]).write_bytes(SCRIPTS[0].read_bytes())
+    (tmp_path / SOURCES[1]).write_bytes(SCRIPTS[1].read_bytes())
     (tmp_path / "programs").mkdir()
     (tmp_path / "programs" / "Q.html").write_text("<p>Q</p>", "utf-8")
     out = tmp_path / "index.html"
-    out.write_text(map_page(program_map(graph_index(LINKED)), sources), "utf-8")
+    out.write_text(map_page(program_map(graph_index(LINKED)), SOURCES), "utf-8")
 
     assert drive_map(out) == MapReport(
         errors=(),

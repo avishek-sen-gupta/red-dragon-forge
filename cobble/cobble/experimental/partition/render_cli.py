@@ -1,4 +1,4 @@
-"""cobble-experimental-partition-render: the WebGL page of a field graph."""
+"""cobble-experimental-partition-render: a program map of a field graph and one WebGL page per program's neighbourhood."""
 
 from __future__ import annotations
 
@@ -10,18 +10,25 @@ from pathlib import Path
 import cobble.knowledge_graph
 from cobble.cli_logging import configure_cli_logging
 from cobble.experimental.partition.graph_file import read_graph
+from cobble.experimental.partition.graph_index import GraphIndex, graph_index
+from cobble.experimental.partition.neighbourhood import neighbourhood
 from cobble.experimental.partition.page import page
+from cobble.experimental.partition.program_map import map_page, program_map
+from cobble.experimental.partition.progress import counted
+from cobble.experimental.partition.tally import RENDER, tenths
 
 logger = logging.getLogger(__name__)
 
 VENDOR = Path(cobble.knowledge_graph.__file__).parent / "vendor"
 SCRIPTS = (VENDOR / "graphology.umd.min.js", VENDOR / "sigma.min.js")
+SOURCES = tuple(f"scripts/{script.name}" for script in SCRIPTS)
+PAGE_SOURCES = tuple(f"../{source}" for source in SOURCES)
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="cobble-experimental-partition-render",
-        description="Experimental: one self-contained WebGL page of a partition graph.",
+        description="Experimental: a program map of a partition graph and one self-contained WebGL page per program's neighbourhood.",
     )
     parser.add_argument(
         "--graph",
@@ -30,22 +37,53 @@ def _parser() -> argparse.ArgumentParser:
         help="the graph cobble-experimental-partition-graph wrote",
     )
     parser.add_argument(
-        "--out", type=Path, required=True, help="the HTML page to write"
+        "--out",
+        type=Path,
+        required=True,
+        help="the directory to write index.html, programs/ and scripts/ into",
     )
     return parser
+
+
+def _write(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def _program_page(out: Path, index: GraphIndex, name: str) -> tuple[int, str]:
+    drawn = neighbourhood(index, name)
+    _write(out / "programs" / f"{name}.html", page(drawn, PAGE_SOURCES))
+    return len(drawn.nodes), name
+
+
+def _pages(out: Path, index: GraphIndex) -> None:
+    names = tuple(index.programs)
+    step = tenths(RENDER, "pages written", len(names))
+    sizes = tuple(
+        _program_page(out, index, name) for name in counted(names, step, len(names))
+    )
+    largest = max(sizes, default=(0, ""))
+    logger.info(
+        "%s: largest neighbourhood %s, %d nodes", RENDER, largest[1], largest[0]
+    )
 
 
 def main(argv: Sequence[str] = ()) -> int:
     configure_cli_logging()
     arguments = _parser().parse_args(tuple(argv) if argv else None)
+    out: Path = arguments.out
     logger.info("partition render: reading %s", arguments.graph)
-    graph = read_graph(arguments.graph)
+    index = graph_index(read_graph(arguments.graph))
     logger.info(
-        "partition render: %d nodes, %d edges", len(graph.nodes), len(graph.edges)
+        "partition render: %d nodes, %d edges, %d programs",
+        len(index.nodes),
+        len(index.edges),
+        len(index.programs),
     )
-    scripts = tuple(script.read_text(encoding="utf-8") for script in SCRIPTS)
-    built = page(graph, scripts)
-    logger.info("partition render: writing %d characters", len(built))
-    arguments.out.write_text(built, encoding="utf-8")
-    logger.info("partition render: %d nodes -> %s", len(graph.nodes), arguments.out)
+    _write(out / SOURCES[0], SCRIPTS[0].read_text(encoding="utf-8"))
+    _write(out / SOURCES[1], SCRIPTS[1].read_text(encoding="utf-8"))
+    _write(out / "index.html", map_page(program_map(index), SOURCES))
+    logger.info("partition render: program map -> %s", out / "index.html")
+    _pages(out, index)
+    logger.info("partition render: %d pages -> %s", len(index.programs), out)
     return 0

@@ -114,7 +114,7 @@ partition-clusters: partition-graph
 	$(COBBLE) cobble-experimental-partition-clusters --graph $(PARTITION_DIR)/graph.jsonl --out $(PARTITION_DIR)/clusters.jsonl --report $(PARTITION_DIR)/clusters.md
 
 partition-render: partition-graph
-	$(COBBLE) cobble-experimental-partition-render --graph $(PARTITION_DIR)/graph.jsonl --out $(PARTITION_DIR)/partition.html
+	$(COBBLE) cobble-experimental-partition-render --graph $(PARTITION_DIR)/graph.jsonl --out $(PARTITION_DIR)/render
 
 # squall's Db2 test database (official icr.io image). The compose project stays
 # squall/, so the squall-db2 container and its named volume are the same ones.

@@ -10,6 +10,7 @@ from typing import TypedDict
 
 import pytest
 from tests.dataflow.fixpoint.fixpoint_dir import Row, fixpoint_dir, flow_row, sink_row
+from tests.experimental.partition.graphs import LINKED
 
 from cobble.experimental.partition import (
     clusters_cli,
@@ -18,6 +19,7 @@ from cobble.experimental.partition import (
     render_cli,
 )
 from cobble.experimental.partition.extent_row import ExtentRow
+from cobble.experimental.partition.graph_file import write_graph
 from cobble.dataflow.combine.link_row import LinkRow
 
 
@@ -150,7 +152,7 @@ def test_the_commands_turn_a_fixpoint_out_dir_into_a_graph_clusters_a_report_and
     )
     graph_path = tmp_path / "graph" / "graph.jsonl"
     clusters_path = tmp_path / "clusters.jsonl"
-    report_path, page_path = tmp_path / "clusters.md", tmp_path / "page.html"
+    report_path, render_dir = tmp_path / "clusters.md", tmp_path / "render"
 
     with caplog.at_level(logging.INFO):
         assert (
@@ -196,7 +198,7 @@ def test_the_commands_turn_a_fixpoint_out_dir_into_a_graph_clusters_a_report_and
                 "--graph",
                 str(graph_path),
                 "--out",
-                str(page_path),
+                str(render_dir),
             ]
         )
         == 0
@@ -261,7 +263,8 @@ def test_the_commands_turn_a_fixpoint_out_dir_into_a_graph_clusters_a_report_and
         "  - P.B, P.D\n"
     )
     payload = json.loads(
-        page_path.read_text(encoding="utf-8")
+        (render_dir / "programs" / "P.html")
+        .read_text(encoding="utf-8")
         .split("const DATA = ", 1)[1]
         .split(";\n", 1)[0]
     )
@@ -469,4 +472,51 @@ def test_file_sites_report_each_route_and_why_the_rest_resolve_to_no_dataset(
         "2 by a SELECT, 1 unresolved-file",
         "partition file sites: 1 unresolved-file sites: selects-under-other-names, "
         "e.g. R/9 LIT-ACCT",
+    ]
+
+
+def _embedded_ids(page: Path) -> list[str]:
+    payload = json.loads(
+        page.read_text(encoding="utf-8").split("const DATA = ", 1)[1].split(";\n", 1)[0]
+    )
+    return [node["id"] for node in payload["nodes"]]
+
+
+def test_the_render_writes_a_map_shared_scripts_and_one_page_per_program(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    graph, out = tmp_path / "graph.jsonl", tmp_path / "render"
+    write_graph(graph, LINKED)
+    arguments = ["--graph", str(graph), "--out", str(out)]
+
+    with caplog.at_level(logging.INFO):
+        assert render_cli.main(arguments) == 0
+    assert render_cli.main(arguments) == 0
+
+    assert sorted(str(p.relative_to(out)) for p in out.rglob("*") if p.is_file()) == [
+        "index.html",
+        "programs/P.html",
+        "programs/Q.html",
+        "programs/S.html",
+        "scripts/graphology.umd.min.js",
+        "scripts/sigma.min.js",
+    ]
+    assert _embedded_ids(out / "programs" / "S.html") == [
+        "Q:REC.B",
+        "S:REC.A",
+        "S:REC.B",
+    ]
+    assert (out / "programs" / "P.html").read_text(encoding="utf-8").count(
+        '<script src="../scripts/sigma.min.js"></script>'
+    ) == 1
+    assert [
+        record.getMessage()
+        for record in caplog.records
+        if "pages written" in record.getMessage() or "largest" in record.getMessage()
+    ] == [
+        "partition render: pages written 1/3",
+        "partition render: pages written 2/3",
+        "partition render: pages written 3/3",
+        "partition render: pages written 3/3 done",
+        "partition render: largest neighbourhood P, 11 nodes",
     ]

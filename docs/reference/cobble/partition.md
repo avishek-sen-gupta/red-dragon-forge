@@ -32,7 +32,7 @@ From the forge root. Each target runs the one before it.
 The CardDemo config parses into its own cache, so a cache written before a bridge change is
 never read. `PARTITION_DIR` then holds `extents.jsonl`, `fixpoint/`,
 `combine/`, `knowledge-graph.jsonl`, `graph.jsonl`, `clusters.jsonl`, `clusters.md` and
-`partition.html`.
+`render/`.
 
 ## cobble-experimental-partition-graph
 
@@ -170,7 +170,28 @@ cluster's records and fields.
 cobble-experimental-partition-render --graph GRAPH --out OUT
 ```
 
-One self-contained WebGL page, using the sigma.js and graphology builds cobble vendors, dark on
+`--out` is a directory, created if missing, every file overwritten:
+
+| file | what it is |
+|---|---|
+| `index.html` | the program map |
+| `programs/<PROGRAM>.html` | one page per program, of its neighbourhood |
+| `scripts/graphology.umd.min.js`, `scripts/sigma.min.js` | the vendored builds, written once; every page loads them by relative `src` |
+
+The graph is read one line at a time, logging every tenth of the lines, into slotted records, and
+indexed once by node and by program, so no step scans the whole graph per program or per slot.
+
+**The program map** has one node per program and one per dataset record, sized by how many graph
+nodes it holds, and an edge between two of them when some graph edge links their nodes, thicker for
+more such edges. It is placed by a seeded weighted `spring_layout`. Clicking a program opens its
+page; hovering a node or searching its name (Enter) shows what it links to, with link counts.
+
+**A program's neighbourhood** is its own fields, origins and sinks; every node one edge from those;
+and, for each dataset slot among them, every node one edge from that slot, so following a dataset
+still shows all its writers and readers. It keeps every edge with both ends inside. The run logs
+every tenth of the pages and the largest neighbourhood.
+
+Each program page draws its neighbourhood with the sigma.js and graphology builds cobble vendors, dark on
 light. Each program is laid out on its own, by one seeded networkx `spring_layout` over the edges
 among its nodes, so linked fields pull together and a field nothing links drifts to the edge.
 Programs are then placed by a seeded `spring_layout` over what links them, call handovers

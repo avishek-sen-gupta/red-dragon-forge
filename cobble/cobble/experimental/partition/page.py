@@ -49,9 +49,9 @@ def _data(full: FieldGraph) -> PageData:
     )
 
 
-def page(graph: FieldGraph, scripts: Sequence[str]) -> str:
+def page(graph: FieldGraph, sources: Sequence[str]) -> str:
     head, rest = TEMPLATE.read_text(encoding="utf-8").split("/*SCRIPTS*/", 1)
     middle, tail = rest.split("/*DATA*/", 1)
     data = _data(graph).model_dump_json().replace("</", "<\\/")
-    tags = "\n".join(f"<script>{script}</script>" for script in scripts)
+    tags = "\n".join(f'<script src="{source}"></script>' for source in sources)
     return f"{head}{tags}{middle}{data}{tail}"
