@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 from scipy.sparse import csr_matrix
 
-from cobble.experimental.aggregates.decompose import rounds
+from cobble.experimental.aggregates.decompose import reconstruction_error, rounds
 from cobble.experimental.aggregates.factor import Factor
 from cobble.experimental.aggregates.matrix import IncidenceMatrix
 from cobble.experimental.aggregates.nmf_settings import NmfSettings
@@ -116,3 +116,19 @@ def test_rounds_hold_memory_for_the_matrix_non_zeros_not_its_every_cell() -> Non
     }
     assert [_block(factor) for factor in second.fit.factors] == [_planted_block(2)]
     assert peak < paragraphs * fields * 8 // 10
+
+
+def test_reconstruction_error_is_the_frobenius_distance_and_zero_on_an_exact_fit() -> (
+    None
+):
+    rng = np.random.default_rng(0)
+    pairs = [(rng.random((5, 2)), rng.random((2, 6))) for _ in range(3)]
+    used, made_of = pairs[2]
+    noisy = rng.random((5, 6))
+
+    assert reconstruction_error(csr_matrix(used @ made_of), used, made_of) == (
+        pytest.approx(0.0, abs=1e-6)
+    )
+    assert reconstruction_error(csr_matrix(noisy), used, made_of) == pytest.approx(
+        float(np.linalg.norm(noisy - used @ made_of)), rel=1e-9
+    )

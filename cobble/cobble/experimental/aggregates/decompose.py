@@ -76,6 +76,20 @@ def _factor(index: int, used: _Loadings, made_of: _Loadings, names: _Names) -> F
     )
 
 
+def reconstruction_error(
+    target: csr_matrix, used: _Loadings, made_of: _Loadings
+) -> float:
+    entries = target.tocoo()
+    cross = sum(
+        float((entries.data * used[entries.row, i] * made_of[i, entries.col]).sum())
+        for i in range(used.shape[1])
+    )
+    rebuilt = float(np.sum((used.T @ used) * (made_of @ made_of.T)))
+    return float(
+        np.sqrt(max(0.0, float((entries.data**2).sum()) - 2 * cross + rebuilt))
+    )
+
+
 def factorised(
     target: csr_matrix, k: int, settings: NmfSettings
 ) -> tuple[_Factors, float, int]:
@@ -84,7 +98,8 @@ def factorised(
         model.set_params(n_components=k).fit_transform(target), dtype=np.float64
     )
     made_of: _Loadings = np.asarray(model.components_, dtype=np.float64)
-    return (used, made_of), float(model.reconstruction_err_), int(model.n_iter_)
+    error = reconstruction_error(target, used, made_of)
+    return (used, made_of), error, int(model.n_iter_)
 
 
 def _fit(
