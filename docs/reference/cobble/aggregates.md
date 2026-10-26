@@ -6,7 +6,7 @@ paragraphs that use them, found by factoring a paragraph x field matrix. Three s
 run.
 
 ```text
-cobble-experimental-aggregate-unify     --graph graph.jsonl --out unified.jsonl
+cobble-experimental-aggregate-unify     --graph graph.jsonl [--join-unplaced] --out unified.jsonl
 cobble-experimental-aggregate-matrix    --defs defs.jsonl --extents extents.jsonl --unified unified.jsonl
                                         [--exclude REGEX ...]
                                         --out-matrix matrix.npz --out-meta meta.json
@@ -32,7 +32,10 @@ field and a reader's field, or two readers' fields, that cover the same bytes of
 at the same offsets and the same size, are one class: a file no COBOL program writes still joins
 its readers. A `possible` dataset edge has no placement and is ignored; it
 never stops a field joining through its other edges. A field that any
-edge without known placement reaches, a clamped move, neither relays nor joins. Copies inside one
+edge without known placement reaches, a clamped move, neither relays nor joins. `--join-unplaced` lifts
+that rule: such a field still relays and joins through its placed edges, and the unplaced edge is
+ignored. On CardDemo it adds 54 members across 16 classes (90 classes become 92), commarea fields
+of another program joining classes they already belonged to in the others. Copies inside one
 program never join. Classes are the connected components of the joined pairs; `unified.jsonl` holds
 one `{"members": [...]}` per class, and the first member names it.
 

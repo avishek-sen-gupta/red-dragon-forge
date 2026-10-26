@@ -66,11 +66,11 @@ def unplaced_fields(graph: ByteGraph, fields: Mapping[str, ByteNode]) -> frozens
     )
 
 
-def _bytes(graph: ByteGraph) -> _Bytes:
+def _bytes(graph: ByteGraph, join_unplaced: bool) -> _Bytes:
     fields = {node.id: node for node in graph.nodes if node.kind is NodeKind.FIELD}
     slots = frozenset(node.id for node in graph.nodes if node.kind is NodeKind.DATASET)
     ends = fields.keys() | slots
-    unplaced = unplaced_fields(graph, fields)
+    unplaced = frozenset[str]() if join_unplaced else unplaced_fields(graph, fields)
     placed = tuple(
         edge
         for edge in graph.edges
@@ -147,8 +147,10 @@ def _partners(found: _Bytes, source: ByteNode) -> tuple[tuple[str, str], ...]:
     )
 
 
-def exact_classes(graph: ByteGraph) -> tuple[tuple[str, ...], ...]:
-    found = _bytes(graph)
+def exact_classes(
+    graph: ByteGraph, *, join_unplaced: bool
+) -> tuple[tuple[str, ...], ...]:
+    found = _bytes(graph, join_unplaced)
     sources = tuple(
         field
         for node, field in sorted(found.fields.items())

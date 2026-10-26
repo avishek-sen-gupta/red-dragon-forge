@@ -47,9 +47,13 @@ def _moved(ends: tuple[str, str], *placed: tuple[int, int, int]) -> GraphEdge:
     )
 
 
-def _classes(tmp_path: Path, graph: FieldGraph) -> tuple[tuple[str, ...], ...]:
+def _classes(
+    tmp_path: Path, graph: FieldGraph, *, join_unplaced: bool = False
+) -> tuple[tuple[str, ...], ...]:
     write_graph(tmp_path / "graph.jsonl", graph)
-    return exact_classes(read_byte_graph(tmp_path / "graph.jsonl"))
+    return exact_classes(
+        read_byte_graph(tmp_path / "graph.jsonl"), join_unplaced=join_unplaced
+    )
 
 
 GRAPH = FieldGraph(
@@ -92,6 +96,10 @@ def test_only_fields_whose_every_byte_lands_in_place_in_another_program_are_one_
     write_unified(tmp_path / "new" / "unified.jsonl", classes)
 
     assert classes == (("R:CA.A", "S:WS.B"),)
+    assert _classes(tmp_path, GRAPH, join_unplaced=True) == (
+        ("R:CA.A", "S:WS.B"),
+        ("R:CA.H", "S:WS.J"),
+    )
     assert read_unified(tmp_path / "new" / "unified.jsonl") == {
         "R:CA.A": "R:CA.A",
         "S:WS.B": "R:CA.A",

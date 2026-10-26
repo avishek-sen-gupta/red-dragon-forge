@@ -30,6 +30,14 @@ def _parser() -> argparse.ArgumentParser:
         help="graph.jsonl from cobble-experimental-partition-graph",
     )
     parser.add_argument(
+        "--join-unplaced",
+        action="store_true",
+        help=(
+            "let a field that an edge without known placement reaches still relay "
+            "and join through its placed edges"
+        ),
+    )
+    parser.add_argument(
         "--out",
         type=Path,
         required=True,
@@ -46,7 +54,7 @@ def main(argv: Sequence[str] = ()) -> int:
     logger.info(
         "aggregate unify: %d nodes, %d edges", len(graph.nodes), len(graph.edges)
     )
-    classes = exact_classes(graph)
+    classes = exact_classes(graph, join_unplaced=arguments.join_unplaced)
     write_unified(arguments.out, classes)
     logger.info("aggregate unify: %d classes -> %s", len(classes), arguments.out)
     return 0
