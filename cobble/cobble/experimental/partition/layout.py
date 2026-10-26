@@ -6,7 +6,8 @@ import math
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from functools import reduce
-from itertools import combinations
+from itertools import combinations, groupby
+from operator import itemgetter
 
 import networkx as nx
 import numpy as np
@@ -25,6 +26,7 @@ SETTLE_STEPS = 3000
 
 _Point = tuple[float, float]
 _Points = NDArray[np.float64]
+_Ends = Mapping[str, tuple[str, ...]]
 
 
 def _radius(size: int) -> float:
@@ -37,29 +39,44 @@ def _programs(graph: FieldGraph) -> dict[str, tuple[str, ...]]:
         for node in graph.nodes
         if node.kind is not NodeKind.DATASET
     )
-    names = sorted({program for program, _ in owned})
     return {
-        name: tuple(node for program, node in owned if program == name)
-        for name in names
+        name: tuple(node for _, node in group)
+        for name, group in groupby(owned, itemgetter(0))
     }
 
 
-def _local(graph: FieldGraph, members: Sequence[str]) -> nx.Graph[str]:
+def _ends(graph: FieldGraph) -> _Ends:
+    steps = sorted(
+        step
+        for number, edge in enumerate(graph.edges)
+        for step in (
+            (edge.source, number, edge.target),
+            (edge.target, number, edge.source),
+        )
+    )
+    return {
+        node: tuple(step[2] for step in group)
+        for node, group in groupby(steps, itemgetter(0))
+    }
+
+
+def _local(ends: _Ends, members: Sequence[str]) -> nx.Graph[str]:
     inside = frozenset(members)
     local: nx.Graph[str] = nx.Graph()
     local.add_nodes_from(members)
     local.add_edges_from(
-        (edge.source, edge.target)
-        for edge in graph.edges
-        if edge.source in inside and edge.target in inside
+        (member, end)
+        for member in members
+        for end in ends.get(member, ())
+        if end in inside
     )
     return local
 
 
-def _region(graph: FieldGraph, members: Sequence[str]) -> dict[str, _Point]:
+def _region(ends: _Ends, members: Sequence[str]) -> dict[str, _Point]:
     if len(members) == 1:
         return {members[0]: (0.0, 0.0)}
-    placed = nx.spring_layout(_local(graph, members), seed=LAYOUT_SEED)
+    placed = nx.spring_layout(_local(ends, members), seed=LAYOUT_SEED)
     raw = np.array([placed[member] for member in members], dtype=np.float64)
     spread = raw - raw.mean(axis=0)
     reach = max(float(np.linalg.norm(spread, axis=1).max()), 1e-9)
@@ -70,7 +87,9 @@ def _region(graph: FieldGraph, members: Sequence[str]) -> dict[str, _Point]:
     }
 
 
-def _ties(graph: FieldGraph, owner: Mapping[str, str]) -> Counter[tuple[str, str]]:
+def _ties(
+    graph: FieldGraph, ends: _Ends, owner: Mapping[str, str]
+) -> Counter[tuple[str, str]]:
     slots = {node.id for node in graph.nodes if node.kind is NodeKind.DATASET}
     direct = (
         tuple(sorted((owner[edge.source], owner[edge.target])))
@@ -83,15 +102,7 @@ def _ties(graph: FieldGraph, owner: Mapping[str, str]) -> Counter[tuple[str, str
         pair
         for slot in sorted(slots)
         for pair in combinations(
-            sorted(
-                {
-                    owner[end]
-                    for edge in graph.edges
-                    if slot in (edge.source, edge.target)
-                    for end in (edge.source, edge.target)
-                    if end in owner
-                }
-            ),
+            sorted({owner[end] for end in ends.get(slot, ()) if end in owner}),
             2,
         )
     )
@@ -137,7 +148,9 @@ def _centres(
     return _apart(start, radii, GAP, SETTLE_STEPS)
 
 
-def _slots(graph: FieldGraph, points: Mapping[str, _Point]) -> dict[str, _Point]:
+def _slots(
+    graph: FieldGraph, ends: _Ends, points: Mapping[str, _Point]
+) -> dict[str, _Point]:
     slots = sorted(node.id for node in graph.nodes if node.kind is NodeKind.DATASET)
     shakes = np.random.default_rng(LAYOUT_SEED).uniform(
         -JITTER, JITTER, (len(slots), 2)
@@ -145,31 +158,26 @@ def _slots(graph: FieldGraph, points: Mapping[str, _Point]) -> dict[str, _Point]
     return {
         slot: (float(centre[0] + shake[0]), float(centre[1] + shake[1]))
         for slot, shake in zip(slots, shakes, strict=True)
-        for centre in (_among(graph, points, slot),)
+        for centre in (_among(ends, points, slot),)
     }
 
 
-def _among(graph: FieldGraph, points: Mapping[str, _Point], slot: str) -> _Points:
-    ends = [
-        points[end]
-        for edge in graph.edges
-        if slot in (edge.source, edge.target)
-        for end in (edge.source, edge.target)
-        if end in points
-    ]
+def _among(ends: _Ends, points: Mapping[str, _Point], slot: str) -> _Points:
+    near = [points[end] for end in ends.get(slot, ()) if end in points]
     return (
-        np.array(ends, dtype=np.float64).reshape(-1, 2).mean(axis=0)
-        if ends
+        np.array(near, dtype=np.float64).reshape(-1, 2).mean(axis=0)
+        if near
         else np.zeros(2)
     )
 
 
 def layout(graph: FieldGraph) -> dict[str, _Point]:
     programs = _programs(graph)
+    ends = _ends(graph)
     names = tuple(programs)
     owner = {node: name for name, members in programs.items() for node in members}
     regions = {
-        name: _region(graph, programs[name])
+        name: _region(ends, programs[name])
         for name in counted(names, Tally(RENDER, "programs laid out", 1), len(names))
     }
     radii = np.array(
@@ -179,10 +187,10 @@ def layout(graph: FieldGraph) -> dict[str, _Point]:
         ],
         dtype=np.float64,
     )
-    centres = _centres(names, radii, _ties(graph, owner))
+    centres = _centres(names, radii, _ties(graph, ends, owner))
     points = {
         node: (x + float(centre[0]), y + float(centre[1]))
         for name, centre in zip(names, centres, strict=True)
         for node, (x, y) in regions[name].items()
     }
-    return {**points, **_slots(graph, points)}
+    return {**points, **_slots(graph, ends, points)}
