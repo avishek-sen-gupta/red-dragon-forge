@@ -89,10 +89,10 @@ def test_only_fields_whose_every_byte_lands_in_place_in_another_program_are_one_
     tmp_path: Path,
 ) -> None:
     classes = _classes(tmp_path, GRAPH)
-    write_unified(tmp_path / "unified.jsonl", classes)
+    write_unified(tmp_path / "new" / "unified.jsonl", classes)
 
     assert classes == (("R:CA.A", "S:WS.B"),)
-    assert read_unified(tmp_path / "unified.jsonl") == {
+    assert read_unified(tmp_path / "new" / "unified.jsonl") == {
         "R:CA.A": "R:CA.A",
         "S:WS.B": "R:CA.A",
     }

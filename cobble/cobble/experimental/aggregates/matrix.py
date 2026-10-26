@@ -117,6 +117,8 @@ def incidence_matrix(
 
 
 def save_matrix(found: IncidenceMatrix, matrix_path: Path, meta_path: Path) -> None:
+    matrix_path.parent.mkdir(parents=True, exist_ok=True)
+    meta_path.parent.mkdir(parents=True, exist_ok=True)
     save_npz(matrix_path, found.matrix)
     meta = MatrixMeta(
         fields=found.fields,

@@ -9,6 +9,7 @@ from cobble.experimental.aggregates.unified_line import UnifiedLine
 
 
 def write_unified(path: Path, classes: Sequence[Sequence[str]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         "".join(
             f"{UnifiedLine(members=tuple(members)).model_dump_json()}\n"

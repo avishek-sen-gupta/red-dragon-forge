@@ -58,8 +58,8 @@ def test_paragraphs_mark_the_unified_fields_they_touch(tmp_path: Path) -> None:
         DEFS, INDEX, {"P:REC.W": "Q:REC.W"}, (re.compile(r"REC\.[YW]$"),)
     )
     every = incidence_matrix(paragraphs)
-    save_matrix(every, tmp_path / "m.npz", tmp_path / "meta.json")
-    loaded = load_matrix(tmp_path / "m.npz", tmp_path / "meta.json")
+    save_matrix(every, tmp_path / "a" / "m.npz", tmp_path / "b" / "meta.json")
+    loaded = load_matrix(tmp_path / "a" / "m.npz", tmp_path / "b" / "meta.json")
 
     assert paragraphs == {
         ("P", "P1"): frozenset({"P:REC.X", "P:REC.Y"}),
