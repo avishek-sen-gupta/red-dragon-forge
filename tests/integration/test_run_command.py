@@ -203,7 +203,7 @@ def test_plain_matches_a_one_step_job(
             jcl_out,
             _dataset_bytes(jcl_system, "APP.OUT"),
         ),
-    ) == ((0, "RC=4\n", expected), (1, "PLAIN: RC=4\n", expected))
+    ) == ((0, "RC 4\n", expected), (1, "PLAIN: RC=4\n", expected))
 
 
 def test_jcl_runs_a_multi_step_job_from_a_package(
@@ -232,58 +232,6 @@ def test_jcl_runs_a_multi_step_job_from_a_package(
         (1, "A: RC=8\nB: RC=0\nC: RC=0\n"),
         (1, "A: RC=8\nB: RC=0\nC: RC=0\n"),
     )
-
-
-_CALLER = """\
-       IDENTIFICATION DIVISION.
-       PROGRAM-ID. CALLER.
-       PROCEDURE DIVISION.
-           CALL 'NOSUCHPG'.
-           GOBACK.
-"""
-
-
-@pytest.mark.parametrize(
-    ("tolerant", "rc", "out", "err"),
-    [
-        (
-            "",
-            1,
-            "",
-            "forge-run: CALL to __entry_NOSUCHPG, but nothing in this run unit is"
-            " registered under it\n",
-        ),
-        (
-            "[tolerant]\npermit_unresolved_call_targets = true\n",
-            0,
-            "RC=0\n",
-            "",
-        ),
-    ],
-)
-def test_plain_refuses_a_call_to_an_unlinked_program_unless_tolerated(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    tolerant: str,
-    rc: int,
-    out: str,
-    err: str,
-) -> None:
-    _sources(tmp_path, {"CALLER": _CALLER})
-    package = _built(tmp_path, 'programs = ["CALLER"]\nlink = ["CALLER"]\n')
-    capsys.readouterr()
-    env = _env(
-        tmp_path,
-        "env.toml",
-        package,
-        tmp_path / "system",
-        tolerant + '[plain]\nprogram = "CALLER"\n',
-    )
-
-    ran = forge_run([str(env)], os.environ)
-    captured = capsys.readouterr()
-
-    assert (ran, captured.out, captured.err) == (rc, out, err)
 
 
 def test_each_fault_in_a_run_stops_it_naming_the_fault(
@@ -473,4 +421,4 @@ def test_plain_sql_from_a_package(
         rc,
         capsys.readouterr().out,
         _dataset_bytes(system, "APP.RPT"),
-    ) == (0, "RC=0\n", "000000500".ljust(80).encode("cp037"))
+    ) == (0, "RC 0\n", "000000500".ljust(80).encode("cp037"))

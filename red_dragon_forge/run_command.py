@@ -23,15 +23,13 @@ from interpreter.vm.builtins import compose_builtins, core_builtins
 from jackal.cli import report
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.parser import parse_jcl
-from jackal.jcl.wire import disp_from_words
 from jackal.missing_data import LenientAllocation
 from jackal.missing_program import StubMissingProgram
-from jackal.model import DD, DdName, DirectDSN, Job, ProgramRef, ProgramStep, StepName
-from jackal.results import Abended, JobResult
+from jackal.model import Job
+from jackal.results import JobResult
 from jackal.runner import JobRunner
 from jackal.unknown_return_code import ZeroUnknownReturnCode
 from jackal.unresolved import RaiseErrorStrategy
-from jackal.value_parts import literal
 from litter.open import open_package
 from litter.package import Package
 from litter.package_error import PackageError
@@ -47,11 +45,11 @@ from red_dragon_forge.env_config import (
     load_env_config,
 )
 from red_dragon_forge.jcl_run import JclRun
+from red_dragon_forge.plain_mode import run_plain
 from red_dragon_forge.plain_run import PlainRun
 
 logger = logging.getLogger(__name__)
 
-_PLAIN_STEP = "PLAIN"
 _DSN = "SQUALL_DB2_DSN"
 
 
@@ -86,26 +84,6 @@ def _runner(
     )
 
 
-def plain_job(plain: PlainRun) -> Job:
-    return Job(
-        _PLAIN_STEP,
-        (
-            ProgramStep(
-                StepName(_PLAIN_STEP),
-                ProgramRef(plain.program),
-                tuple(
-                    DD(
-                        DdName(assign),
-                        DirectDSN(literal(dsn)),
-                        disp_from_words(("SHR",)),
-                    )
-                    for assign, dsn in plain.files.items()
-                ),
-            ),
-        ),
-    )
-
-
 def _ran(runner: JobRunner, job: Job) -> JobResult:
     with tempfile.TemporaryDirectory(prefix="forge-run-") as scratch:
         return runner.run(job, Path(scratch))
@@ -118,12 +96,13 @@ def _plain(
     package: Package,
     coprocessing: Coprocessing,
 ) -> int:
-    runner = _runner(
-        package, config, base / config.paths.system, plain.max_steps, (), coprocessing
+    return run_plain(
+        package,
+        SystemCatalog(base / config.paths.system),
+        plain,
+        compose_builtins(core_builtins(), coprocessing.builtins),
+        config.tolerant.permit_unresolved_call_targets,
     )
-    result = _ran(runner, plain_job(plain))
-    sys.stdout.write("".join(f"{s.outcome.rendered()}\n" for s in result.steps))
-    return 1 if any(isinstance(s.outcome, Abended) for s in result.steps) else 0
 
 
 def _jcl(

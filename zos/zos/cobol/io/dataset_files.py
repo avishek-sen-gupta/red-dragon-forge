@@ -185,13 +185,6 @@ class DatasetFileIOProvider(RealFileIOProvider):
             return to_ioresult(AccessResult(AccessCondition.OPEN_MODE_NOT_SUPPORTED))
         frame = self._frames[filename]
         prime = frame.prime_key
-        if not self._admits(
-            filename,
-            opened,
-            RecordKey(
-                prime.offset,
-                prime.length,
-            ),
-        ):
+        if not self._admits(filename, opened, RecordKey(prime.offset, prime.length)):
             return to_ioresult(AccessResult(AccessCondition.ATTRIBUTE_CONFLICT))
         return super()._open_file(filename, opened, program)

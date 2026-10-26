@@ -1,0 +1,136 @@
+"""[plain]: one program entered directly on the package image, its files bound to catalogued datasets."""
+
+from __future__ import annotations
+
+import sys
+import tempfile
+from collections.abc import Mapping
+from functools import partial
+from pathlib import Path
+
+from catnip.dataset import Dataset, Relabeller
+from catnip.labels import Label
+from catnip.system_catalog import NotCataloged, SystemCatalog
+from interpreter.cobol.cee3abd_abend import user_abend
+from interpreter.cobol.return_code_readback import read_return_code
+from interpreter.cobol.symbolic_return_code_error import SymbolicReturnCodeError
+from interpreter.func_name import FuncName
+from interpreter.project.program_entry import ProgramEntry
+from interpreter.run import (
+    BudgetExhausted,
+    Completed,
+    RunOutcome,
+    Suspended,
+    initial_vm_state,
+    run_linked_resumable,
+)
+from interpreter.vm.builtin import Builtin
+from interpreter.vm.vm_types import VMState
+from litter.package import Package
+from zos.cobol.io.dataset_files import DatasetFileIOProvider
+from zos.cobol.io.file_bindings import FileBindings
+from zos.cobol.io.file_definitions import program_files_of
+from zos.cobol.io.program_files import ProgramFilesIOProvider
+
+from red_dragon_forge.config_error import ConfigError
+from red_dragon_forge.plain_run import PlainRun
+
+
+class CatalogRelabeller(Relabeller):
+    """Records a dataset's label in the system catalog when its first OPEN gives it one."""
+
+    def __init__(self, catalog: SystemCatalog) -> None:
+        self._catalog = catalog
+
+    def relabel(self, dataset: Dataset, label: Label) -> None:
+        self._catalog.relabel(dataset.dsn, label)
+
+
+def _resolved(catalog: SystemCatalog, assign: str, dsn: str) -> Dataset:
+    match catalog.lookup(dsn):
+        case Dataset() as dataset:
+            return dataset
+        case NotCataloged():
+            raise ConfigError(f"[plain.files] {assign}: {dsn} is not cataloged")
+
+
+def _bindings(catalog: SystemCatalog, plain: PlainRun) -> FileBindings:
+    datasets = {
+        assign: _resolved(catalog, assign, dsn) for assign, dsn in plain.files.items()
+    }
+    return FileBindings(
+        paths={assign: dataset.path for assign, dataset in datasets.items()},
+        appended=frozenset(),
+        datasets=datasets,
+    )
+
+
+def _completed(plain: PlainRun, vm: VMState) -> int:
+    abends = user_abend(vm)
+    if abends:
+        sys.stdout.write(f"{abends[0].rendered()}\n")
+        return 1
+    sys.stdout.write(f"RC {_return_code(plain, vm)}\n")
+    return 0
+
+
+def _return_code(plain: PlainRun, vm: VMState) -> int:
+    try:
+        return read_return_code(vm)
+    except SymbolicReturnCodeError:
+        sys.stderr.write(
+            f"forge-run: warning: {plain.program}'s RETURN-CODE is unknown;"
+            " reported as 0\n"
+        )
+        return 0
+
+
+def _reported(plain: PlainRun, outcome: RunOutcome) -> int:
+    match outcome:
+        case Suspended():
+            sys.stderr.write(
+                f"forge-run: {plain.program} reached a SUSPEND, which only a CICS"
+                " task can\n"
+            )
+            return 1
+        case _:
+            return _ended(plain, outcome)
+
+
+def _ended(plain: PlainRun, outcome: Completed | BudgetExhausted) -> int:
+    match outcome:
+        case Completed(vm=vm):
+            return _completed(plain, vm)
+        case BudgetExhausted():
+            sys.stdout.write(f"budget exhausted after {plain.max_steps} steps\n")
+            return 1
+
+
+def run_plain(
+    package: Package,
+    catalog: SystemCatalog,
+    plain: PlainRun,
+    builtins: Mapping[FuncName, Builtin],
+    permit_unresolved_call_targets: bool,
+) -> int:
+    bindings = _bindings(catalog, plain)
+    with tempfile.TemporaryDirectory(prefix="forge-run-") as scratch:
+        provider = ProgramFilesIOProvider(
+            tuple(package.image.programs),
+            partial(
+                DatasetFileIOProvider,
+                Path(scratch),
+                bindings=bindings,
+                relabeller=CatalogRelabeller(catalog),
+            ),
+            program_files_of(package.image),
+        )
+        outcome = run_linked_resumable(
+            package.image,
+            ProgramEntry(plain.program),
+            max_steps=plain.max_steps,
+            builtins=builtins,
+            initial_vm=initial_vm_state(io_provider=provider),
+            permit_unresolved_call_targets=permit_unresolved_call_targets,
+        )
+    return _reported(plain, outcome)

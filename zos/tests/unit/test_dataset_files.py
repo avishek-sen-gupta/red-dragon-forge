@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from catnip.dataset import Dataset
+from catnip.dataset import Dataset, Relabeller
 from catnip.labels import Label, RecordFormat, SequentialLabel
 from cobol_asg.cobol_statements import FileControlEntry
 from cobol_asg.file_enums import FileOrganization
@@ -18,7 +18,7 @@ from zos.cobol.io.record_format import FixedFormat
 _RECORD = "R" * 80
 
 
-class _Unrelabelled:
+class _Unrelabelled(Relabeller):
     def relabel(self, dataset: Dataset, label: Label) -> None:
         raise AssertionError(f"{dataset.dsn} relabelled to {label}")
 

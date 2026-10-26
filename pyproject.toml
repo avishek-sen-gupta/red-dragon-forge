@@ -8,6 +8,7 @@ dependencies = [
     "red-dragon",
     "litter",
     "catnip",
+    "zos",
     "pyyaml>=6.0",
     "sortedcontainers>=2.4.0",
     "lark>=1.3.1",

@@ -1856,6 +1856,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "red-dragon" },
     { name = "sortedcontainers" },
+    { name = "zos" },
 ]
 
 [package.optional-dependencies]
@@ -1882,6 +1883,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "red-dragon", editable = "vendor/red-dragon" },
     { name = "sortedcontainers", specifier = ">=2.4.0" },
+    { name = "zos", editable = "zos" },
 ]
 provides-extras = ["db2"]
 

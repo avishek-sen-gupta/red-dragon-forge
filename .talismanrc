@@ -369,8 +369,6 @@ fileignoreconfig:
   checksum: 80fe7ab65a0a29459c9e92da2d317278ca4398b5f1b16b72925ae6ee2410d68e
 - filename: jackal/jackal/cobol_files.py
   checksum: 91b8d20c19c08fdb5ac96b5fa537caf73921560fab6327f20c897d2f2a055f80
-- filename: jackal/jackal/record_format.py
-  checksum: ce636f136b3f1922f062128ef0aa2a1bf94e0683310500aff41f703c5998ea9a
 - filename: cicada/tests/unit/cics/test_vsam_dump.py
   checksum: c60f7dafb89074b0d67987945e7000264e94111a69cfef475a43d58a6f3ac93f
 - filename: docs/superpowers/specs/2026-10-15-file-definitions-as-ir-data-design.md
@@ -379,8 +377,6 @@ fileignoreconfig:
   checksum: 73db18b0b575c4b47d1cf1af21c4b28e5e759d9de7ef135d585358b3867aac04
 - filename: jackal/tests/unit/test_file_definitions.py
   checksum: b8e23f6d53c4dc58f2982bc6d70d8b4731fb95e8dc43954030d0fd1e1b783f3e
-- filename: jackal/jackal/file_definitions.py
-  checksum: d92e01d090c0e1e3fc3d8394d8c36e2b0b923b88d09ae6dc06e2d1fbff278edf
 - filename: cicada/tests/integration/cics/test_sign_on_flow.py
   checksum: de82c11f91f78729a1970450526c8e514eb8397f3d0919007689df8ae872be5e
 - filename: fp.json
@@ -407,8 +403,6 @@ fileignoreconfig:
   checksum: dc9dca6884a56225db4373981412a3f27f11c84c61732d79ebd40353012a4268
 - filename: docs/reference/forge/run.md
   checksum: 01ed2eadaf16585f4ada62a6cfc4df6cb9c4d6cdd63b03e8087e528362b18492
-- filename: jackal/jackal/program_files_provider.py
-  checksum: ae3289b0f0d53a854c6619bd050e72e9bb5aa3563b45965c769629db37c7730f
 - filename: tests/integration/test_run_command.py
   checksum: 781a5a77e8af231e91bdb20de8e9e1ed9314163188682963c7e64cae0ee1ee12
 - filename: docs/reference/forge/build.md
@@ -471,4 +465,8 @@ fileignoreconfig:
   checksum: 7b34a1f9feb98ae60acb59bb4b7e408404ae396875eebb27b02e02caa9db509b
 - filename: cobble/cobble/experimental/aggregates/unify.py
   checksum: c7d9fbdf3d8e9072fb4460faf029bff4928de37f40cb4e8093e93e513c85cd3b
+- filename: zos/zos/cobol/io/dataset_files.py
+  checksum: 147baa05d253c77e4daa0fdf9fc5575c521afc979602ab7862d0effb41a108f9
+- filename: zos/zos/cobol/io/program_files.py
+  checksum: 3e89b0c0dbb5fad6f3c410161b671b52e04a08065992db77ce9acb41b411893c
 version: "1.0"

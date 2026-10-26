@@ -29,7 +29,7 @@ system = "/tmp/carddemo-system"     # catnip's system directory
 
 [plain]
 program = "CBACT01C"
-max_steps = 500000                  # optional; jackal's step budget by default
+max_steps = 500000                  # optional; the default
 
 [plain.files]                       # ASSIGN name = cataloged dataset
 ACCTFILE = "AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS"
@@ -50,7 +50,7 @@ The section present picks the mode.
 
 | Mode | What runs | Output and exit status |
 |---|---|---|
-| `[plain]` | a one-step job built in code: `EXEC PGM=<program>` with one `DD DSN=<dataset>,DISP=SHR` per `[plain.files]` entry, run by jackal with its CLI's defaults | `RC=<n>`; exit 1 on an abend, else 0 |
+| `[plain]` | the image entered at `program`, with `max_steps` as its budget; no job, DD or disposition | one line: `RC <n>`, exit 0; or the abend (`U1234`), exit 1; or `budget exhausted after <n> steps`, exit 1 |
 | `[jcl]` | the job, run by jackal against the package | jackal's per-step lines and exit status ([jackal CLI](../jackal/cli.md)) |
 | `[cics]` | a region assembled from the package (`cics.tn3270.region.assemble_region`), served until interrupted | |
 
@@ -58,16 +58,20 @@ The section present picks the mode.
 region's `DATFORM`, the order of a `FORMATTIME DATE` or `FULLDATE`. An unknown zone stops the
 run: `env.toml: cics.timezone: invalid timezone: Mars/Base`.
 
-`[plain]` describes no dataset: each one is cataloged in the system directory, which supplies its
-record format and length.
+`[plain]` describes no dataset: each `[plain.files]` entry names one cataloged in the system
+directory, which supplies its record format and length. A name not in the catalog stops the run
+before the program starts; plain mode never creates a dataset. A dataset cataloged with a pending
+label takes its label from the FD on its first OPEN OUTPUT or EXTEND. An abend wins over the
+return code. A RETURN-CODE left unknown by a tolerated CALL reports `RC 0`, with a warning on
+stderr: `forge-run: warning: P's RETURN-CODE is unknown; reported as 0`.
 
 `[tolerant] permit_unresolved_call_targets` is passed to every program run in every mode: the
-jackal step, the CICS task, and a program it LINKs to. Off, the default, a `CALL` to a program
-the image does not hold stops a `[plain]` or `[jcl]` run: `forge-run: CALL to __entry_X, but
-nothing in this run unit is registered under it`, exit 1. Under `[cics]` it abends the task with
-code 4038, as LE's "module not found" (`CEE3501S`, `U4038`) does: the abend path runs (backout,
-`Transaction abended: 4038` on the terminal) without driving HANDLE ABEND, and the terminal and
-the region carry on. On, red-dragon's unresolved-call resolver returns a
+`[plain]` program, the jackal step, the CICS task, and a program it LINKs to. Off, the default,
+a `CALL` to a program the image does not hold stops a `[plain]` or `[jcl]` run:
+`forge-run: CALL to __entry_X, but nothing in this run unit is registered under it`, exit 1.
+Under `[cics]` it abends the task with code 4038, as LE's "module not found" (`CEE3501S`,
+`U4038`) does: the abend path runs (backout, `Transaction abended: 4038` on the terminal) without
+driving HANDLE ABEND, and the terminal and the region carry on. On, red-dragon's unresolved-call resolver returns a
 symbolic result and the program runs on. `permit_missing_host_variables` is squall's runtime
 tolerance: a host variable missing from the data layout is skipped rather than raised.
 
@@ -90,19 +94,22 @@ back. `EXEC SQL CONNECT TO` another location is red-dragon-forge-b114.
 | the package missing or not a zip | `env.toml: package <path>: <reason>` |
 | `[sql]` with `SQUALL_DB2_DSN` unset | `SQUALL_DB2_DSN is not set` |
 | a DSN with no `DATABASE=` | `SQUALL_DB2_DSN names no DATABASE` |
+| a `[plain.files]` dataset not cataloged | `[plain.files] NAME: DSN is not cataloged` |
 | a `[jcl]` job file that cannot be read | `<path>: <reason>` |
 | a CICS file whose dataset is not cataloged | `CICS file NAME: DSN is not cataloged` |
 | a CALL to a program the image lacks (`[plain]`, `[jcl]`) | `CALL to __entry_X, but nothing in this run unit is registered under it` |
 
 Every configuration fault stops the run with exit 1 before any runtime is installed; an
-unresolved CALL stops it when the CALL runs.
+uncataloged `[plain.files]` dataset stops it before the program starts; an unresolved CALL
+stops it when the CALL runs.
 
 ## Tests
 
 `tests/unit/test_env_config.py` covers mode selection and each fault;
-`tests/integration/test_run_command.py` covers `[plain]` against the equivalent one-step
-`[jcl]` job, a multi-step `[jcl]` job against `jackal run`, the CardDemo sign-on screen served
-by `[cics]` over TN3270, and a `[plain]` Db2 program (needs `SQUALL_DB2_DSN`).
+`tests/integration/test_plain_mode.py` covers each `[plain]` outcome and refusal, labelling on
+first OPEN, and two programs selecting the same name; `tests/integration/test_run_command.py`
+covers `[plain]` against the equivalent one-step `[jcl]` job, a multi-step `[jcl]` job against
+`jackal run`, the CardDemo sign-on screen served by `[cics]` over TN3270, and a `[plain]` Db2 program (needs `SQUALL_DB2_DSN`).
 `tests/integration/test_carddemo_forge.py` builds CardDemo's checked-in `config/carddemo/build.toml`
 and `build-db2.toml` (exact programs and CSD transactions), serves each with its `env.toml`, and
 drives it with `s3270`: a user signs on and views an account; an admin reaches the Db2

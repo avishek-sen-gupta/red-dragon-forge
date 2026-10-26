@@ -2,13 +2,14 @@
 
 from collections.abc import Mapping
 
-from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from pydantic import BaseModel, ConfigDict
+
+DEFAULT_PLAIN_STEP_BUDGET = 500_000
 
 
 class PlainRun(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     program: str
-    max_steps: int = DEFAULT_PROGRAM_STEP_BUDGET
+    max_steps: int = DEFAULT_PLAIN_STEP_BUDGET
     files: Mapping[str, str] = {}
