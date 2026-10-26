@@ -50,7 +50,7 @@ from tests.carddemo_packages import DB2, local_env
 from tests.carddemo_system import installed_carddemo
 from squall.backends.db2 import Db2Backend
 
-from red_dragon_forge.run_command import cics_region
+from red_dragon_forge.cics_command import cics_region
 
 # Task 12: CardDemo's own defects (Part E of
 # .superpowers/sdd/db2-epic/carddemo-db2-behaviour.md), pinned as

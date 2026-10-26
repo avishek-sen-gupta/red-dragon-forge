@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -17,6 +19,13 @@ from red_dragon_forge.run_command import run as forge_run
 
 _FB80 = SequentialLabel(RecordFormat.FB, 80)
 _TOLERANT = "[tolerant]\npermit_unresolved_call_targets = true\n"
+_LOADED_PACKAGES = (
+    "import os, sys\n"
+    "from red_dragon_forge.run_command import run\n"
+    "rc = run(sys.argv[1:], os.environ)\n"
+    "print(*sorted({name.split('.')[0] for name in sys.modules}), sep='\\n')\n"
+    "raise SystemExit(rc)\n"
+)
 
 _RCFOUR = """\
        IDENTIFICATION DIVISION.
@@ -395,3 +404,22 @@ def test_an_unresolved_call_stops_the_run_unless_tolerated(
         "forge-run: CALL to __entry_NOSUCHPG, but nothing in this run unit is"
         " registered under it\n",
     )
+
+
+def test_a_plain_run_loads_no_jackal(tmp_path: Path) -> None:
+    package = _package(tmp_path, {"RCFOUR": _RCFOUR})
+    env = tmp_path / "env.toml"
+    env.write_text(
+        f'package = "{package}"\n[paths]\nsystem = "{tmp_path / "system"}"\n'
+        '[plain]\nprogram = "RCFOUR"\n'
+    )
+
+    ran = subprocess.run(
+        [sys.executable, "-c", _LOADED_PACKAGES, str(env)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    report, *loaded = ran.stdout.splitlines()
+
+    assert (ran.returncode, report, {"jackal"} & set(loaded)) == (0, "RC 4", set())

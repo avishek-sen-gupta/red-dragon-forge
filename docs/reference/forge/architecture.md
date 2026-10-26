@@ -43,7 +43,11 @@ CICS, SQL or JCL knowledge of its own.
 | Module | Purpose |
 |---|---|
 | `build_command.py` | `forge-build`: a `build.toml` into a litter package. See [Build](build.md). |
-| `run_command.py` | `forge-run`: a package run as `env.toml` says, `[plain]`, `[jcl]` or `[cics]`; `cics_region` assembles the `[cics]` region in process. See [Run](run.md). |
+| `run_command.py` | `forge-run`: reads `env.toml` and imports only its mode's command. See [Run](run.md). |
+| `run_preparation.py` | What every mode starts from: the config, the mode, the opened package and its `Coprocessing`. |
+| `plain_command.py` | `[plain]`, through `plain_mode.py`. Imports no jackal. |
+| `jcl_command.py` | `[jcl]`: the job, run by jackal's `JobRunner`. |
+| `cics_command.py` | `[cics]`: the region served over TN3270; `cics_region` assembles it in process. |
 | `coprocessors.py` | The coprocessors a build may name, each with its compile spec and the programs it requires linked. |
 | `coprocessing.py` | `Coprocessing`: what a package's `sql` adds to a run — squall's builtins, the three CICS unit-of-work hooks and the abend rollback. `db2_connection.py` builds it; with no `sql` a run gets none. `[jcl]` composes its builtins into the job runner's table; `[plain]` runs the image directly, through `plain_mode.py`; `[cics]` passes them and the hooks to the region. |
 | `plain_mode.py` | `[plain]`: runs one program from the package image, with no job, step or DD, and reports RC, abend or budget exhaustion. |
@@ -65,7 +69,7 @@ Design records: [CICS + SQL composition](../../records/design/2026-07-04-cics-sq
   `jackal` import it.
 - `catnip` also imports no `interpreter` (`catnip-imports-no-runtime`).
 - `zos` imports none of `cics`, `squall`, `jackal`, `cobble`, `litter` or `red_dragon_forge` (`zos-imports-no-runtime`). It sits between catnip and the runtimes.
-- `red_dragon_forge.plain_mode` and `red_dragon_forge.plain_run` must not import `jackal` (`plain-mode-without-jackal`).
+- `red_dragon_forge.plain_command`, `red_dragon_forge.plain_mode` and `red_dragon_forge.plain_run` must not import `jackal` (`plain-mode-without-jackal`).
 - `litter` imports none of `cics`, `squall`, `jackal`, `cobble`, `catnip` or `red_dragon_forge`.
   `jackal` and `cics` import it: a job runs against a litter package, and a TN3270 region is
   assembled from one.

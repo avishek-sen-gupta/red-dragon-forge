@@ -86,7 +86,7 @@ From an `env.toml`, exactly as `forge-run`'s `[cics]` mode assembles it, includi
 connection and the `[tolerant]` settings:
 
 ```python
-from red_dragon_forge.run_command import cics_region
+from red_dragon_forge.cics_command import cics_region
 
 region = cics_region(Path("app/env.toml"), os.environ)
 ```

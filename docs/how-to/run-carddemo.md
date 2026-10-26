@@ -67,7 +67,7 @@ change the region and any batch job make. To start clean, install into a new dir
    uv run --no-sync forge-run config/carddemo/env.toml
    ```
 
-   Expected: `INFO red_dragon_forge.run_command: serving on 127.0.0.1:3270`.
+   Expected: `INFO red_dragon_forge.cics_command: serving on 127.0.0.1:3270`.
 
 4. In a second terminal, connect.
 
@@ -134,7 +134,7 @@ Stop the server with `Ctrl+C`. Changes stay in the system directory and a restar
    uv run --no-sync forge-run config/carddemo/env-db2.toml
    ```
 
-   Expected: `INFO red_dragon_forge.run_command: serving on 127.0.0.1:3271`.
+   Expected: `INFO red_dragon_forge.cics_command: serving on 127.0.0.1:3271`.
 
 7. In a second terminal, connect.
 

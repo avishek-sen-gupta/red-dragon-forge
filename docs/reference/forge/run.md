@@ -2,7 +2,8 @@
 
 `forge-run ENV_TOML` runs a [litter](../litter/README.md) package as `env.toml` says: one program,
 a JCL job, or a CICS region served over TN3270. A run never parses, lowers or links. It is
-`red_dragon_forge.run_command:main`. Design: [the forge runner spec](../../superpowers/specs/2026-10-15-forge-runner-design.md) (D6–D9).
+`red_dragon_forge.run_command:main`, which imports only its mode's command: `plain_command`,
+`jcl_command` or `cics_command`. Design: [the forge runner spec](../../superpowers/specs/2026-10-15-forge-runner-design.md) (D6–D9).
 
 ```bash
 . ./bridge-env.sh

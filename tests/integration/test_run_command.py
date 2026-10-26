@@ -22,7 +22,7 @@ from interpreter.vm.vm_types import VMState
 from jackal.cli import run as jackal_run
 
 from red_dragon_forge.build_command import run as forge_build
-from red_dragon_forge.run_command import cics_region
+from red_dragon_forge.cics_command import cics_region
 from red_dragon_forge.run_command import run as forge_run
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]

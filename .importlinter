@@ -217,9 +217,10 @@ forbidden_modules =
     red_dragon_forge
 
 [importlinter:contract:plain-mode-without-jackal]
-name = forge-run's plain mode runs the image directly — it imports no jackal
+name = forge-run's plain mode and its command run the image directly — they import no jackal
 type = forbidden
 source_modules =
+    red_dragon_forge.plain_command
     red_dragon_forge.plain_mode
     red_dragon_forge.plain_run
 forbidden_modules =
