@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from itertools import groupby
 
 from cobble.experimental.partition.field_graph import FieldGraph
@@ -52,24 +52,22 @@ def _span(run: Sequence[GraphNode], text: str) -> str:
 
 def _drawn(run: Sequence[GraphNode]) -> GraphNode:
     head = run[0]
-    return head.model_copy(
-        update={
-            "id": _span(run, f"{head.program}:{head.record}.{head.field}"),
-            "label": _span(run, f"{head.program}.{head.field}"),
-        }
+    return replace(
+        head,
+        id=_span(run, f"{head.program}:{head.record}.{head.field}"),
+        label=_span(run, f"{head.program}.{head.field}"),
     )
 
 
 def _merged(ends: tuple[str, str], edges: Iterable[GraphEdge]) -> GraphEdge:
     taken = tuple(edges)
-    return taken[0].model_copy(
-        update={
-            "source": ends[0],
-            "target": ends[1],
-            "sites": max(edge.sites for edge in taken),
-            "clustered": any(edge.clustered for edge in taken),
-            "cross_program": any(edge.cross_program for edge in taken),
-        }
+    return replace(
+        taken[0],
+        source=ends[0],
+        target=ends[1],
+        sites=max(edge.sites for edge in taken),
+        clustered=any(edge.clustered for edge in taken),
+        cross_program=any(edge.cross_program for edge in taken),
     )
 
 

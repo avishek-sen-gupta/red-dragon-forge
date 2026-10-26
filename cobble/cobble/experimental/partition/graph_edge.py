@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from cobble.experimental.partition.byte_alignment import ByteAlignment
 from cobble.experimental.partition.certainty import Certainty
-from pydantic import BaseModel, ConfigDict
+from pydantic import ConfigDict
 
 
-class GraphEdge(BaseModel):
+@dataclass(frozen=True, slots=True)
+class GraphEdge:
     """Bytes moving from source to target, at how many sites, whether the named barrier lets clustering cross it, and where the bytes land: ``aligned`` when every site's placement is known, and how sure a dataset edge is."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
 
     source: str
     target: str
@@ -22,3 +23,4 @@ class GraphEdge(BaseModel):
     aligned: bool = False
     certainty: Certainty = Certainty.EXACT
     reasons: tuple[str, ...] = ()
+    __pydantic_config__ = ConfigDict(extra="forbid")

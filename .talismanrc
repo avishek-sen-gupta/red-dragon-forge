@@ -465,4 +465,8 @@ fileignoreconfig:
   checksum: 3e89b0c0dbb5fad6f3c410161b671b52e04a08065992db77ce9acb41b411893c
 - filename: tests/integration/fixtures/readacct/stdout.txt
   checksum: c25d48077584e449f3b251f5f9cf0e30dc58f2cb514dc31993884ce7e44990c1
+- filename: docs/superpowers/specs/2026-10-27-partition-render-neighbourhoods-design.md
+  checksum: 9db638c4718856b828c238c4618e46506ac5cc419c4355cc08ef013939ce892f
+- filename: docs/superpowers/plans/2026-10-27-partition-render-neighbourhoods.md
+  checksum: c737bea5b0e9c8020edc3837bb70b6b85f27030e34b04f0647ccca4ec598bbe6
 version: "1.0"

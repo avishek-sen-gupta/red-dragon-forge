@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 from tests.experimental.partition.page_driver import drive
+from tests.experimental.partition.graphs import SPREAD_OUT
 from tests.experimental.partition.page_report import PageReport
 
 from cobble.experimental.partition.certainty import Certainty
@@ -91,44 +92,6 @@ GRAPH = FieldGraph(
         _edge("P:REC.C", "P:REC.D", clustered=False),
         _edge("P:REC.A", "P|sink|MAP:M"),
         _edge("P:REC.D", "P|sink|MAP:M"),
-    ),
-)
-
-
-def _program_field(program: str, name: str) -> GraphNode:
-    return GraphNode(
-        id=f"{program}:REC.{name}",
-        kind=NodeKind.FIELD,
-        label=f"{program}.{name}",
-        program=program,
-        record="REC",
-    )
-
-
-SPREAD_OUT = FieldGraph(
-    nodes=(
-        *(_program_field("P", name) for name in "ABCDEFGH"),
-        GraphNode(id="P|sink|MAP:M", kind=NodeKind.SINK, label="P MAP:M", program="P"),
-        *(_program_field("Q", name) for name in "ABCDEF"),
-        *(_program_field("S", name) for name in "AB"),
-        GraphNode(
-            id="DS[0:4]",
-            kind=NodeKind.DATASET,
-            label="DS[0:4]",
-            program="",
-            record="DS",
-            size=4,
-        ),
-    ),
-    edges=(
-        *(_edge(f"P:REC.{a}", f"P:REC.{b}") for a, b in ("AB", "BC", "CD", "EF")),
-        _edge("P:REC.D", "P|sink|MAP:M"),
-        _edge("P:REC.E", "P|sink|MAP:M"),
-        _edge("P:REC.G", "P|sink|MAP:M"),
-        *(_edge(f"Q:REC.{a}", f"Q:REC.{b}") for a, b in ("AB", "BC")),
-        _edge("S:REC.A", "S:REC.B"),
-        _edge("P:REC.A", "DS[0:4]", clustered=False),
-        _edge("DS[0:4]", "Q:REC.A", clustered=False),
     ),
 )
 
