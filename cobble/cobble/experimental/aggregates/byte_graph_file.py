@@ -33,7 +33,12 @@ def _texts(path: Path) -> Iterator[str]:
 
 
 def _shared(edge: ByteEdge) -> ByteEdge:
-    return replace(edge, source=sys.intern(edge.source), target=sys.intern(edge.target))
+    return replace(
+        edge,
+        source=sys.intern(edge.source),
+        target=sys.intern(edge.target),
+        reasons=tuple(sys.intern(reason) for reason in edge.reasons),
+    )
 
 
 def _read(text: str) -> ByteNode | ByteEdge:

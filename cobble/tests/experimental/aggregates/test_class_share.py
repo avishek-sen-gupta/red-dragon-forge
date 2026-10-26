@@ -26,7 +26,7 @@ def _node(node: str, kind: NodeKind, size: int) -> GraphNode:
 
 
 def _edge(
-    ends: tuple[str, str], length: int, certainty: Certainty = Certainty.EXACT
+    ends: tuple[str, str], length: int, reasons: tuple[str, ...] = ()
 ) -> GraphEdge:
     return GraphEdge(
         source=ends[0],
@@ -39,7 +39,8 @@ def _edge(
             (ByteAlignment(source=0, target=0, length=length),) if length else ()
         ),
         aligned=bool(length),
-        certainty=certainty,
+        certainty=Certainty.POSSIBLE if reasons else Certainty.EXACT,
+        reasons=reasons,
     )
 
 
@@ -125,7 +126,8 @@ def test_fields_a_dataset_slot_links_are_counted_by_what_kept_each_out_of_a_clas
                 _edge(("DS[0:4]", "C:R.ID"), 4),
                 _edge(("C:WS.X", "C:R.ID"), 0),
                 _edge(("DS[0:4]", "D:R.ID"), 4),
-                _edge(("DS[0:4]", "E:R.ID"), 0, Certainty.POSSIBLE),
+                _edge(("DS[0:4]", "E:R.ID"), 0, ("unresolved-file", "clamped")),
+                _edge(("DS[0:4]", "A:R.ID"), 0, ("clamped",)),
             ),
         ),
     )
@@ -139,7 +141,10 @@ def test_fields_a_dataset_slot_links_are_counted_by_what_kept_each_out_of_a_clas
         if record.getMessage().startswith("aggregate class share: graph")
     ] == [
         "aggregate class share: graph has 6 fields, 1 dataset slots, "
-        "4 exact and 1 possible dataset edges",
+        "4 exact and 2 possible dataset edges",
+        "aggregate class share: graph has 2 possible dataset edges with reason clamped",
+        "aggregate class share: graph has 1 possible dataset edges with reason "
+        "unresolved-file",
         "aggregate class share: graph links 4 fields to slots by exact edges: "
         "2 in a class, 1 blocked by an edge without placement, 1 neither",
         "aggregate class share: graph links 1 fields to slots only by possible edges",

@@ -64,6 +64,12 @@ def _slots(found: SlotFields) -> None:
         found.exact_edges,
         found.possible_edges,
     )
+    for reason, count in found.reasons:
+        logger.info(
+            "aggregate class share: graph has %d possible dataset edges with reason %s",
+            count,
+            reason,
+        )
     logger.info(
         "aggregate class share: graph links %d fields to slots by exact edges: "
         "%d in a class, %d blocked by an edge without placement, %d neither",

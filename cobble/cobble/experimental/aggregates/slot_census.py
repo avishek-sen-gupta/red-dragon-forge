@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Set
+from collections import Counter
+from collections.abc import Sequence, Set
 
 from cobble.experimental.aggregates.byte_edge import ByteEdge
 from cobble.experimental.aggregates.byte_graph import ByteGraph
@@ -30,6 +31,12 @@ def _linked(
     )
 
 
+def _reasons(dataset: Sequence[ByteEdge]) -> tuple[tuple[str, int], ...]:
+    counts = Counter(reason for edge in dataset for reason in edge.reasons)
+    ranked = sorted((-counts[reason], reason) for reason in counts)
+    return tuple((reason, -negated) for negated, reason in ranked)
+
+
 def slot_census(graph: ByteGraph, members: Set[str]) -> SlotFields:
     fields = {node.id: node for node in graph.nodes if node.kind is NodeKind.FIELD}
     slots = frozenset(node.id for node in graph.nodes if node.kind is NodeKind.DATASET)
@@ -46,6 +53,7 @@ def slot_census(graph: ByteGraph, members: Set[str]) -> SlotFields:
         possible_edges=sum(
             1 for edge in dataset if edge.certainty is Certainty.POSSIBLE
         ),
+        reasons=_reasons(dataset),
         linked=len(exact),
         classed=len(exact & members),
         blocked=len(blocked),

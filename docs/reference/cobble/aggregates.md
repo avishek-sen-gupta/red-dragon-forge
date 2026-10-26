@@ -78,11 +78,14 @@ top fields. On CardDemo, at thresholds 10, 4 and 2, it reports 33 of 107, 75 of 
 columns as classes, holding 33.8%, 19.2% and 15.0% of the entries.
 
 It then reads the partition graph and counts the fields dataset slots link, by what kept each out of
-a class: the graph's field and slot counts and its `exact` and `possible` dataset edges; the fields
+a class: the graph's field and slot counts and its `exact` and `possible` dataset edges, the
+`possible` ones counted per reason, most common first (an edge with two reasons counts under both);
+the fields
 an `exact`, placed edge links to a slot, split into those in a class, those blocked because some
 edge without placement reaches them, and the rest, whose layouts do not line up byte for byte with
 another program's; and the fields only `possible` edges link. No slots means the graph was built
-without `--knowledge-graph`. On CardDemo: 263 slots, 653 exact and 350 possible dataset edges; of
+without `--knowledge-graph`. On CardDemo: 263 slots, 653 exact and 350 possible dataset edges, 312 of them for
+`overlapping-layouts`, 31 for `no-step` and 7 for `dd-unbound`; of
 470 fields linked by exact edges, 335 are in a class, 1 is blocked and 134 are neither; 100 fields
 are linked only by possible edges.
 

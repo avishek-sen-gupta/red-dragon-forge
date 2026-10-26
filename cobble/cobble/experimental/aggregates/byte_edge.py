@@ -1,4 +1,4 @@
-"""A graph edge as unify reads it: its ends, where its bytes land and how sure a dataset edge is, the rest of the line ignored."""
+"""A graph edge as unify reads it: its ends, where its bytes land and how sure a dataset edge is and why, the rest of the line ignored."""
 
 from __future__ import annotations
 
@@ -16,4 +16,5 @@ class ByteEdge:
     alignments: tuple[ByteAlignment, ...] = ()
     aligned: bool = False
     certainty: Certainty = Certainty.EXACT
+    reasons: tuple[str, ...] = ()
     __pydantic_config__ = ConfigDict(extra="ignore")
