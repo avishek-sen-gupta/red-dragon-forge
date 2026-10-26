@@ -143,7 +143,8 @@ def test_the_commands_turn_a_fixpoint_out_dir_into_a_graph_clusters_a_report_and
             ).model_dump_json()
         ],
     )
-    graph_path, clusters_path = tmp_path / "graph.jsonl", tmp_path / "clusters.jsonl"
+    graph_path = tmp_path / "graph" / "graph.jsonl"
+    clusters_path = tmp_path / "clusters.jsonl"
     report_path, page_path = tmp_path / "clusters.md", tmp_path / "page.html"
 
     with caplog.at_level(logging.INFO):
