@@ -32,6 +32,9 @@ edge without known placement reaches, a clamped move, neither relays nor joins. 
 program never join. Classes are the connected components of the joined pairs; `unified.jsonl` holds
 one `{"members": [...]}` per class, and the first member names it.
 
+Unify reads the graph a line at a time and keeps only each field's and slot's id, program, size and
+subscripts and each edge's ends and alignments, logging progress every tenth of the file's lines.
+
 ## Matrix
 
 Each `defs.jsonl` row names the fields its range covers, through the extents, and the paragraphs of

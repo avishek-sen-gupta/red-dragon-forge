@@ -7,10 +7,12 @@ from pathlib import Path
 
 import pytest
 
+from cobble.experimental.aggregates.byte_graph_file import read_byte_graph
 from cobble.experimental.aggregates.exact_merge import exact_classes
 from cobble.experimental.aggregates.unify import read_unified, write_unified
 from cobble.experimental.partition.byte_alignment import ByteAlignment
 from cobble.experimental.partition.field_graph import FieldGraph
+from cobble.experimental.partition.graph_file import write_graph
 from cobble.experimental.partition.graph_edge import GraphEdge
 from cobble.experimental.partition.graph_node import GraphNode
 from cobble.experimental.partition.node_kind import NodeKind
@@ -43,6 +45,11 @@ def _moved(ends: tuple[str, str], *placed: tuple[int, int, int]) -> GraphEdge:
         ),
         aligned=bool(placed),
     )
+
+
+def _classes(tmp_path: Path, graph: FieldGraph) -> tuple[tuple[str, ...], ...]:
+    write_graph(tmp_path / "graph.jsonl", graph)
+    return exact_classes(read_byte_graph(tmp_path / "graph.jsonl"))
 
 
 GRAPH = FieldGraph(
@@ -81,7 +88,7 @@ GRAPH = FieldGraph(
 def test_only_fields_whose_every_byte_lands_in_place_in_another_program_are_one_class(
     tmp_path: Path,
 ) -> None:
-    classes = exact_classes(GRAPH)
+    classes = _classes(tmp_path, GRAPH)
     write_unified(tmp_path / "unified.jsonl", classes)
 
     assert classes == (("R:CA.A", "S:WS.B"),)
@@ -96,7 +103,7 @@ def _slot(node: str, size: int) -> GraphNode:
 
 
 def test_fields_holding_the_same_dataset_bytes_in_two_programs_are_one_class(
-    caplog: pytest.LogCaptureFixture,
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     graph = FieldGraph(
         nodes=(
@@ -119,9 +126,12 @@ def test_fields_holding_the_same_dataset_bytes_in_two_programs_are_one_class(
     )
 
     with caplog.at_level(logging.INFO):
-        assert exact_classes(graph) == (("Q:R.ID", "R:R.ID", "W:R.ID"),)
+        assert _classes(tmp_path, graph) == (("Q:R.ID", "R:R.ID", "W:R.ID"),)
 
     assert [record.getMessage() for record in caplog.records] == [
+        f"aggregate unify: counting the lines of {tmp_path / 'graph.jsonl'}",
+        *(f"aggregate unify: graph lines read {n}/13" for n in (2, 4, 6, 8, 10, 12)),
+        "aggregate unify: graph lines read 13/13 done",
         "aggregate unify: 6 placed edges; moving their bytes",
         "aggregate unify: 38 bytes move; linking bytes through 2 relays",
         "aggregate unify: 16 relayed byte links",
@@ -131,7 +141,9 @@ def test_fields_holding_the_same_dataset_bytes_in_two_programs_are_one_class(
     ]
 
 
-def test_fields_reading_the_same_dataset_bytes_with_no_writer_are_one_class() -> None:
+def test_fields_reading_the_same_dataset_bytes_with_no_writer_are_one_class(
+    tmp_path: Path,
+) -> None:
     graph = FieldGraph(
         nodes=(
             _field("A:R.ID", 5),
@@ -146,4 +158,4 @@ def test_fields_reading_the_same_dataset_bytes_with_no_writer_are_one_class() ->
         ),
     )
 
-    assert exact_classes(graph) == (("A:R.ID", "B:R.ID"),)
+    assert _classes(tmp_path, graph) == (("A:R.ID", "B:R.ID"),)

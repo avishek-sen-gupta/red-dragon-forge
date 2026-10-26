@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable, Mapping, Set
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from itertools import groupby
 from operator import itemgetter
 
 import networkx as nx
-from cobble.experimental.partition.field_graph import FieldGraph
-from cobble.experimental.partition.graph_edge import GraphEdge
-from cobble.experimental.partition.graph_node import GraphNode
+from cobble.experimental.aggregates.byte_edge import ByteEdge
+from cobble.experimental.aggregates.byte_graph import ByteGraph
+from cobble.experimental.aggregates.byte_node import ByteNode
 from cobble.experimental.partition.node_kind import NodeKind
 from cobble.experimental.partition.progress import counted
 from cobble.experimental.partition.tally import tenths
@@ -30,10 +30,10 @@ class _Bytes:
     moves: Mapping[_Byte, tuple[_Byte, ...]]
     relays: Set[str]
     relayed: nx.DiGraph[_Byte]
-    fields: Mapping[str, GraphNode]
+    fields: Mapping[str, ByteNode]
 
 
-def _byte_moves(edges: Iterable[GraphEdge]) -> Mapping[_Byte, tuple[_Byte, ...]]:
+def _byte_moves(edges: Iterable[ByteEdge]) -> Mapping[_Byte, tuple[_Byte, ...]]:
     steps = sorted(
         ((edge.source, placed.source + k), (edge.target, placed.target + k))
         for edge in edges
@@ -46,22 +46,19 @@ def _byte_moves(edges: Iterable[GraphEdge]) -> Mapping[_Byte, tuple[_Byte, ...]]
     }
 
 
-def _read_back(edge: GraphEdge) -> GraphEdge:
-    return edge.model_copy(
-        update={
-            "source": edge.target,
-            "target": edge.source,
-            "alignments": tuple(
-                placed.model_copy(
-                    update={"source": placed.target, "target": placed.source}
-                )
-                for placed in edge.alignments
-            ),
-        }
+def _read_back(edge: ByteEdge) -> ByteEdge:
+    return replace(
+        edge,
+        source=edge.target,
+        target=edge.source,
+        alignments=tuple(
+            placed.model_copy(update={"source": placed.target, "target": placed.source})
+            for placed in edge.alignments
+        ),
     )
 
 
-def _unplaced(graph: FieldGraph, fields: Mapping[str, GraphNode]) -> frozenset[str]:
+def _unplaced(graph: ByteGraph, fields: Mapping[str, ByteNode]) -> frozenset[str]:
     return frozenset(
         edge.target
         for edge in graph.edges
@@ -69,7 +66,7 @@ def _unplaced(graph: FieldGraph, fields: Mapping[str, GraphNode]) -> frozenset[s
     )
 
 
-def _bytes(graph: FieldGraph) -> _Bytes:
+def _bytes(graph: ByteGraph) -> _Bytes:
     fields = {node.id: node for node in graph.nodes if node.kind is NodeKind.FIELD}
     slots = frozenset(node.id for node in graph.nodes if node.kind is NodeKind.DATASET)
     ends = fields.keys() | slots
@@ -127,7 +124,7 @@ def _landings(found: _Bytes, byte: _Byte) -> frozenset[_Byte]:
 
 
 def _exact(
-    source: GraphNode, target: GraphNode, landed: Iterable[frozenset[_Byte]]
+    source: ByteNode, target: ByteNode, landed: Iterable[frozenset[_Byte]]
 ) -> bool:
     return source.size == target.size and all(
         {offset for node, offset in bytes_ if node == target.id} == {i}
@@ -135,7 +132,7 @@ def _exact(
     )
 
 
-def _partners(found: _Bytes, source: GraphNode) -> tuple[tuple[str, str], ...]:
+def _partners(found: _Bytes, source: ByteNode) -> tuple[tuple[str, str], ...]:
     landed = tuple(_landings(found, (source.id, i)) for i in range(source.size))
     targets = {
         node
@@ -150,7 +147,7 @@ def _partners(found: _Bytes, source: GraphNode) -> tuple[tuple[str, str], ...]:
     )
 
 
-def exact_classes(graph: FieldGraph) -> tuple[tuple[str, ...], ...]:
+def exact_classes(graph: ByteGraph) -> tuple[tuple[str, ...], ...]:
     found = _bytes(graph)
     sources = tuple(
         field

@@ -8,9 +8,9 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
+from cobble.experimental.aggregates.byte_graph_file import read_byte_graph
 from cobble.experimental.aggregates.exact_merge import exact_classes
 from cobble.experimental.aggregates.unify import write_unified
-from cobble.experimental.partition.graph_file import read_graph
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ def main(argv: Sequence[str] = ()) -> int:
     configure_cli_logging()
     arguments = _parser().parse_args(tuple(argv) if argv else None)
     logger.info("aggregate unify: reading %s", arguments.graph)
-    graph = read_graph(arguments.graph)
+    graph = read_byte_graph(arguments.graph)
     logger.info(
         "aggregate unify: %d nodes, %d edges", len(graph.nodes), len(graph.edges)
     )
