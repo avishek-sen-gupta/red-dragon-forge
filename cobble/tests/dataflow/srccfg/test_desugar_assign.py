@@ -361,3 +361,32 @@ def test_a_statement_reads_what_it_hands_out_of_the_program(program_of) -> None:
         (("WS-TEXT",), ("WS-TEXT", "WS-LOWER", "WS-UPPER")),
         (("WS-COUNT",), ("WS-NAME", "WS-CHAR")),
     ]
+
+
+def test_a_file_statement_names_the_record_its_fd_declares(program_of) -> None:
+    """The parser pairs each 01 with its FD, so a READ fills that record and a
+    WRITE sends it to that file, however differently the two are named."""
+    asg = program_of(
+        [
+            {"type": "READ", "file_name": "CARD-INPUT"},
+            {"type": "READ", "file_name": "CARD-INPUT", "into": "WS-COPY"},
+            {"type": "WRITE", "record_name": "OUT-REC"},
+        ],
+        file_control=[{"file_name": "CARD-INPUT"}, {"file_name": "CARD-OUTPUT"}],
+        file_fields=[
+            {
+                "level": 1,
+                "name": "FD-CARD-REC",
+                "pic": "X(16)",
+                "fd_name": "CARD-INPUT",
+            },
+            {"level": 1, "name": "OUT-REC", "pic": "X(16)", "fd_name": "CARD-OUTPUT"},
+        ],
+    )
+    nodes = lower_statements(asg.paragraphs[0].statements, _ctx(asg), "").nodes
+
+    assert [(node.writes, node.reads) for node in nodes if "#" not in node.id] == [
+        (("FD-CARD-REC",), ("FILE:CARD-INPUT",)),
+        (("WS-COPY", "FD-CARD-REC"), ("FILE:CARD-INPUT",)),
+        (("FILE:CARD-OUTPUT",), ("OUT-REC",)),
+    ]

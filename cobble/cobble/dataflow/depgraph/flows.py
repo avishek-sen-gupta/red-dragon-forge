@@ -45,7 +45,7 @@ with different operand semantics is skipped loudly rather than mishandled quietl
 from __future__ import annotations
 
 import dataclasses
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping
 from typing import Callable
 
 # (sources, targets). pass1 emits every source -> target pair in a block.
@@ -149,13 +149,13 @@ def _read_names(operand: object) -> tuple[str, ...]:
 class ProgramContext:
     """What a rule needs to know about the program it is reading.
 
-    record_of_file / file_of_record  the FD <-> record area pairing, which the ASG
-                                    does not carry (see fd_record_pairing)
+    records_of_file / file_of_record  each FD's 01 records and each record's FD, as
+                                     the parser pairs them
     declared                        every declared name, for resolving the record
                                     a SEND MAP / RECEIVE MAP implies
     """
 
-    record_of_file: Mapping[str, str]
+    records_of_file: Mapping[str, tuple[str, ...]]
     file_of_record: Mapping[str, str]
     declared: frozenset[str]
 
@@ -172,43 +172,9 @@ def _all_declared(fields: Iterable[object]) -> tuple[str, ...]:
     return tuple(out)
 
 
-def fd_record_pairing(file_names: Sequence[str], record_names: Sequence[str]) -> dict:
-    """FD name -> its record area, matched by name, uniquely or not at all.
-
-    Batch READ is 170/170 bare in a 120-program sample -- ``READ LAYOUT1`` with no
-    INTO -- so without this pairing every batch read yields no edge at all and the
-    whole batch half of the corpus starts from nowhere.
-
-    The ASG cannot answer it: ``file_record_to_select`` is null in every cached
-    program, and pairing file_control to file_fields BY INDEX is wrong -- one program
-    pairs the wrong FD with the wrong record that way. Name matching is right and
-    measurable: the FD name as a prefix of an 01, then the FD name minus its 3- or
-    4-character site prefix. Over 477 FDs that is 357 unique, 8 ambiguous, 112
-    unresolved -- the unresolved being files whose record lives in a foreign stub
-    copybook, so the record is genuinely not in the program.
-
-    Ambiguous is left unresolved rather than guessed at: two candidates means the
-    edge would be a coin toss.
-    """
-    out: dict[str, str] = {}
-    for file_name in file_names:
-        for stem in (file_name, file_name[3:], file_name[4:]):
-            if not stem:
-                continue
-            hits = [r for r in record_names if r.startswith(stem)]
-            if len(hits) == 1:
-                out[file_name] = hits[0]
-                break
-    return out
-
-
 def program_context(asg) -> ProgramContext:
     records = _record_names(getattr(asg, "file_fields", ()) or ())
-    files = tuple(
-        operand_name(getattr(e, "file_name", ""))
-        for e in getattr(asg, "file_control", ()) or ()
-    )
-    record_of_file = fd_record_pairing(files, records)
+    file_of_record = dict(getattr(asg, "file_record_to_select", {}) or {})
     declared = frozenset(
         name
         for group in ("data_fields", "linkage_fields", "local_storage_fields")
@@ -216,8 +182,11 @@ def program_context(asg) -> ProgramContext:
         if name
     ) | frozenset(records)
     return ProgramContext(
-        record_of_file=record_of_file,
-        file_of_record={rec: fd for fd, rec in record_of_file.items()},
+        records_of_file={
+            fd: tuple(rec for rec, owner in file_of_record.items() if owner == fd)
+            for fd in frozenset(file_of_record.values())
+        },
+        file_of_record=file_of_record,
         declared=declared,
     )
 
@@ -376,10 +345,13 @@ def _call(s, ctx: ProgramContext) -> tuple[Block, ...]:
 
 
 def _read(s, ctx: ProgramContext) -> tuple[Block, ...]:
-    """A record arrives from a dataset. KEY is a selector, so it is not a source."""
+    """A record arrives from a dataset into the FD's record area, and into INTO
+    too when there is one. What picks the record is a selector, not a source."""
     file_name = operand_name(s.file_name)
-    into = operand_name(s.into) or ctx.record_of_file.get(file_name, "")
-    return _block((FILE_PREFIX + file_name if file_name else "",), (into,))
+    return _block(
+        (FILE_PREFIX + file_name if file_name else "",),
+        (operand_name(s.into), *ctx.records_of_file.get(file_name, ())),
+    )
 
 
 def _write(s, ctx: ProgramContext) -> tuple[Block, ...]:
@@ -393,7 +365,7 @@ def _write(s, ctx: ProgramContext) -> tuple[Block, ...]:
     record = operand_name(s.record_name)
     source = operand_name(getattr(s, "from_field", ""))
     file_name = ctx.file_of_record.get(record, "")
-    return _block((source,), (record,)) + _block(
+    return _block((source,), (record,) if source else ()) + _block(
         (record,), (FILE_PREFIX + file_name if file_name else "",)
     )
 

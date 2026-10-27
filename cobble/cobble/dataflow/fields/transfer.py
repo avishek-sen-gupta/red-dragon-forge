@@ -33,6 +33,7 @@ from types import MappingProxyType
 from cics.statements import CicsOperand, ExecCicsStatement, operand_reference
 from cobble.asg_walk import descend
 from cobble.dataflow.fields.extent import CellIndex, OperandExtents, operand_extents
+from cobble.dataflow.fields.file_read import FileRead
 from cobble.dataflow.fields.move_kind import MoveKind
 from cobble.dataflow.fields.state import (
     CICS_STATE,
@@ -97,7 +98,7 @@ from cobol_memory.field_extent import FieldExtent
 
 # cobol_asg has no statement base class, and its own union leaves out the
 # dialect-parsed EXEC CICS form, so the two have to be spelled together here.
-Statement = CobolStatementType | ExecCicsStatement | UnmodelledWrite
+Statement = CobolStatementType | ExecCicsStatement | UnmodelledWrite | FileRead
 
 _CICS_FILE_VERBS = frozenset({"READ", "READNEXT", "READPREV"})
 COMMAREA = "COMMAREA"
@@ -702,6 +703,22 @@ def _read_writes(
     )
 
 
+def _file_read_targets(statement: FileRead) -> tuple[RefModOperand, ...]:
+    return statement.targets
+
+
+def _file_read_writes(
+    statement: FileRead, node: str, index: CellIndex, state: State
+) -> Iterator[Write]:
+    return _origin_writes(
+        statement.targets,
+        f"FILE:{statement.file_name}",
+        node,
+        index,
+        values=because(UnresolvedReason.FROM_FILE),
+    )
+
+
 def _call_targets(statement: CallStatement) -> tuple[RefModOperand, ...]:
     """BY REFERENCE is the only linkage the callee can write back through."""
     passed = tuple(
@@ -921,6 +938,7 @@ HANDLED: tuple[type, ...] = (
     RewriteStatement,
     CallStatement,
     ExecCicsStatement,
+    FileRead,
 )
 
 _WRITES_BY_KIND: Mapping[str, Callable[..., Iterator[Write]]] = MappingProxyType(
@@ -936,6 +954,7 @@ _WRITES_BY_KIND: Mapping[str, Callable[..., Iterator[Write]]] = MappingProxyType
         "CallStatement": _call_writes,
         "ExecCicsStatement": _cics_writes,
         "UnmodelledWrite": _unmodelled_writes,
+        "FileRead": _file_read_writes,
     }
 )
 
@@ -954,6 +973,7 @@ _TARGETS_BY_KIND: Mapping[str, Callable[..., tuple[RefModOperand, ...]]] = (
             "CallStatement": _call_targets,
             "ExecCicsStatement": _cics_targets,
             "UnmodelledWrite": _unmodelled_targets,
+            "FileRead": _file_read_targets,
         }
     )
 )

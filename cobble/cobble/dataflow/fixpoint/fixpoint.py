@@ -64,6 +64,7 @@ from types import MappingProxyType
 
 from cobble.dataflow.depgraph.flows import IDENTITY_PREFIXES
 from cobble.dataflow.fields.extent import CellIndex, cell_index, operand_extents
+from cobble.dataflow.fields.file_read import FileRead
 from cobble.dataflow.fields.image import initial_image
 from cobble.dataflow.fields.program_layout import NO_LAYOUT, ProgramLayout, layout_of
 from cobble.dataflow.fields.sinks import Sink, sinks_of
@@ -77,8 +78,8 @@ from cobble.dataflow.fields.state import (
     values_at,
 )
 from cobble.dataflow.fields.transfer import (
-    REBUILT,
     HANDLED,
+    REBUILT,
     Statement,
     Write,
     transfer,
@@ -103,6 +104,8 @@ from cobble.dataflow.srccfg.literals import is_literal
 from cobble.dataflow.srccfg.order import DepthFirstOrder, depth_first_order
 from cobble.dataflow.srccfg.program import program_cfg
 from cobble.dataflow.srccfg.statements import statement_index
+from cobol_asg.asg_types import CobolASG
+from cobol_asg.cobol_statements import ReadStatement
 from cobol_asg.ref_mod import RefModOperand
 from cobol_memory.field_extent import FieldExtent
 
@@ -272,6 +275,40 @@ def _statements_at(
     return tuple(
         (node.id, statements[node.id]) for node in cfg.nodes if node.id in statements
     )
+
+
+def program_statements(asg: CobolASG, cfg: Cfg) -> Mapping[str, Statement]:
+    """The statement at every CFG node, as the transfer reads them."""
+    return with_unmodelled(
+        with_record_areas(statement_index(asg), asg.file_record_to_select),
+        cfg,
+        condition_index(asg),
+    )
+
+
+def with_record_areas(
+    statements: Mapping[str, Statement], file_of_record: Mapping[str, str]
+) -> Mapping[str, Statement]:
+    """Every READ as the fields it fills: its file's 01 records, which share the
+    record area, and its INTO field."""
+    return MappingProxyType(
+        {
+            node_id: _file_read(statement, file_of_record)
+            for node_id, statement in statements.items()
+        }
+    )
+
+
+def _file_read(statement: Statement, file_of_record: Mapping[str, str]) -> Statement:
+    if not isinstance(statement, ReadStatement):
+        return statement
+    into = (statement.into,) if statement.into.name else ()
+    records = tuple(
+        RefModOperand(name=record)
+        for record, owner in file_of_record.items()
+        if owner == statement.file_name.upper()
+    )
+    return FileRead(file_name=statement.file_name, targets=into + records)
 
 
 def with_unmodelled(
@@ -814,7 +851,7 @@ def analyse(
     initial image of WORKING-STORAGE's VALUE clauses, when the caller has one.
     """
     unpruned = program_cfg(asg)
-    statements = with_unmodelled(statement_index(asg), unpruned, condition_index(asg))
+    statements = program_statements(asg, unpruned)
     cfg = fallthroughs_pruned(unpruned, paragraph_order(asg), statements)
     found = _statements_at(cfg, statements)
     _warn_untracked(cfg.program, found, index)
@@ -908,7 +945,7 @@ def _kept_after(cfg: Cfg, live: Live) -> Callable[[str, FieldExtent], bool]:
 def program_graph(asg) -> tuple[Cfg, Mapping[str, Statement]]:
     """The pruned CFG a walk runs over, and the statements at its nodes."""
     unpruned = program_cfg(asg)
-    statements = with_unmodelled(statement_index(asg), unpruned, condition_index(asg))
+    statements = program_statements(asg, unpruned)
     return fallthroughs_pruned(unpruned, paragraph_order(asg), statements), statements
 
 
@@ -924,7 +961,7 @@ def stepwise(asg, options: AnalysisOptions, cap: int) -> tuple[Cfg, Iterator[Ste
     """
     built = _laid_out(asg, NO_LAYOUT)
     unpruned = program_cfg(asg)
-    statements = with_unmodelled(statement_index(asg), unpruned, condition_index(asg))
+    statements = program_statements(asg, unpruned)
     cfg = fallthroughs_pruned(unpruned, paragraph_order(asg), statements)
     live = EVERYTHING
     entry = _entry_node(asg)

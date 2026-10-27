@@ -98,7 +98,8 @@ side is clamped; the entry keeps its writers and its values become `not-a-litera
 
 The transfer models `MOVE`, `INITIALIZE`, arithmetic, `COMPUTE`, `STRING`, `READ`, `CALL`,
 `EXEC CICS` and `WRITE`/`REWRITE ... FROM`, which moves the `FROM` operand into the record
-area. Any other statement that writes storage (`ACCEPT`, `UNSTRING`, `INSPECT`, `SET`,
+area. A `READ` fills its file's record area, every 01 the parser places under its FD, and
+its `INTO` field when it has one. Any other statement that writes storage (`ACCEPT`, `UNSTRING`, `INSPECT`, `SET`,
 `SEARCH`, the `CORRESPONDING` forms, `XML GENERATE`) is a weak
 write of the names its CFG node lists (`INSPECT REPLACING`/`CONVERTING` lists its subject, as
 read and written): it adds a definer, removes nothing, and adds the reason
