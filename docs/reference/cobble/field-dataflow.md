@@ -22,11 +22,12 @@ targets, query), `dataflow/combine/`, `dataflow/depgraph/`.
 
 An extent reads `NAME@region[start:end]`. A trailing `~` marks a clamped range: a computed
 subscript lands somewhere inside it. A field id is `<program>.<field>`. Synthetic origins
-(`<program>.LITERAL`, `FILE:<name>`, `MAP:<map>`, `%CICS-STATE`, `%CALL:<target>`, `FUNCTION`)
+(`<program>.LITERAL`, `FILE:<name>`, `MAP:<map>`, `%CICS-STATE`, `%CALL:<target>`, `FUNCTION:<name>`)
 are not storage. A `RECEIVE MAP` writes its `INTO` field, or the map's input record `<map>I`
 when `INTO` is absent, from `MAP:<map>`. A `MOVE FUNCTION f(...)` reads the fields its
 arguments name, as a `COMPUTE` does; a function reading no field, such as `CURRENT-DATE`, is
-the `FUNCTION` origin.
+the `FUNCTION:<name>` origin, e.g. `FUNCTION:CURRENT-DATE`. `ASKTIME` and `ASSIGN` write every
+field they name, and any command its `RESP` and `RESP2`, from `%CICS-STATE`.
 
 ## cobble-extents
 
@@ -99,7 +100,8 @@ The transfer models `MOVE`, `INITIALIZE`, arithmetic, `COMPUTE`, `STRING`, `READ
 `EXEC CICS` and `WRITE`/`REWRITE ... FROM`, which moves the `FROM` operand into the record
 area. Any other statement that writes storage (`ACCEPT`, `UNSTRING`, `INSPECT`, `SET`,
 `SEARCH`, the `CORRESPONDING` forms, `XML GENERATE`) is a weak
-write of the names its CFG node lists: it adds a definer, removes nothing, and adds the reason
+write of the names its CFG node lists (`INSPECT REPLACING`/`CONVERTING` lists its subject, as
+read and written): it adds a definer, removes nothing, and adds the reason
 `unmodelled`. `EXEC SQL ... INTO` and `FETCH ... INTO` are not modelled.
 
 The graph is intra-program. A `CALL` or `LINK` contributes a `%CALL:<target>` source;
@@ -416,7 +418,7 @@ only when it started inside the callee.
 
 Output is a tree, one line per row, each source under the write that read it. A branch already
 shown is printed once more with `(see above)` and not expanded. Origins (`FILE:`, `MAP:`,
-`LITERAL`, `%CALL:`, `FUNCTION`) are backward leaves, sinks forward ones. The rows are the
+`LITERAL`, `%CALL:`, `FUNCTION:`) are backward leaves, sinks forward ones. The rows are the
 fixpoint's, merged over paths; a run capped with `--sweeps` that did not settle has fewer reaching
 definitions, so its tree can be smaller.
 

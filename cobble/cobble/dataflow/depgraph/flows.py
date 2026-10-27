@@ -29,8 +29,6 @@ Verbs that carry data but yield nothing, deliberately:
     EXEC SQL        the bridge keeps the block as opaque text; a real gap
     CICS RETRIEVE   its data came from another transaction's START FROM, and the
                     receiving transid is not in the statement
-    CICS ASKTIME    ABSTIME is written by CICS, from nothing in the program
-    CICS ASSIGN     same: USERID etc. come from the system
     CICS BIF DEEDIT FIELD(X) edits X in place, which is the self edge X -> X
 
 EXTERNAL IDENTITIES BECOME NODES, prefixed so a dataset called like a variable
@@ -228,9 +226,11 @@ def program_context(asg) -> ProgramContext:
 
 
 def _block(sources: Iterable[str], targets: Iterable[str]) -> tuple[Block, ...]:
-    """One block, or none when either side is empty (no edge to build)."""
+    """One block, or none when both sides are empty. A one-sided block builds no
+    edge but still says what the statement reads or writes: MOVE FUNCTION
+    CURRENT-DATE TO X writes X from nothing named."""
     src, dst = tuple(s for s in sources if s), tuple(t for t in targets if t)
-    return ((src, dst),) if src and dst else ()
+    return ((src, dst),) if src or dst else ()
 
 
 def _move(s, ctx: ProgramContext) -> tuple[Block, ...]:
@@ -297,11 +297,28 @@ def _unstring(s, ctx: ProgramContext) -> tuple[Block, ...]:
 
 
 def _inspect(s, ctx: ProgramContext) -> tuple[Block, ...]:
-    """TALLYING only. REPLACING and CONVERTING rewrite the source in place, which
-    is the self edge, and their FROM/TO operands are figurative or literal in all
-    five INSPECTs sampled."""
+    """TALLYING counts into its targets. REPLACING and CONVERTING rewrite the
+    source in place, the self edge. The patterns are read: they decide what is
+    counted or what lands. AFTER and BEFORE only bound the scan, like DELIMITED BY."""
+    source = operand_name(s.source)
     tallied = tuple(operand_name(g.target) for g in s.tallying_groups)
-    return _block((operand_name(s.source),), tallied)
+    rewritten = (source,) if s.replacings or s.inspect_type == "CONVERTING" else ()
+    return _block((source,) + _inspect_patterns(s), tallied + rewritten)
+
+
+def _inspect_patterns(s) -> tuple[str, ...]:
+    return operand_names(
+        (
+            *(p.pattern for g in s.tallying_groups for p in g.patterns),
+            *(
+                operand
+                for r in s.replacings
+                for operand in (r.from_pattern, r.to_pattern)
+            ),
+            s.converting_from,
+            s.converting_to,
+        )
+    )
 
 
 def _set(s, ctx: ProgramContext) -> tuple[Block, ...]:
@@ -511,6 +528,37 @@ def _cics_formattime(s, ctx: ProgramContext) -> tuple[Block, ...]:
     return _block((source,), targets)
 
 
+def _cics_return(s, ctx: ProgramContext) -> tuple[Block, ...]:
+    """RETURN TRANSID('T') COMMAREA(X): X is handed to the transaction's next run."""
+    return _block(
+        (_option(s.options, "COMMAREA"),),
+        (_identity(TRANSID_PREFIX, s.options, "TRANSID"),),
+    )
+
+
+def _cics_send(s, ctx: ProgramContext) -> tuple[Block, ...]:
+    """SEND, SEND TEXT and WRITEQ TD read FROM out to a terminal or a transient
+    data queue, neither of which is a node."""
+    return _block((_option(s.options, "FROM"),), ())
+
+
+def _cics_responses(s) -> tuple[Block, ...]:
+    """Any command's RESP and RESP2 are written by CICS, from nothing in the program."""
+    return _block((), (_option(s.options, "RESP"), _option(s.options, "RESP2")))
+
+
+def _cics_system(s, ctx: ProgramContext) -> tuple[Block, ...]:
+    """ASKTIME and ASSIGN: CICS fills every named operand from its own state."""
+    return _block(
+        (),
+        tuple(
+            operand_name(operand)
+            for operand in s.options.values()
+            if operand is not None
+        ),
+    )
+
+
 _CICS_RULES: Mapping[str, Callable[..., tuple[Block, ...]]] = {
     "READ": _cics_read,
     "READNEXT": _cics_read,
@@ -525,12 +573,18 @@ _CICS_RULES: Mapping[str, Callable[..., tuple[Block, ...]]] = {
     "READQ TS": _cics_readq_ts,
     "START": _cics_start,
     "FORMATTIME": _cics_formattime,
+    "ASKTIME": _cics_system,
+    "ASSIGN": _cics_system,
+    "RETURN": _cics_return,
+    "SEND": _cics_send,
+    "SEND TEXT": _cics_send,
+    "WRITEQ TD": _cics_send,
 }
 
 
 def _exec_cics(s, ctx: ProgramContext) -> tuple[Block, ...]:
     rule = _CICS_RULES.get(s.verb.upper())
-    return rule(s, ctx) if rule else ()
+    return (rule(s, ctx) if rule else ()) + _cics_responses(s)
 
 
 def _exec_cics_verb(s) -> str:

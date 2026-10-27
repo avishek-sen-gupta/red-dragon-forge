@@ -7,6 +7,19 @@ root. Every output lands under `cobble/out-carddemo/`, which git ignores.
 For another corpus, change the paths in the two config files. Every flag is in
 [the cobble reference](../reference/cobble/config.md).
 
+## All at once
+
+`make carddemo-all` runs every stage below, and the rest of cobble's artefacts, into one
+timestamped directory, `cobble/out-carddemo-<YYYYMMDD-HHMM>-rebuild-all/`, logging each step:
+the BMS symbolic copybooks and a synthesised CSD, a fresh parse, extents (with
+`--synthesize-undeclared`), the fixpoint, combine, the knowledge graph and its page, one CFG
+closure per program with its page, field accesses, call graph and sequence views, the name-level
+dependency graph, the BMS maps, the partition graph, its file-site census and pages, and the
+aggregates (classes, matrix, factors, class share, scorecard). It stops at the first step that
+fails. `PARTITION_SWEEPS=N` caps the fixpoint at N sweeps; without it the fixpoint runs its
+worklist. It is `tools/rebuild-all.sh CONFIG OUT_DIR [SWEEPS]` underneath, which takes any corpus
+config. On CardDemo it takes about a quarter of an hour, most of it the per-program CFG closures.
+
 ## Prerequisites
 
 - `make setup` has run (see [setup](setup.md)). It builds both bridge JARs and `hlasm_export`.

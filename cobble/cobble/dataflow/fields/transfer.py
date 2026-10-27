@@ -27,6 +27,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from functools import reduce
+from itertools import chain
 from types import MappingProxyType
 
 from cics.statements import CicsOperand, ExecCicsStatement, operand_reference
@@ -102,6 +103,8 @@ _CICS_FILE_VERBS = frozenset({"READ", "READNEXT", "READPREV"})
 COMMAREA = "COMMAREA"
 _CICS_CALL_VERBS = frozenset({"LINK", "XCTL"})
 _CICS_RECEIVERS = ("INTO", "SET")
+_CICS_SYSTEM_VERBS = frozenset({"ASKTIME", "ASSIGN"})
+_CICS_RESPONSES = ("RESP", "RESP2")
 _RECEIVE_MAP = "RECEIVE MAP"
 _MAP_ORIGIN = "MAP:"
 _MAP_INPUT_SUFFIX = "I"
@@ -150,18 +153,24 @@ def _unresolved(operand: RefModOperand, reason: str, node: str) -> frozenset[Sou
     )
 
 
+_NAMED_ORIGINS: Mapping[str, str] = MappingProxyType(
+    {"unknown-name": "UNKNOWN", "function": "FUNCTION"}
+)
+
+
 def _unresolved_origin(operand: RefModOperand, reason: str) -> str:
     """A literal reads no storage, and neither does LENGTH OF or a FUNCTION.
 
     For a field name that simply has no declared extent (e.g. a SQL host
     variable from an unparsed DCLGEN struct), embed the name so backward
     provenance queries say ``UNKNOWN:FIELD-NAME`` rather than the opaque
-    ``UNKNOWN-NAME``.
+    ``UNKNOWN-NAME``; a function reading no field is ``FUNCTION:CURRENT-DATE``.
     """
     if is_literal(operand.name):
         return LITERAL
-    if reason == "unknown-name" and operand.name:
-        return f"UNKNOWN:{operand.name}"
+    prefix = _NAMED_ORIGINS.get(reason, "")
+    if prefix and operand.name:
+        return f"{prefix}:{operand.name}"
     return reason.upper()
 
 
@@ -783,7 +792,21 @@ def _cics_values(statement: ExecCicsStatement) -> ValueSet:
 
 
 def _cics_targets(statement: ExecCicsStatement) -> tuple[RefModOperand, ...]:
-    """LINK and XCTL write through the COMMAREA; everything else through a receiver.
+    return _cics_receivers(statement) + _cics_responses(statement)
+
+
+def _cics_responses(statement: ExecCicsStatement) -> tuple[RefModOperand, ...]:
+    """RESP and RESP2, which CICS writes on any command that names them."""
+    return tuple(
+        _option_reference(statement, name)
+        for name in _CICS_RESPONSES
+        if isinstance(statement.options.get(name), CicsOperand)
+    )
+
+
+def _cics_receivers(statement: ExecCicsStatement) -> tuple[RefModOperand, ...]:
+    """LINK and XCTL write through the COMMAREA, ASKTIME and ASSIGN every field
+    they name; everything else through a receiver.
 
     A RECEIVE MAP without INTO fills the map's symbolic input record, as a SEND
     MAP without FROM sends its output record.
@@ -794,6 +817,20 @@ def _cics_targets(statement: ExecCicsStatement) -> tuple[RefModOperand, ...]:
             for name in (COMMAREA,)
             if isinstance(statement.options.get(name), CicsOperand)
         )
+    if statement.verb.upper() in _CICS_SYSTEM_VERBS:
+        return _every_operand(statement)
+    return _received_into(statement)
+
+
+def _every_operand(statement: ExecCicsStatement) -> tuple[RefModOperand, ...]:
+    return tuple(
+        operand_reference(value)
+        for value in statement.options.values()
+        if isinstance(value, CicsOperand)
+    )
+
+
+def _received_into(statement: ExecCicsStatement) -> tuple[RefModOperand, ...]:
     receivers = _receiver_options(statement)
     if not receivers and statement.verb.upper() == _RECEIVE_MAP:
         return (RefModOperand(name=_map_name(statement) + _MAP_INPUT_SUFFIX),)
@@ -803,16 +840,31 @@ def _cics_targets(statement: ExecCicsStatement) -> tuple[RefModOperand, ...]:
 def _cics_writes(
     statement: ExecCicsStatement, node: str, index: CellIndex, state: State
 ) -> Iterator[Write]:
+    return chain(
+        _cics_received(statement, node, index),
+        _origin_writes(
+            _cics_responses(statement),
+            CICS_STATE,
+            node,
+            index,
+            values=because(UnresolvedReason.NOT_A_LITERAL),
+        ),
+    )
+
+
+def _cics_received(
+    statement: ExecCicsStatement, node: str, index: CellIndex
+) -> Iterator[Write]:
     if statement.verb.upper() in _CICS_CALL_VERBS:
         return _origin_writes(
-            _cics_targets(statement),
+            _cics_receivers(statement),
             f"%CALL:{_option(statement, 'PROGRAM')}",
             node,
             index,
             values=because(UnresolvedReason.FROM_CALLEE),
         )
     return _origin_writes(
-        _cics_targets(statement),
+        _cics_receivers(statement),
         _cics_origin(statement),
         node,
         index,

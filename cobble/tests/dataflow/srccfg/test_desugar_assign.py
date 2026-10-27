@@ -210,3 +210,154 @@ def test_a_paragraph_with_no_statements_lowers_to_nothing(program_of) -> None:
     asg = program_of([])
 
     assert lower_statements(asg.paragraphs[0].statements, _ctx(asg), "").nodes == ()
+
+
+def test_a_statement_writes_its_targets_though_nothing_named_feeds_them(
+    program_of,
+) -> None:
+    """A FUNCTION with no arguments, a FILE or PROGRAM chosen at run time, CICS
+    filling a field from its own state -- RESP and RESP2 among them -- and INSPECT
+    rewriting its subject in place: none names a source the graph has a node for,
+    and each still writes."""
+    var = {"is_literal": False}
+    cfg_nodes = lower_statements(
+        program_of(
+            [
+                {
+                    "type": "MOVE",
+                    "operands": [
+                        {"kind": "function", "name": "CURRENT-DATE", "args": []},
+                        {"name": "WS-DATE"},
+                    ],
+                },
+                {
+                    "type": "EXEC_CICS",
+                    "verb": "READ",
+                    "options": {
+                        "FILE": {"text": "WS-FILE", **var},
+                        "INTO": {"text": "WS-REC", **var},
+                        "RESP": {"text": "WS-RESP", **var},
+                        "RESP2": {"text": "WS-RESP2", **var},
+                    },
+                },
+                {
+                    "type": "EXEC_CICS",
+                    "verb": "XCTL",
+                    "options": {
+                        "PROGRAM": {"text": "WS-PGM", **var},
+                        "COMMAREA": {"text": "WS-COMM", **var},
+                    },
+                },
+                {
+                    "type": "INSPECT",
+                    "inspect_type": "CONVERTING",
+                    "source": {"name": "WS-TEXT"},
+                    "converting_from": {"name": "'abc'"},
+                    "converting_to": {"name": "'ABC'"},
+                },
+                {
+                    "type": "INSPECT",
+                    "inspect_type": "REPLACING",
+                    "source": {"name": "WS-NAME"},
+                    "replacings": [
+                        {"mode": "ALL", "from": {"name": "' '"}, "to": {"name": "'-'"}}
+                    ],
+                },
+                {
+                    "type": "EXEC_CICS",
+                    "verb": "ASKTIME",
+                    "options": {"ABSTIME": {"text": "WS-ABS", **var}},
+                },
+                {
+                    "type": "EXEC_CICS",
+                    "verb": "ASSIGN",
+                    "options": {
+                        "APPLID": {"text": "WS-APPLID", **var},
+                        "SYSID": {"text": "WS-SYSID", **var},
+                    },
+                },
+            ]
+        )
+        .paragraphs[0]
+        .statements,
+        _ctx(program_of([])),
+        "",
+    ).nodes
+
+    assert [
+        (node.kind, node.writes, node.reads) for node in cfg_nodes if "#" not in node.id
+    ] == [
+        (NodeKind.ASSIGN, ("WS-DATE",), ()),
+        (NodeKind.ASSIGN, ("WS-REC", "WS-RESP", "WS-RESP2"), ()),
+        (NodeKind.CALL, ("WS-COMM",), ("WS-COMM",)),
+        (NodeKind.ASSIGN, ("WS-TEXT",), ("WS-TEXT", "'ABC'")),
+        (NodeKind.ASSIGN, ("WS-NAME",), ("WS-NAME", "' '", "'-'")),
+        (NodeKind.ASSIGN, ("WS-ABS",), ()),
+        (NodeKind.ASSIGN, ("WS-APPLID", "WS-SYSID"), ()),
+    ]
+
+
+def test_a_statement_reads_what_it_hands_out_of_the_program(program_of) -> None:
+    """RETURN hands its COMMAREA to the transaction it names, SEND and WRITEQ TD send
+    FROM, and INSPECT's patterns choose what lands in its subject. The length is a
+    constant and the queue a name, so neither is read."""
+    var = {"is_literal": False}
+    asg = program_of(
+        [
+            {
+                "type": "EXEC_CICS",
+                "verb": "RETURN",
+                "options": {
+                    "TRANSID": {"text": "'T001'", "is_literal": True},
+                    "COMMAREA": {"text": "WS-COMM", **var},
+                    "LENGTH": {"text": "LENGTH OF WS-COMM", **var},
+                },
+            },
+            {
+                "type": "EXEC_CICS",
+                "verb": "SEND TEXT",
+                "options": {"FROM": {"text": "WS-MSG", **var}, "ERASE": None},
+            },
+            {
+                "type": "EXEC_CICS",
+                "verb": "SEND",
+                "options": {"FROM": {"text": "WS-DATA", **var}, "NOHANDLE": None},
+            },
+            {
+                "type": "EXEC_CICS",
+                "verb": "WRITEQ TD",
+                "options": {
+                    "QUEUE": {"text": "WS-QUEUE", **var},
+                    "FROM": {"text": "WS-LINE", **var},
+                },
+            },
+            {
+                "type": "INSPECT",
+                "inspect_type": "CONVERTING",
+                "source": {"name": "WS-TEXT"},
+                "converting_from": {"name": "WS-LOWER"},
+                "converting_to": {"name": "WS-UPPER"},
+            },
+            {
+                "type": "INSPECT",
+                "inspect_type": "TALLYING",
+                "source": {"name": "WS-NAME"},
+                "tallying_groups": [
+                    {
+                        "target": {"name": "WS-COUNT"},
+                        "patterns": [{"mode": "ALL", "pattern": {"name": "WS-CHAR"}}],
+                    }
+                ],
+            },
+        ]
+    )
+    nodes = lower_statements(asg.paragraphs[0].statements, _ctx(asg), "").nodes
+
+    assert [(node.writes, node.reads) for node in nodes if "#" not in node.id] == [
+        (("TRANSID:T001",), ("WS-COMM",)),
+        ((), ("WS-MSG",)),
+        ((), ("WS-DATA",)),
+        ((), ("WS-LINE",)),
+        (("WS-TEXT",), ("WS-TEXT", "WS-LOWER", "WS-UPPER")),
+        (("WS-COUNT",), ("WS-NAME", "WS-CHAR")),
+    ]

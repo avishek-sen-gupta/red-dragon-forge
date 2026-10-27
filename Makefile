@@ -12,7 +12,7 @@ BLACK_PATHS = cicada/cics cicada/bms_copybook_gen cicada/tests squall/squall squ
   catnip/catnip catnip/tests zos/zos zos/tests litter/litter litter/tests jackal/jackal jackal/tests red_dragon_forge cobble/cobble cobble/tests tools tests
 DB2_COMPOSE = docker compose -f squall/docker-compose.yml
 
-.PHONY: help setup hlasm jar jar-force python test test-all fmt partition-traces partition-graph partition-render db2-up db2-seed db2-status db2-restart db2-stop db2-clean
+.PHONY: help setup hlasm jar jar-force python test test-all fmt partition-traces partition-graph partition-render carddemo-all db2-up db2-seed db2-status db2-restart db2-stop db2-clean
 
 help:
 	@echo "make setup     - init submodules + build the HLASM binaries + rebuild bridge JARs + uv sync"
@@ -26,6 +26,7 @@ help:
 	@echo "make partition-traces   - experimental: parse, extents, the fixpoint capped at PARTITION_SWEEPS sweeps, and combine (PARTITION_CONFIG, PARTITION_ASG)"
 	@echo "make partition-graph    - experimental: the knowledge graph, then the field graph of those traces with dataset links (PARTITION_BARRIER, PARTITION_FANOUT)"
 	@echo "make partition-render   - experimental: the WebGL page of the graph"
+	@echo "make carddemo-all       - every cobble artefact for CardDemo into a timestamped cobble/out-carddemo-* dir (PARTITION_SWEEPS optional)"
 	@echo "make db2-up    - start squall's Db2 container and wait until healthy (idempotent)"
 	@echo "make db2-seed  - create and seed CardDemo's Db2 schema (the only DROP TABLE)"
 	@echo "make db2-status - does Db2 actually answer? (container up != instance alive)"
@@ -108,6 +109,9 @@ partition-traces: jar
 partition-graph: partition-traces
 	$(BRIDGE_ENV) && $(COBBLE) cobble-build --config $(PARTITION_CONFIG) --output $(PARTITION_DIR)/knowledge-graph.jsonl --dynamic-call-targets $(PARTITION_DIR)/combine/targets.jsonl
 	$(COBBLE) cobble-experimental-partition-graph --extents $(PARTITION_DIR)/extents.jsonl --fixpoint $(PARTITION_DIR)/fixpoint --links $(PARTITION_DIR)/combine/links.jsonl --knowledge-graph $(PARTITION_DIR)/knowledge-graph.jsonl --targets $(PARTITION_DIR)/combine/targets.jsonl --barrier $(PARTITION_BARRIER) --fanout-limit $(PARTITION_FANOUT) --out $(PARTITION_DIR)/graph.jsonl
+
+carddemo-all: jar
+	tools/rebuild-all.sh $(PARTITION_CONFIG) cobble/out-carddemo-$$(date +%Y%m%d-%H%M)-rebuild-all $(PARTITION_SWEEPS)
 
 partition-render: partition-graph
 	$(COBBLE) cobble-experimental-partition-render --graph $(PARTITION_DIR)/graph.jsonl --out $(PARTITION_DIR)/render

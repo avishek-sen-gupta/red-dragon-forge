@@ -460,6 +460,7 @@ def test_a_call_through_a_data_item_credits_a_sink_no_member_can_be(
 def test_exec_cics_read_into_marks_the_target_as_coming_from_the_file_or_dataset(
     program_of, field, after, names_reaching
 ):
+    """RESP and RESP2 are written too, by CICS rather than from the file."""
     asg = program_of(
         [
             {
@@ -468,6 +469,8 @@ def test_exec_cics_read_into_marks_the_target_as_coming_from_the_file_or_dataset
                 "options": {
                     "FILE": {"text": "CUSTFILE", "is_literal": True},
                     "INTO": {"text": "WS-REC", "is_literal": False},
+                    "RESP": {"text": "WS-RESP", "is_literal": False},
+                    "RESP2": {"text": "WS-RESP2", "is_literal": False},
                 },
             },
             {
@@ -486,13 +489,17 @@ def test_exec_cics_read_into_marks_the_target_as_coming_from_the_file_or_dataset
                 children=[
                     field(5, "WS-REC", "X(8)", offset=0),
                     field(5, "WS-USER", "X(8)", offset=8),
+                    field(5, "WS-RESP", "S9(8)", usage="COMP", offset=16),
+                    field(5, "WS-RESP2", "S9(8)", usage="COMP", offset=20),
                 ],
             )
         ],
     )
     state, index = after(asg)
-    assert names_reaching(state, index, "WS-REC") == {"FILE:CUSTFILE"}
-    assert names_reaching(state, index, "WS-USER") == {"FILE:WS-USRSEC-FILE"}
+    assert [
+        names_reaching(state, index, name)
+        for name in ("WS-REC", "WS-USER", "WS-RESP", "WS-RESP2")
+    ] == [{"FILE:CUSTFILE"}, {"FILE:WS-USRSEC-FILE"}, {"%CICS-STATE"}, {"%CICS-STATE"}]
 
 
 def test_exec_cics_receive_map_writes_the_screen_into_its_map_record(
@@ -746,7 +753,7 @@ def test_a_move_from_a_function_reads_the_fields_its_arguments_name(
     state, index = after(asg)
     assert [
         names_reaching(state, index, name) for name in ("WS-B", "WS-C", "WS-D")
-    ] == [{"WS-A"}, {"WS-A"}, {"FUNCTION"}]
+    ] == [{"WS-A"}, {"WS-A"}, {"FUNCTION:CURRENT-DATE"}]
 
 
 def test_a_link_or_xctl_writes_its_commarea_and_nothing_without_one() -> None:
@@ -764,3 +771,23 @@ def test_a_link_or_xctl_writes_its_commarea_and_nothing_without_one() -> None:
         [operand.name for operand in write_operands(ExecCicsStatement(verb, options))]
         for verb, options in cases
     ] == [[], [], ["WS-AREA"]]
+
+
+def test_asktime_and_assign_write_every_field_they_name_from_cics_state() -> None:
+    """CICS fills ABSTIME, APPLID and SYSID from its own state; NOHANDLE names nothing."""
+    cases: tuple[tuple[str, dict[str, CicsOperand | None]], ...] = (
+        ("ASKTIME", {"ABSTIME": CicsOperand(text="WS-ABS", is_literal=False)}),
+        (
+            "ASSIGN",
+            {
+                "APPLID": CicsOperand(text="WS-APPLID", is_literal=False),
+                "SYSID": CicsOperand(text="WS-SYSID", is_literal=False),
+                "NOHANDLE": None,
+            },
+        ),
+    )
+
+    assert [
+        [operand.name for operand in write_operands(ExecCicsStatement(verb, options))]
+        for verb, options in cases
+    ] == [["WS-ABS"], ["WS-APPLID", "WS-SYSID"]]
