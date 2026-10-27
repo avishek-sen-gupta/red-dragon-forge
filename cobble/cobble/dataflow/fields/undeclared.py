@@ -13,10 +13,12 @@ from dataclasses import replace
 from functools import reduce
 from itertools import groupby
 
-from cobble.asg_walk import procedure_statements
+from cobble.asg_walk import descend, procedure_statements
 from cobble.dataflow.fields.extent import CellIndex, operand_extents
 from cobble.dataflow.fields.program_layout import program_layout
+from cobble.dataflow.fields.transfer import write_operands
 from cobble.dataflow.srccfg.literals import is_literal
+from cobble.dataflow.srccfg.statements import statement_index
 from cobol_asg.asg_types import CobolASG
 from cobol_asg.cobol_expression import FieldRefNode, RefModNode
 from cobol_asg.cobol_field import CobolField
@@ -64,16 +66,47 @@ def _anchor(path: _Path, index: CellIndex) -> int:
     )
 
 
+def _index_names(asg: CobolASG) -> frozenset[str]:
+    """OCCURS ... INDEXED BY names: declared, though as no storage a cell holds."""
+    roots = (
+        *asg.data_fields,
+        *asg.linkage_fields,
+        *asg.local_storage_fields,
+        *asg.file_fields,
+    )
+    return frozenset(
+        name.upper()
+        for root in roots
+        for node in descend(root)
+        if isinstance(node, CobolField)
+        for name in node.indexed_by
+    )
+
+
+def _written(asg: CobolASG) -> Iterator[RefModOperand]:
+    """Every write target a statement names, as the fixpoint counts them -- a CICS
+    option such as RECEIVE INTO is a typed operand only there."""
+    return (
+        target
+        for statement in statement_index(asg).values()
+        for target in write_operands(statement)
+    )
+
+
 def undeclared_names(asg: CobolASG, index: CellIndex) -> tuple[_Named, ...]:
     """Every undeclared reference's path, outermost qualifier first, with the most
-    subscripts any reference to it carries. A literal is not a reference; a name
+    subscripts any reference to it carries: every field reference, and every write
+    target the fixpoint counts. A literal and an index name are not field names; a name
     declared elsewhere is left alone, since a second declaration would make its other
     references ambiguous."""
+    references = (*_references(asg), *_written(asg))
+    indexes = _index_names(asg)
     found = sorted(
         {
             (path, len(operand.subscripts))
-            for operand in _references(asg)
+            for operand in references
             if not is_literal(operand.name)
+            and operand.name.upper() not in indexes
             and operand_extents(operand, index).reason == UNKNOWN
             for path in (
                 tuple(

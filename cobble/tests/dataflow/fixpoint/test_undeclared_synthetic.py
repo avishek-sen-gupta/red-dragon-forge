@@ -44,6 +44,8 @@ SOURCE = """\
            DISPLAY 'NOT A FIELD' WS-A.
            MOVE -1 TO WS-C.
            STRING FUNCTION TRIM(WS-A) DELIMITED BY SIZE INTO WS-C.
+           EXEC CICS RECEIVE INTO(CPY-INBOX) END-EXEC.
+           ACCEPT CPY-TODAY FROM DATE.
            STOP RUN.
 """
 
@@ -98,6 +100,8 @@ def test_undeclared_names_are_declared_as_ten_byte_text_and_their_moves_tracked(
         "CPY-NAME": ("WORKING-STORAGE", 10, 0, ("CPY-REC", "CPY-NAME")),
         "CPY-ROW": ("WORKING-STORAGE", 10, 10, ("CPY-ROW",)),
         "CPY-PART": ("WORKING-STORAGE", 12, 0, ("WS-REC", "CPY-PART")),
+        "CPY-INBOX": ("WORKING-STORAGE", 10, 0, ("CPY-INBOX",)),
+        "CPY-TODAY": ("WORKING-STORAGE", 10, 0, ("CPY-TODAY",)),
     }
     flows = _flows(out)
     assert flows["0"] == ("WS-A", "CPY-AMT", ())
@@ -111,6 +115,9 @@ def test_undeclared_names_are_declared_as_ten_byte_text_and_their_moves_tracked(
         _cells_named(out, name) for name in ("WS-A", "WS-DONE", "WS-IX", "TRIM")
     ] == [1, 0, 0, 0]
     assert _literal_cells(out) == []
+    assert [
+        dep.target.name for dep in provenance(out) if dep.target.name == "CPY-INBOX"
+    ] == ["CPY-INBOX"]
 
 
 def test_without_synthesis_an_undeclared_name_is_an_unknown_origin(

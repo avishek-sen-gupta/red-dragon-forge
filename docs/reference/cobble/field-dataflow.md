@@ -50,8 +50,8 @@ read their layout from this table; `cobble.dataflow.fields.extents_input` is its
 again whenever the ASG cache changes; a table written before the `justified` column is refused
 with a message to rerun `cobble-extents`.
 
-With `--synthesize-undeclared`, a field reference in the procedure division that the fixpoint
-would find no declaration for gets one, written to the table as if a copybook had declared it:
+With `--synthesize-undeclared`, a field reference in the procedure division, or a write target the
+fixpoint counts such as a CICS `RECEIVE INTO`, that the fixpoint would find no declaration for gets one, written to the table as if a copybook had declared it:
 
 | reference | declared as |
 |---|---|
