@@ -16,9 +16,9 @@ from cobol_asg.copybook_search import CopybookSearch
 from cobol_asg.subprocess_runner import RealSubprocessRunner
 from hlasm_asg.hlasm_bridge_failure import HlasmBridgeFailure
 from hlasm_asg.hlasm_bridge_not_found import HlasmBridgeNotFound
-from hlasm_asg.hlasm_bridge_parser import make_hlasm_parser
 from hlasm_asg.hlasm_parse_error import HlasmParseError
 from hlasm_asg.missing_syslib_directory import MissingSyslibDirectory
+from interpreter.frontends import get_hlasm_parser
 from interpreter.project.duplicate_program_in_image import DuplicateProgramInImage
 from litter.build import build
 from litter.cics_file import CicsFile
@@ -94,7 +94,7 @@ def _hlasm(base: Path, config: BuildConfig) -> HlasmPrograms:
         return NO_HLASM
     return HlasmSources(
         _sources(base, config.hlasm, "[hlasm]", _HLASM_EXTS),
-        make_hlasm_parser(tuple(base / d for d in config.hlasm.maclib_dirs)),
+        get_hlasm_parser(tuple(base / d for d in config.hlasm.maclib_dirs)),
     )
 
 

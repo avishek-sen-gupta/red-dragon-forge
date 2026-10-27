@@ -6,6 +6,9 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from catnip.system_catalog import SystemCatalog
+from interpreter.hlasm_run_inputs.run_input_builtins import (
+    unsupplied_run_input_builtins,
+)
 from interpreter.vm.builtins import compose_builtins, core_builtins
 from litter.manifest import Manifest
 
@@ -33,6 +36,8 @@ def run_plain_mode(path: Path, environ: Mapping[str, str]) -> int:
         package,
         SystemCatalog(path.parent / config.paths.system),
         config.plain,
-        compose_builtins(core_builtins(), coprocessing.builtins),
+        compose_builtins(
+            core_builtins(), unsupplied_run_input_builtins(), coprocessing.builtins
+        ),
         config.tolerant.permit_unresolved_call_targets,
     )

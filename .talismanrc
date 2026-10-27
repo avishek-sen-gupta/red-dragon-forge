@@ -69,6 +69,8 @@ fileignoreconfig:
   ignore_detectors: [filecontent]
 - filename: vendor/bank-of-z
   checksum: 5851a6da905fa54005291c767fd450082efd860e1f3ae1c1b158f576a25b7c13
+- filename: vendor/carddemo
+  checksum: 62f2350c44cb53b8ce8fe411a912c500d12fa80d0f5414a2abe1955c484ce958
 - filename: docs/superpowers/plans/2026-07-05-monorepo-migration.md
   checksum: f8e38023e439d68d9ca428c70f4408f3f46fc7fdba5d8192680a827a909600e5
 - filename: issues/issues.jsonl
