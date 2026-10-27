@@ -14,10 +14,13 @@ from functools import reduce
 from itertools import groupby
 
 from cobble.asg_walk import descend, procedure_statements
+from cobble.dataflow.depgraph.flows import IDENTITY_PREFIXES
 from cobble.dataflow.fields.extent import CellIndex, operand_extents
 from cobble.dataflow.fields.program_layout import program_layout
 from cobble.dataflow.fields.transfer import write_operands
+from cobble.dataflow.srccfg.conditions import condition_index
 from cobble.dataflow.srccfg.literals import is_literal
+from cobble.dataflow.srccfg.program import program_cfg
 from cobble.dataflow.srccfg.statements import statement_index
 from cobol_asg.asg_types import CobolASG
 from cobol_asg.cobol_expression import FieldRefNode, RefModNode
@@ -93,13 +96,34 @@ def _written(asg: CobolASG) -> Iterator[RefModOperand]:
     )
 
 
+def _named_by_cfg(asg: CobolASG, typed: frozenset[str]) -> Iterator[RefModOperand]:
+    """The names the CFG says a statement writes or reads, which is where the fixpoint
+    takes the targets of a statement the transfer does not model, such as SET ... TO
+    TRUE. A declared level-88 name is its parent's, and a name a typed reference
+    already carries comes with its qualifiers from there."""
+    conditions = condition_index(asg)
+    return (
+        RefModOperand(name=name)
+        for node in program_cfg(asg).nodes
+        for name in (*node.writes, *node.reads)
+        if name
+        and not name.startswith(IDENTITY_PREFIXES)
+        and name.upper() not in conditions
+        and name.upper() not in typed
+    )
+
+
 def undeclared_names(asg: CobolASG, index: CellIndex) -> tuple[_Named, ...]:
     """Every undeclared reference's path, outermost qualifier first, with the most
-    subscripts any reference to it carries: every field reference, and every write
-    target the fixpoint counts. A literal and an index name are not field names; a name
+    subscripts any reference to it carries: every field reference, every write target
+    the fixpoint counts, and every name the CFG gives a statement it does not model. A literal and an index name are not field names; a name
     declared elsewhere is left alone, since a second declaration would make its other
     references ambiguous."""
-    references = (*_references(asg), *_written(asg))
+    typed = (*_references(asg), *_written(asg))
+    references = (
+        *typed,
+        *_named_by_cfg(asg, frozenset(operand.name.upper() for operand in typed)),
+    )
     indexes = _index_names(asg)
     found = sorted(
         {
