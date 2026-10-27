@@ -21,6 +21,7 @@ from cobble.corpus_index import CorpusIndex
 from cobble.dataflow.fields.aliases import ALIAS_PHASE_FAILED
 from cobble.dataflow.fields.emit_extents import emit
 from cobble.dataflow.fields.extents_input import member_rows
+from cobble.dataflow.fields.extents_options import ExtentsOptions
 from cobble.dataflow.fields.side_tables import target_row
 from cobble.dataflow.fields.values import UnresolvedReason
 from cobble.dataflow.fixpoint import build_corpus
@@ -28,8 +29,8 @@ from cobble.dataflow.fixpoint.build_corpus import (
     ALIASES_FILE,
     DEFS_FILE,
     GRAPH_FILE,
-    SINKS_FILE,
     JUMPS_FILE,
+    SINKS_FILE,
     TARGETS_FILE,
     cli,
 )
@@ -163,7 +164,7 @@ def corpus(tmp_path: Path):
         for name, body in members.items():
             (asg_dir / f"{name}.json").write_text(body, encoding="utf-8")
         extents = tmp_path / "extents.jsonl"
-        emit(asg_dir, extents, declared, max_workers=1)
+        emit(asg_dir, extents, declared, ExtentsOptions(max_workers=1))
         return (
             [
                 "--asg-dir",

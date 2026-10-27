@@ -24,6 +24,7 @@ from pathlib import Path
 from cobble.cli_logging import configure_cli_logging
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.fields.emit import _declared_extents
+from cobble.dataflow.fields.extents_options import ExtentsOptions
 from cobble.dataflow.fields.program_layout import program_layout
 from cobble.dataflow.fields.side_tables import (
     JsonlWriter,
@@ -31,6 +32,7 @@ from cobble.dataflow.fields.side_tables import (
     extent_row,
     jsonl_writer,
 )
+from cobble.dataflow.fields.undeclared import with_undeclared
 from cobble.dataflow.layout import UnsizeableFieldError
 from cobble.parsing.asg_cache import first_program_at
 from cobble.path_utils import ensure_parent
@@ -48,8 +50,19 @@ def _members(asg_dir: Path) -> tuple[str, ...]:
     return tuple(sorted(p.stem for p in asg_dir.glob("*.json")))
 
 
-def _laid_out(asg_dir: Path, member: str) -> tuple[tuple[_Row, ...], str, float]:
-    """One member's rows, or the reason it has none, and how long it took.
+_Names = tuple[tuple[str, ...], ...]
+_LaidOut = tuple[tuple[_Row, ...], str, float, _Names]
+
+LISTED = 10
+
+
+def _prepared(asg: CobolASG, undeclared: bool) -> tuple[CobolASG, _Names]:
+    return with_undeclared(asg) if undeclared else (asg, ())
+
+
+def _laid_out(asg_dir: Path, member: str, undeclared: bool) -> _LaidOut:
+    """One member's rows, or the reason it has none, how long it took, and the names it
+    declared because the program used them without declaring them.
 
     Runs in a worker process, so it writes and logs nothing: the parent owns the
     one writer and the report. Every failure is a reason rather than an abort --
@@ -58,22 +71,23 @@ def _laid_out(asg_dir: Path, member: str) -> tuple[tuple[_Row, ...], str, float]
     """
     started = time.monotonic()
     try:
-        layout = program_layout(_asg_at(asg_dir / f"{member}.json"))
+        asg, names = _prepared(_asg_at(asg_dir / f"{member}.json"), undeclared)
+        layout = program_layout(asg)
     except UnsizeableFieldError as unsizeable:
-        return (), f"unsizeable: {unsizeable}", time.monotonic() - started
+        return (), f"unsizeable: {unsizeable}", time.monotonic() - started, ()
     except Exception as failure:  # noqa: BLE001 - one member must not end the run
-        return (), f"unreadable: {failure!r}", time.monotonic() - started
+        return (), f"unreadable: {failure!r}", time.monotonic() - started, ()
     rows = tuple(extent_row(ext) for ext in _declared_extents(layout, member))
-    return rows, "", time.monotonic() - started
+    return rows, "", time.monotonic() - started, names
 
 
 def _written(
-    numbered: tuple[int, tuple[str, tuple[tuple[_Row, ...], str, float]]],
+    numbered: tuple[int, tuple[str, _LaidOut]],
     total: int,
     writer: JsonlWriter,
 ) -> str:
     """Write one member's rows and report it; the reason it was skipped, or ""."""
-    n, (member, (rows, reason, seconds)) = numbered
+    n, (member, (rows, reason, seconds, names)) = numbered
     if reason:
         logger.warning("extents: [%d/%d] %s skipped: %s", n, total, member, reason)
         return reason
@@ -81,10 +95,20 @@ def _written(
     logger.info(
         "extents: [%d/%d] %s %d rows, %.1fs", n, total, member, len(rows), seconds
     )
+    if names:
+        logger.info(
+            "extents: %s declared %d names it uses but never declares: %s%s",
+            member,
+            len(names),
+            ", ".join(" OF ".join(reversed(path)) for path in names[:LISTED]),
+            ", ..." if len(names) > LISTED else "",
+        )
     return ""
 
 
-def emit(asg_dir: Path, out: Path, members: Sequence[str], max_workers: int) -> int:
+def emit(
+    asg_dir: Path, out: Path, members: Sequence[str], options: ExtentsOptions
+) -> int:
     """Lay members out across worker processes, writing them in member order.
 
     Workers finish out of order; ``map`` hands results back in submission order,
@@ -92,13 +116,17 @@ def emit(asg_dir: Path, out: Path, members: Sequence[str], max_workers: int) -> 
     """
     chosen = members if members else _members(asg_dir)
     total = len(chosen)
-    logger.info("extents: %d members from %s, %d workers", total, asg_dir, max_workers)
+    logger.info(
+        "extents: %d members from %s, %d workers", total, asg_dir, options.max_workers
+    )
     ensure_parent(out)
     with (
-        ProcessPoolExecutor(max_workers=max_workers) as pool,
+        ProcessPoolExecutor(max_workers=options.max_workers) as pool,
         jsonl_writer(out) as writer,
     ):
-        results = pool.map(_laid_out, repeat(asg_dir), chosen)
+        results = pool.map(
+            _laid_out, repeat(asg_dir), chosen, repeat(options.undeclared)
+        )
         skipped = tuple(
             reason
             for numbered in enumerate(zip(chosen, results, strict=True), 1)
@@ -134,6 +162,13 @@ def _parser() -> argparse.ArgumentParser:
         help="worker processes laying members out in parallel (default 4)",
     )
     parser.add_argument(
+        "--synthesize-undeclared",
+        action="store_true",
+        help="declare every field name a program uses but never declares, as when its"
+        " copybook is missing, as PIC X(10) in WORKING-STORAGE (under its qualifiers;"
+        " OCCURS 10 where subscripted), so the fixpoint tracks it",
+    )
+    parser.add_argument(
         "members",
         nargs="*",
         help="members to emit (default: all *.json in asg-dir)",
@@ -148,7 +183,13 @@ def cli(argv: Sequence[str] = ()) -> int:
         logger.error("extents: no ASG cache at %s", arguments.asg_dir)
         return 2
     return emit(
-        arguments.asg_dir, arguments.out, arguments.members, arguments.max_workers
+        arguments.asg_dir,
+        arguments.out,
+        arguments.members,
+        ExtentsOptions(
+            max_workers=arguments.max_workers,
+            undeclared=arguments.synthesize_undeclared,
+        ),
     )
 
 

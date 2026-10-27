@@ -76,6 +76,7 @@ from cobol_asg.cobol_statements import (
     MoveStatement,
     ReadStatement,
     RewriteStatement,
+    StringSending,
     StringStatement,
     WriteStatement,
 )
@@ -98,6 +99,7 @@ from cobol_memory.field_extent import FieldExtent
 Statement = CobolStatementType | ExecCicsStatement | UnmodelledWrite
 
 _CICS_FILE_VERBS = frozenset({"READ", "READNEXT", "READPREV"})
+COMMAREA = "COMMAREA"
 _CICS_CALL_VERBS = frozenset({"LINK", "XCTL"})
 _CICS_RECEIVERS = ("INTO", "SET")
 _RECEIVE_MAP = "RECEIVE MAP"
@@ -229,13 +231,24 @@ def _source_operand(statement: MoveStatement) -> RefModOperand:
 
 
 def _function_reads(statement: MoveStatement) -> tuple[RefModOperand, ...]:
-    """The fields a FUNCTION source's arguments read, as a COMPUTE reads them."""
     source = statement.source
     if not isinstance(source, FunctionCallOperand):
         return ()
+    return _argument_reads(source)
+
+
+def _argument_reads(function: FunctionCallOperand) -> tuple[RefModOperand, ...]:
+    """The fields a FUNCTION's arguments read, as a COMPUTE reads them."""
     return tuple(
-        read for arg in source.args for read in _expression_reads(expr_from_dict(arg))
+        read for arg in function.args for read in _expression_reads(expr_from_dict(arg))
     )
+
+
+def _sending_reads(sending: StringSending) -> tuple[RefModOperand, ...]:
+    """A STRING sending reads its field, or its FUNCTION's arguments."""
+    if isinstance(sending.function, FunctionCallOperand):
+        return _argument_reads(sending.function)
+    return (sending.value,)
 
 
 def _move_targets(statement: MoveStatement) -> tuple[RefModOperand, ...]:
@@ -628,7 +641,9 @@ def _string_writes(
     statement: StringStatement, node: str, index: CellIndex, state: State
 ) -> Iterator[Write]:
     return _union_writes(
-        tuple(sending.value for sending in statement.sendings),
+        tuple(
+            read for sending in statement.sendings for read in _sending_reads(sending)
+        ),
         _string_targets(statement),
         node,
         index,
@@ -774,7 +789,11 @@ def _cics_targets(statement: ExecCicsStatement) -> tuple[RefModOperand, ...]:
     MAP without FROM sends its output record.
     """
     if statement.verb.upper() in _CICS_CALL_VERBS:
-        return (_option_reference(statement, "COMMAREA"),)
+        return tuple(
+            _option_reference(statement, name)
+            for name in (COMMAREA,)
+            if isinstance(statement.options.get(name), CicsOperand)
+        )
     receivers = _receiver_options(statement)
     if not receivers and statement.verb.upper() == _RECEIVE_MAP:
         return (RefModOperand(name=_map_name(statement) + _MAP_INPUT_SUFFIX),)

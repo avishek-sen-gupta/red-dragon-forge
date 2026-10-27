@@ -24,7 +24,7 @@ from itertools import chain
 
 from cobble.dataflow.srccfg.arm_clauses import ARM_CLAUSES
 from cobble.dataflow.srccfg.paragraphs import paragraph_order
-from cobble.dataflow.srccfg.varying import spec_text
+from cobble.dataflow.srccfg.varying import spec_operand, spec_text
 from cobol_asg.asg_types import CobolASG
 from cobol_asg.cobol_statements import (
     ArithmeticStatement,
@@ -125,7 +125,7 @@ def _assignments(spec: PerformVaryingSpec, node: str) -> tuple[Entry, ...]:
         (
             f"{node}#init",
             MoveStatement(
-                source=RefModOperand(name=spec_text(spec.varying_from)),
+                source=spec_operand(spec.varying_from),
                 targets=[counter],
             ),
         ),
@@ -133,7 +133,7 @@ def _assignments(spec: PerformVaryingSpec, node: str) -> tuple[Entry, ...]:
             f"{node}#step",
             ArithmeticStatement(
                 op="ADD",
-                operands=[RefModOperand(name=spec_text(spec.varying_by))],
+                operands=[spec_operand(spec.varying_by)],
                 targets=[counter],
             ),
         ),

@@ -69,7 +69,7 @@ from cobble.dataflow.srccfg.synthetic import (
     io_status_field,
 )
 from cobble.dataflow.srccfg.using_argument import UsingArgument
-from cobble.dataflow.srccfg.varying import spec_text
+from cobble.dataflow.srccfg.varying import spec_reads, spec_text
 from cobble.dataflow.srccfg.whenever import SQLCA_CONDITIONS, Governing
 from cobol_asg.cobol_expression import expr_to_dict
 from cobol_asg.cobol_statements import (
@@ -982,7 +982,7 @@ def _times_test(spec: PerformTimesSpec, ctx: Ctx, path: str) -> CondFragment:
         paragraph=ctx.paragraph,
         span=ctx.span,
         atom=Atom(text=f"{times} TIMES", left=times, op=TIMES_OP),
-        reads=_dedupe((times,)),
+        reads=_dedupe(spec_reads(spec.times)),
     )
     return _exits_of(node)
 
@@ -1033,13 +1033,13 @@ def _varying_loop(
     """
     inner_body = _nest_after_specs(spec.after_specs, body, ctx, path)
     variable = spec_text(spec.varying_var)
-    init = _step_node(ctx, path, "#init", variable, (spec_text(spec.varying_from),))
+    init = _step_node(ctx, path, "#init", variable, spec_reads(spec.varying_from))
     step = _step_node(
         ctx,
         path,
         "#step",
         variable,
-        (variable, spec_text(spec.varying_by)),
+        (variable, *spec_reads(spec.varying_by)),
     )
     loop = _tested_loop(
         _until_test(spec, ctx, path),
@@ -1080,14 +1080,14 @@ def _one_after_loop(
         path,
         f"{suffix}#init",
         variable,
-        (spec_text(spec.varying_from),),
+        spec_reads(spec.varying_from),
     )
     step = _step_node(
         ctx,
         path,
         f"{suffix}#step",
         variable,
-        (variable, spec_text(spec.varying_by)),
+        (variable, *spec_reads(spec.varying_by)),
     )
     loop = _tested_loop(
         lower_condition(

@@ -31,7 +31,7 @@ the `FUNCTION` origin.
 ## cobble-extents
 
 ```
-cobble-extents --asg-dir ASG_DIR --out OUT [--max-workers N] [MEMBER ...]
+cobble-extents --asg-dir ASG_DIR --out OUT [--max-workers N] [--synthesize-undeclared] [MEMBER ...]
 ```
 
 | Flag | Meaning |
@@ -39,6 +39,7 @@ cobble-extents --asg-dir ASG_DIR --out OUT [--max-workers N] [MEMBER ...]
 | `--asg-dir` | the ASG cache |
 | `--out` | the extents table to write |
 | `--max-workers` | worker processes (default 4). Output is in member order whatever the count |
+| `--synthesize-undeclared` | declare every field name a program uses but never declares, as when its copybook is missing (below) |
 | `MEMBER` | members to emit; default every `*.json` in the cache |
 
 One row per declared name: `id`, `level`, `usage`, `extents` (one per occurrence, so `OCCURS`
@@ -48,6 +49,20 @@ qualification, start, length, level, PIC, usage, `REDEFINES`, `OCCURS`, subscrip
 read their layout from this table; `cobble.dataflow.fields.extents_input` is its reader. Run it
 again whenever the ASG cache changes; a table written before the `justified` column is refused
 with a message to rerun `cobble-extents`.
+
+With `--synthesize-undeclared`, a field reference in the procedure division that the fixpoint
+would find no declaration for gets one, written to the table as if a copybook had declared it:
+
+| reference | declared as |
+|---|---|
+| `CPY-AMT`, nothing declared | `01 CPY-AMT PIC X(10)` in WORKING-STORAGE |
+| `CPY-NAME OF CPY-REC`, neither declared | `01 CPY-REC` holding `05 CPY-NAME PIC X(10)`, its undeclared fields laid end to end |
+| `CPY-NAME OF WS-REC`, WS-REC declared | `CPY-NAME PIC X(n)` under WS-REC, redefining its first child: a view of all n of its bytes |
+| `CPY-ROW(I)` | `01 CPY-ROW PIC X(10) OCCURS 10`; with more subscripts, its synthesized qualifiers are tables too |
+
+A name declared elsewhere in the program is left alone, since a second declaration would make its
+other references ambiguous. A literal is never declared, nor is a FUNCTION named in a STRING
+sending. Each member logs the names it declared.
 
 ## cobble-dataflow-fixpoint
 

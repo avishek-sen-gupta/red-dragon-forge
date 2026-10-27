@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from cobble.dataflow.fields.emit_extents import emit
+from cobble.dataflow.fields.extents_options import ExtentsOptions
 from cobble.dataflow.fixpoint.build_corpus import cli
 
 FORGE = Path(__file__).resolve().parents[4]
@@ -27,7 +28,27 @@ def fixpoint_out(
     """Parse ``source`` as ``member``, lay it out, run the fixpoint; the out-dir."""
 
     def run(member: str, source: str) -> Path:
-        return _fixpoint(tmp_path_factory, ("--member", member), {member: source}, ())
+        return _fixpoint(
+            tmp_path_factory, {member: source}, ("--member", member), ExtentsOptions()
+        )
+
+    return run
+
+
+@pytest.fixture(scope="session")
+def fixpoint_out_undeclared(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Callable[[str, str], Path]:
+    """``fixpoint_out`` with the extents declaring every name the program uses but never
+    declares."""
+
+    def run(member: str, source: str) -> Path:
+        return _fixpoint(
+            tmp_path_factory,
+            {member: source},
+            ("--member", member),
+            ExtentsOptions(undeclared=True),
+        )
 
     return run
 
@@ -40,7 +61,7 @@ def fixpoint_corpus(
     out-dir, whose parent holds the extents."""
 
     def run(sources: Mapping[str, str]) -> Path:
-        return _fixpoint(tmp_path_factory, ("--all",), sources, ())
+        return _fixpoint(tmp_path_factory, sources, ("--all",), ExtentsOptions())
 
     return run
 
@@ -52,16 +73,16 @@ def fixpoint_corpus_with(
     """``fixpoint_corpus`` with extra fixpoint arguments."""
 
     def run(sources: Mapping[str, str], extra: tuple[str, ...]) -> Path:
-        return _fixpoint(tmp_path_factory, ("--all",), sources, extra)
+        return _fixpoint(tmp_path_factory, sources, ("--all", *extra), ExtentsOptions())
 
     return run
 
 
 def _fixpoint(
     tmp_path_factory: pytest.TempPathFactory,
-    selection: tuple[str, ...],
     sources: Mapping[str, str],
-    extra: tuple[str, ...],
+    arguments: tuple[str, ...],
+    options: ExtentsOptions,
 ) -> Path:
     from cobble.parsing.parse_corpus import Job, parse_one
 
@@ -76,7 +97,7 @@ def _fixpoint(
         )
         assert parsed.ok, parsed.error
     extents = workspace / "extents.jsonl"
-    assert emit(cache, extents, (), max_workers=1) == 0
+    assert emit(cache, extents, (), options) == 0
     out = workspace / "out"
     cli(
         [
@@ -86,10 +107,9 @@ def _fixpoint(
             str(out),
             "--extents",
             str(extents),
-            *selection,
             "--max-workers",
             "1",
-            *extra,
+            *arguments,
         ]
     )
     return out

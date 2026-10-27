@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 from cobble.dataflow.fields.emit_extents import cli, emit
+from cobble.dataflow.fields.extents_options import ExtentsOptions
 from tests.dataflow.fields.test_fields_build_corpus import _program
 
 
@@ -40,7 +41,7 @@ def test_each_member_is_reported_in_order_as_its_rows_are_written(
     out = tmp_path / "extents.jsonl"
     caplog.set_level(logging.INFO)
 
-    assert emit(asg, out, (), max_workers=2) == 3
+    assert emit(asg, out, (), ExtentsOptions(max_workers=2)) == 3
 
     rows = Counter(json.loads(line)["program"] for line in out.read_text().splitlines())
     messages = [_untimed(message) for message in caplog.messages]
@@ -61,8 +62,8 @@ def test_four_workers_write_the_table_one_worker_writes(tmp_path: Path) -> None:
     asg = _cache(tmp_path)
     serial, parallel = tmp_path / "serial.jsonl", tmp_path / "parallel.jsonl"
 
-    assert emit(asg, serial, (), max_workers=1) == 3
-    assert emit(asg, parallel, (), max_workers=4) == 3
+    assert emit(asg, serial, (), ExtentsOptions(max_workers=1)) == 3
+    assert emit(asg, parallel, (), ExtentsOptions(max_workers=4)) == 3
 
     assert parallel.read_bytes() == serial.read_bytes()
 

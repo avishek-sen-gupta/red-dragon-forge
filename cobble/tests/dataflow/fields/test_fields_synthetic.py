@@ -34,6 +34,7 @@ from pathlib import Path
 import pytest
 from cobble.dataflow.fields.emit_extents import emit
 from cobble.dataflow.fields.extent_text import NO_RANGE, byte_range
+from cobble.dataflow.fields.extents_options import ExtentsOptions
 from cobble.dataflow.fixpoint.build_corpus import cli
 from cobble.dataflow.fixpoint.query import (
     FieldStore,
@@ -114,7 +115,7 @@ def _parsed(workspace: Path) -> Path:
 def _built(workspace: Path, cache: Path) -> Path:
     out = workspace / "out"
     extents = workspace / "extents.jsonl"
-    assert emit(cache, extents, (), max_workers=1) == 0
+    assert emit(cache, extents, (), ExtentsOptions(max_workers=1)) == 0
     assert (
         cli(
             [
@@ -428,7 +429,7 @@ def two_program_artefact(tmp_path_factory) -> Path:
         )
         assert result.ok, result.error
     extents = root / "extents.jsonl"
-    assert emit(cache, extents, (), max_workers=1) == 0
+    assert emit(cache, extents, (), ExtentsOptions(max_workers=1)) == 0
     assert (
         cli(
             [

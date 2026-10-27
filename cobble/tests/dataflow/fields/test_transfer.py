@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import pytest
+from cics.statements import CicsOperand, ExecCicsStatement
 from cobble.dataflow.fields.extent import operand_extents
 from cobble.dataflow.fields.state import EMPTY, reaching, values_at
-from cobble.dataflow.fields.transfer import transfer
+from cobble.dataflow.fields.transfer import transfer, write_operands
 from cobble.dataflow.fields.values import of_value
 from cobble.dataflow.srccfg.statements import statement_index
 from cobol_asg.cobol_expression import LiteralNode
@@ -746,3 +747,20 @@ def test_a_move_from_a_function_reads_the_fields_its_arguments_name(
     assert [
         names_reaching(state, index, name) for name in ("WS-B", "WS-C", "WS-D")
     ] == [{"WS-A"}, {"WS-A"}, {"FUNCTION"}]
+
+
+def test_a_link_or_xctl_writes_its_commarea_and_nothing_without_one() -> None:
+    """A program transfer with no COMMAREA hands nothing back, so it names no target."""
+    program = CicsOperand(text="WS-PGM", is_literal=False)
+    area = CicsOperand(text="WS-AREA", is_literal=False)
+
+    cases: tuple[tuple[str, dict[str, CicsOperand | None]], ...] = (
+        ("XCTL", {"PROGRAM": program}),
+        ("LINK", {"PROGRAM": program}),
+        ("LINK", {"PROGRAM": program, "COMMAREA": area}),
+    )
+
+    assert [
+        [operand.name for operand in write_operands(ExecCicsStatement(verb, options))]
+        for verb, options in cases
+    ] == [[], [], ["WS-AREA"]]
