@@ -66,6 +66,7 @@ from cobol_asg.cobol_expression import (
     expr_from_dict,
 )
 from cobol_asg.cobol_statements import (
+    ArithmeticCorrespondingStatement,
     ArithmeticStatement,
     CallStatement,
     CobolStatementType,
@@ -78,6 +79,8 @@ from cobol_asg.cobol_statements import (
     StringStatement,
     WriteStatement,
 )
+from cobol_asg.cobol_types import CobolDataCategory, CobolTypeDescriptor
+from cobol_asg.pic_parser import parse_pic
 from cobol_asg.ref_mod import (
     FunctionCallOperand,
     RefModBinOp,
@@ -277,14 +280,25 @@ def _kind(operand: RefModOperand, index: CellIndex) -> MoveKind:
 def _cell_kind(cell: Cell) -> MoveKind:
     if cell.is_group:
         return MoveKind.GROUP
-    if _alphanumeric(cell.pic.upper()):
+    return _elementary_kind(_described(cell))
+
+
+def _elementary_kind(kind: CobolTypeDescriptor) -> MoveKind:
+    if kind.category is CobolDataCategory.ALPHANUMERIC:
         return MoveKind.ALPHANUMERIC
-    return MoveKind.OTHER
+    return MoveKind.NUMERIC if _zoned(kind) else MoveKind.OTHER
 
 
-def _alphanumeric(pic: str) -> bool:
-    symbols = set(pic.replace("(", "").replace(")", "").strip("0123456789"))
-    return bool(pic) and symbols <= {"X", "A"}
+def _described(cell: Cell) -> CobolTypeDescriptor:
+    return parse_pic(cell.pic, cell.usage)
+
+
+def _zoned(kind: CobolTypeDescriptor) -> bool:
+    return kind.category is CobolDataCategory.ZONED_DECIMAL and not kind.sign_separate
+
+
+def _whole(kind: CobolTypeDescriptor) -> int:
+    return kind.total_digits - kind.decimal_digits
 
 
 def _constant(expression: RefModExpr, index: CellIndex) -> tuple[int, ...]:
@@ -331,26 +345,123 @@ def _combined(
     return (_ARITHMETIC[op](left[0], right[0]),)
 
 
+def _first_cell(operand: RefModOperand, index: CellIndex) -> Cell:
+    return index.cells_named(operand.name, operand.qualifiers, len(operand.subscripts))[
+        0
+    ]
+
+
+def _text_into_text(
+    source: RefModOperand, target: RefModOperand, index: CellIndex
+) -> tuple[int, ...]:
+    """Left-aligned, or right-aligned into a JUSTIFIED RIGHT receiver."""
+    if (
+        isinstance(target.ref_mod_start, _REF_MODS)
+        or not _first_cell(target, index).justified
+    ):
+        return (0,)
+    if isinstance(source.ref_mod_start, _REF_MODS):
+        return ()
+    return (_first_cell(source, index).length - _first_cell(target, index).length,)
+
+
+def _integer_into_text(
+    source: RefModOperand, target: RefModOperand, index: CellIndex
+) -> tuple[int, ...]:
+    """An unsigned integer moves as its digits; a sign or a scale does not survive."""
+    kind = _described(_first_cell(source, index))
+    if kind.signed or kind.decimal_digits:
+        return ()
+    return _text_into_text(source, target, index)
+
+
+def _text_into_number(
+    source: RefModOperand, target: RefModOperand, index: CellIndex
+) -> tuple[int, ...]:
+    kind = _described(_first_cell(target, index))
+    if kind.signed or isinstance(source.ref_mod_start, _REF_MODS):
+        return ()
+    return (_first_cell(source, index).length - _whole(kind),)
+
+
+def _number_into_number(
+    source: RefModOperand, target: RefModOperand, index: CellIndex
+) -> tuple[int, ...]:
+    sent, received = (
+        _described(_first_cell(source, index)),
+        _described(_first_cell(target, index)),
+    )
+    if sent.signed != received.signed or (
+        sent.signed and sent.decimal_digits != received.decimal_digits
+    ):
+        return ()
+    return (_whole(sent) - _whole(received),)
+
+
+def _uncopied(
+    source: RefModOperand, target: RefModOperand, index: CellIndex
+) -> tuple[int, ...]:
+    return ()
+
+
+_Lead = Callable[[RefModOperand, RefModOperand, CellIndex], tuple[int, ...]]
+
+_LEADS: Mapping[tuple[MoveKind, MoveKind], _Lead] = MappingProxyType(
+    {
+        (MoveKind.ALPHANUMERIC, MoveKind.ALPHANUMERIC): _text_into_text,
+        (MoveKind.NUMERIC, MoveKind.ALPHANUMERIC): _integer_into_text,
+        (MoveKind.ALPHANUMERIC, MoveKind.NUMERIC): _text_into_number,
+        (MoveKind.NUMERIC, MoveKind.NUMERIC): _number_into_number,
+    }
+)
+
+
+def _lead(
+    source: RefModOperand, target: RefModOperand, index: CellIndex
+) -> tuple[int, ...]:
+    """How far into the source's read bytes the byte landing on the target's first byte sits:
+    0 for a byte copy, the difference in whole digits where display numerics line up on the
+    decimal point or text lines up on a number's units digit, and nothing where the move
+    rewrites the bytes."""
+    kinds = (_kind(source, index), _kind(target, index))
+    if MoveKind.GROUP in kinds:
+        return (0,)
+    return _LEADS.get(kinds, _uncopied)(source, target, index)
+
+
 def _copy_start(
     source: RefModOperand, target: RefModOperand, index: CellIndex
 ) -> tuple[int, ...]:
-    """The source byte that lands on the target's first byte, when the MOVE copies
-    byte for byte from a fixed place: a group on either side, or both alphanumeric,
-    with no subscript on the source and a reference-modification start the
-    compiler knows. Nothing otherwise."""
-    kinds = (_kind(source, index), _kind(target, index))
-    copying = MoveKind.GROUP in kinds or kinds == (
-        MoveKind.ALPHANUMERIC,
-        MoveKind.ALPHANUMERIC,
-    )
+    """The source byte that lands on the target's first byte, when the MOVE moves bytes
+    unchanged from a fixed place: a group on either side, both alphanumeric, or display
+    numerics and text lined up by digit, with no subscript on the source and a
+    reference-modification start the compiler knows. Nothing otherwise."""
     cells = index.cells_named(source.name, source.qualifiers, 0)
-    if source.subscripts or not copying or not cells:
+    if source.subscripts or not cells:
         return ()
-    base = index.extent_of(cells[0]).start
+    lead = _lead(source, target, index)
+    if not lead:
+        return ()
+    return _read_from(source, index, index.extent_of(cells[0]).start + lead[0])
+
+
+def _read_from(source: RefModOperand, index: CellIndex, base: int) -> tuple[int, ...]:
+    """``base`` moved to where a reference modification starts reading, when the
+    compiler knows that start."""
     if not isinstance(source.ref_mod_start, _REF_MODS):
         return (base,)
     offset = _constant(source.ref_mod_start, index)
     return (base + offset[0] - 1,) if offset else ()
+
+
+REBUILT = (
+    ArithmeticStatement,
+    ArithmeticCorrespondingStatement,
+    ComputeStatement,
+    StringStatement,
+)
+"""The statements that build their target's value in place -- worked out in its own
+format, or assembled from pieces -- rather than copy bytes into it from elsewhere."""
 
 
 def _implied_move(statement: WriteStatement | RewriteStatement) -> MoveStatement:

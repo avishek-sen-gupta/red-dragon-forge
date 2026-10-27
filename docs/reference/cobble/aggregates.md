@@ -35,7 +35,9 @@ field and a reader's field, or two readers' fields, that cover the same bytes of
 at the same offsets and the same size, are one class: a file no COBOL program writes still joins
 its readers. A `possible` dataset edge has no placement and is ignored; it
 never stops a field joining through its other edges. A field that any
-edge without known placement reaches, a clamped move, neither relays nor joins. `--join-unplaced` lifts
+copy without known placement reaches, a clamped move, neither relays nor joins. An edge marked
+`rebuilt` does not count: arithmetic or STRING building the field's value in place leaves it the
+datum it was, so `ADD … TO ACCT-CURR-BAL` keeps the balance in its class. `--join-unplaced` lifts
 that rule: such a field still relays and joins through its placed edges, and the unplaced edge is
 ignored. On CardDemo it adds 54 members across 16 classes (90 classes become 92), commarea fields
 of another program joining classes they already belonged to in the others. Copies inside one

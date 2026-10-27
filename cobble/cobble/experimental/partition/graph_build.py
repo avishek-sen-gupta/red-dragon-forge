@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import replace
 from itertools import groupby, product
 
 from cobble.dataflow.combine.link_row import LinkRow
@@ -25,6 +26,7 @@ from cobble.experimental.partition.span import Span
 from cobble.experimental.partition.tally import GRAPH, Tally
 
 _Moved = tuple[tuple[GraphNode, ...], tuple[Flow, ...]]
+AS_IS = (0,)
 _Pair = tuple[FieldLeaf, FieldLeaf]
 _Traced = Callable[[FillQuery], tuple[FieldLeaf, ...]]
 
@@ -77,15 +79,23 @@ def _read(traced: _Traced, dep: DepRow) -> Span:
     return Span(dep.source, traced(read_of(dep)))
 
 
-def _placed(target: Span, source: Span, pair: _Pair) -> tuple[ByteAlignment, ...]:
-    if not (target.range.exact and source.range.exact):
+def _exact(target: Span, source: Span) -> bool:
+    return target.range.exact and source.range.exact
+
+
+def _placed(
+    target: Span, source: Span, pair: _Pair, landing: tuple[int, ...]
+) -> tuple[ByteAlignment, ...]:
+    """The bytes of the source leaf, among those read, that land on the target leaf,
+    among those written, given where the first byte read landed."""
+    if not landing or not _exact(target, source):
         return ()
     s, t = pair
-    start, end = _aligned(target.range, source.range, t)
-    low, high = max(start, s.start), min(end, s.end)
+    shift = source.range.start - target.range.start - landing[0]
+    low = max(s.start, source.range.start, t.start + shift, target.range.start + shift)
+    high = min(s.end, source.range.end, t.end + shift, target.range.end + shift)
     if low >= high:
         return ()
-    shift = source.range.start - target.range.start
     return (
         ByteAlignment(
             source=low - s.start, target=low - shift - t.start, length=high - low
@@ -93,14 +103,21 @@ def _placed(target: Span, source: Span, pair: _Pair) -> tuple[ByteAlignment, ...
     )
 
 
-def _copied(barrier: Barrier, target: Span, source: Span, site: str) -> _Moved:
-    pairs = _pairs(target, source)
+def _copied(
+    barrier: Barrier, ends: tuple[Span, Span], site: str, landing: tuple[int, ...]
+) -> _Moved:
+    target, source = ends
+    placements = {
+        (s, t): _placed(target, source, (s, t), landing)
+        for s, t in _pairs(target, source)
+    }
+    missed = bool(landing) and _exact(target, source)
+    pairs = tuple(pair for pair, placed in placements.items() if placed or not missed)
     clustered = not barrier.blocks(set(pairs))
     return (
         tuple(field_node(leaf) for pair in pairs for leaf in pair),
         tuple(
-            Flow(s.node, t.node, site, clustered, _placed(target, source, (s, t)))
-            for s, t in pairs
+            Flow(s.node, t.node, site, clustered, placements[(s, t)]) for s, t in pairs
         ),
     )
 
@@ -132,7 +149,10 @@ def _moved(index: LeafIndex, traced: _Traced, barrier: Barrier, dep: DepRow) -> 
     if not dep.source.known:
         origin = _terminal(NodeKind.ORIGIN, dep.target.program, _origin_name(dep))
         return _fanned(origin, index.fields_in(dep.target), dep.site, inward=True)
-    return _copied(barrier, _span(index, dep.target), _read(traced, dep), dep.site)
+    nodes, flows = _copied(
+        barrier, (_span(index, dep.target), _read(traced, dep)), dep.site, dep.landing
+    )
+    return nodes, tuple(replace(flow, rebuilt=dep.rebuilt) for flow in flows)
 
 
 def _linked(index: LeafIndex, barrier: Barrier, link: LinkRow) -> tuple[_Moved, ...]:
@@ -140,10 +160,10 @@ def _linked(index: LeafIndex, barrier: Barrier, link: LinkRow) -> tuple[_Moved, 
     callee = byte_range(link.callee_extent, link.callee)
     site = f"{link.caller}/{link.node}"
     caller_span, callee_span = _span(index, caller), _span(index, callee)
-    entered = _copied(barrier, callee_span, caller_span, site)
+    entered = _copied(barrier, (callee_span, caller_span), site, AS_IS)
     if not link.returns:
         return (entered,)
-    return (entered, _copied(barrier, caller_span, callee_span, site))
+    return (entered, _copied(barrier, (caller_span, callee_span), site, AS_IS))
 
 
 def _edge(
@@ -168,6 +188,7 @@ def _edge(
             )
         ),
         aligned=all(flow.alignment for flow in taken),
+        rebuilt=all(flow.rebuilt for flow in taken),
     )
 
 

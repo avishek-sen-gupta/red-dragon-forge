@@ -1,4 +1,4 @@
-"""A graph edge as unify reads it: its ends, where its bytes land and how sure a dataset edge is and why, the rest of the line ignored."""
+"""A graph edge as unify reads it: its ends, where its bytes land and how sure a dataset edge is and why, and whether its statements rebuilt the target in place, the rest of the line ignored."""
 
 from __future__ import annotations
 
@@ -17,4 +17,5 @@ class ByteEdge:
     aligned: bool = False
     certainty: Certainty = Certainty.EXACT
     reasons: tuple[str, ...] = ()
+    rebuilt: bool = False
     __pydantic_config__ = ConfigDict(extra="ignore")

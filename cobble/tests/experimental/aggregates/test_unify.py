@@ -31,7 +31,9 @@ def _field(node: str, size: int, subscripts: tuple[int, ...] = ()) -> GraphNode:
     )
 
 
-def _moved(ends: tuple[str, str], *placed: tuple[int, int, int]) -> GraphEdge:
+def _moved(
+    ends: tuple[str, str], *placed: tuple[int, int, int], rebuilt: bool = False
+) -> GraphEdge:
     source, target = ends
     return GraphEdge(
         source=source,
@@ -44,6 +46,7 @@ def _moved(ends: tuple[str, str], *placed: tuple[int, int, int]) -> GraphEdge:
             ByteAlignment(source=s, target=t, length=n) for s, t, n in placed
         ),
         aligned=bool(placed),
+        rebuilt=rebuilt,
     )
 
 
@@ -69,6 +72,9 @@ GRAPH = FieldGraph(
         _field("S:WS.G", 2),
         _field("S:WS.J", 2),
         _field("S:WS.K", 2),
+        _field("R:CA.M", 2),
+        _field("S:WS.N", 2),
+        _field("S:WS.P", 2),
         GraphNode(id="S|origin|LITERAL", kind=NodeKind.ORIGIN, label="S", program="S"),
     ),
     edges=(
@@ -85,6 +91,8 @@ GRAPH = FieldGraph(
         _moved(("R:CA.H", "S:WS.J"), (0, 0, 2)),
         _moved(("S:WS.K", "S:WS.J")),
         _moved(("S|origin|LITERAL", "S:WS.B")),
+        _moved(("R:CA.M", "S:WS.N"), (0, 0, 2)),
+        _moved(("S:WS.P", "S:WS.N"), rebuilt=True),
     ),
 )
 
@@ -92,17 +100,23 @@ GRAPH = FieldGraph(
 def test_only_fields_whose_every_byte_lands_in_place_in_another_program_are_one_class(
     tmp_path: Path,
 ) -> None:
+    """A field an unplaced copy reaches stays out unless unplaced fields may join; one
+    that a statement rebuilds in place (arithmetic, STRING) keeps its class either way.
+    """
     classes = _classes(tmp_path, GRAPH)
     write_unified(tmp_path / "new" / "unified.jsonl", classes)
 
-    assert classes == (("R:CA.A", "S:WS.B"),)
+    assert classes == (("R:CA.A", "S:WS.B"), ("R:CA.M", "S:WS.N"))
     assert _classes(tmp_path, GRAPH, join_unplaced=True) == (
         ("R:CA.A", "S:WS.B"),
         ("R:CA.H", "S:WS.J"),
+        ("R:CA.M", "S:WS.N"),
     )
     assert read_unified(tmp_path / "new" / "unified.jsonl") == {
         "R:CA.A": "R:CA.A",
         "S:WS.B": "R:CA.A",
+        "R:CA.M": "R:CA.M",
+        "S:WS.N": "R:CA.M",
     }
 
 

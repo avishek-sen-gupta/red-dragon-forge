@@ -75,7 +75,9 @@ def _attrs(directory: Path, edge: GraphEdge) -> FlowAttrs:
     try:
         return FlowAttrs.model_validate(edge.attrs)
     except ValidationError as error:
-        raise _stale(directory, "an edge lacks its origin") from error
+        raise _stale(
+            directory, "an edge lacks its origin, landing or rebuilt flag"
+        ) from error
 
 
 def _flow(program: str, attrs: FlowAttrs, definers: _Reaching) -> DepRow:
@@ -92,6 +94,8 @@ def _flow(program: str, attrs: FlowAttrs, definers: _Reaching) -> DepRow:
         sink="",
         literal=attrs.literal,
         entry=_from_entry(source, reaching),
+        landing=attrs.landing,
+        rebuilt=attrs.rebuilt,
     )
 
 

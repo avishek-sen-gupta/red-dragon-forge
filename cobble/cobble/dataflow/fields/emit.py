@@ -91,6 +91,8 @@ def _attrs(edge: FlowEdge) -> dict[str, AttrValue]:
         "target_extent": extent_text(edge.target),
         "origin": edge.origin,
         "literal": edge.literal,
+        "landing": list(edge.landing),
+        "rebuilt": edge.rebuilt,
     }
 
 

@@ -67,6 +67,7 @@ def test_a_fixpoint_out_dir_reads_back_as_flow_and_sink_rows(corpus):
             site="PROGA/MAIN/1",
             definers=("PROGA/MAIN/0",),
             sink="",
+            landing=(0,),
         ),
         DepRow(
             program="PROGA",

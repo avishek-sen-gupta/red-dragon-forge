@@ -59,10 +59,15 @@ def _read_back(edge: ByteEdge) -> ByteEdge:
 
 
 def unplaced_fields(graph: ByteGraph, fields: Mapping[str, ByteNode]) -> frozenset[str]:
+    """Fields a copy of unknown placement reaches. A statement that rebuilds a field in
+    place (arithmetic, STRING) is not such a copy: the field stays the datum it was."""
     return frozenset(
         edge.target
         for edge in graph.edges
-        if not edge.aligned and edge.source in fields and edge.target in fields
+        if not edge.aligned
+        and not edge.rebuilt
+        and edge.source in fields
+        and edge.target in fields
     )
 
 

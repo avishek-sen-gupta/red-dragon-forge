@@ -43,10 +43,11 @@ cobble-extents --asg-dir ASG_DIR --out OUT [--max-workers N] [MEMBER ...]
 
 One row per declared name: `id`, `level`, `usage`, `extents` (one per occurrence, so `OCCURS`
 gives several), `program`, then arrays parallel to `extents` holding each occurrence's record,
-qualification, start, length, level, PIC, usage, `REDEFINES`, `OCCURS`, subscripts, `VALUE`
-and parent, plus the record's origin and size. The fixpoint and the queries read their layout
-from this table; `cobble.dataflow.fields.extents_input` is its reader. Run it again whenever
-the ASG cache changes.
+qualification, start, length, level, PIC, usage, `REDEFINES`, `OCCURS`, subscripts, `VALUE`,
+`JUSTIFIED RIGHT` and parent, plus the record's origin and size. The fixpoint and the queries
+read their layout from this table; `cobble.dataflow.fields.extents_input` is its reader. Run it
+again whenever the ASG cache changes; a table written before the `justified` column is refused
+with a message to rerun `cobble-extents`.
 
 ## cobble-dataflow-fixpoint
 
@@ -107,7 +108,7 @@ back edge too.
 
 | File | One row per | Holds |
 |---|---|---|
-| `graph.jsonl` | `FIELD` endpoint, and `(node, source extent, target extent)` | node rows carry only the id; edge rows are `FLOWS_TO` with the `node` that moved the bytes |
+| `graph.jsonl` | `FIELD` endpoint, and `(node, source extent, target extent)` | node rows carry only the id; edge rows are `FLOWS_TO` with the `node` that moved the bytes, `landing`: the offset in the target where the source's first byte landed, when the statement moved the bytes unchanged, or `[]` when it rewrote them (see below), and `rebuilt`: true when the statement built the target's value in place (`ADD`, `SUBTRACT`, `MULTIPLY`, `DIVIDE`, `COMPUTE`, `STRING`) |
 | `defs.jsonl` | `(program, node, source extent)` read that feeds a write | `definers` (statements whose writes reach the read; empty for a `VALUE` or nothing), `values` (quoted literals only), `reasons` |
 | `aliases.jsonl` | call site and caller window | `caller_extent` and `callee_extent` of the shared window, or the reason none is shared and the callee it stopped on |
 | `targets.jsonl` | dynamic `CALL`/`XCTL`/`LINK` site, and dynamic CICS file site | `caller`, `node`, `kind` (`program` or `file`), `transfer`, `expression`, `candidates`, `reasons`, `dropped` (values that cannot name a program, or a CICS file); a file row also carries `operand`, its operand's fact (`extent`, `values`, `writers`, `reasons`), which the combine walks back from |
@@ -123,6 +124,29 @@ warning naming the program, the statement's node and the name.
 
 An edge names the smallest declared field covering the bytes it moved, so a group write leaves
 its children out of the graph. Join on byte ranges, not ids; the query does.
+
+### Landing
+
+An edge's `landing` is set only when the statement moves the source's bytes unchanged, by IBM's
+elementary move rules (Enterprise COBOL Language Reference, "Elementary move rules" and "JUSTIFIED
+clause"):
+
+| Move | Landing |
+|---|---|
+| a group on either side, or alphanumeric to alphanumeric (a reference-modified operand is alphanumeric) | the first byte read lands at offset 0 |
+| alphanumeric into a `JUSTIFIED RIGHT` receiver | right-aligned: offset `receiver length - sender length` |
+| unsigned display integer into alphanumeric | as alphanumeric to alphanumeric |
+| alphanumeric into an unsigned display numeric | moved as an unsigned integer, so lined up on the units digit |
+| display numeric into display numeric, both unsigned, or both signed with the same scale | lined up on the decimal point |
+
+Everything else rewrites the bytes and has `[]`: a signed or scaled number into text, a sign or
+scale change under a sign, binary or packed decimal on either side, an edited picture, `STRING`,
+arithmetic, `INITIALIZE`, and every write other than `MOVE` and the move `WRITE FROM` and
+`REWRITE FROM` imply. A read from a file, a literal or a call result has no source bytes, so no
+landing either. A negative landing means the
+sender's leading bytes are truncated. A subscripted sender, or a reference modification whose
+start is not a constant, has no landing. A member directory written before `landing` existed is
+refused by the readers with a message to rerun with `--force`.
 
 ### Exit status
 

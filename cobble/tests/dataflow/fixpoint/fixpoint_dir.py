@@ -18,6 +18,7 @@ def flow_row(
     source: str,
     origin: str = "",
     literal: str = "",
+    landing: tuple[int, ...] = (0,),
 ) -> Row:
     return (
         program,
@@ -35,6 +36,8 @@ def flow_row(
                     "target_extent": target,
                     "origin": origin,
                     "literal": literal,
+                    "landing": [] if origin else list(landing),
+                    "rebuilt": False,
                 },
             }
         ),

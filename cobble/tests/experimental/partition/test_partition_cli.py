@@ -87,6 +87,7 @@ class _EdgeLine(TypedDict):
     aligned: bool
     certainty: str
     reasons: list[str]
+    rebuilt: bool
 
 
 def _edge_line(
@@ -106,6 +107,7 @@ def _edge_line(
         aligned=bool(placed),
         certainty="exact",
         reasons=[],
+        rebuilt=False,
     )
 
 

@@ -46,7 +46,7 @@ sweep loses everything a loop body wrote to every reader after the loop -- the
 exit hangs off the loop's test node, whose own state arrives through the back
 edge.
 
-The coverage counters are computed from the source, not from the answer. The 3ao
+The coverage counters are rebuilt from the source, not from the answer. The 3ao
 post-mortem found an acceptance suite passing while its walk reached 18% of
 nodes, because the denominator was derived from what the walk had produced.
 ``writes`` counts write operands the statements name; ``covered`` counts those
@@ -67,8 +67,17 @@ from cobble.dataflow.fields.extent import CellIndex, cell_index, operand_extents
 from cobble.dataflow.fields.image import initial_image
 from cobble.dataflow.fields.program_layout import NO_LAYOUT, ProgramLayout, layout_of
 from cobble.dataflow.fields.sinks import Sink, sinks_of
-from cobble.dataflow.fields.state import EMPTY, State, join, pruned, reaching, values_at
+from cobble.dataflow.fields.state import (
+    EMPTY,
+    Source,
+    State,
+    join,
+    pruned,
+    reaching,
+    values_at,
+)
 from cobble.dataflow.fields.transfer import (
+    REBUILT,
     HANDLED,
     Statement,
     Write,
@@ -117,6 +126,11 @@ class FlowEdge:
     one node can have many reaching definers, so carrying the definer here made
     each of those one edge per definer; ``ReachingDef`` holds the relation instead,
     keyed by the pair this edge already names.
+
+    ``landing`` is where the source's first byte lands, as an offset into the
+    target, when the statement moves the bytes unchanged; nothing when it rewrites
+    them or their place is not known. ``rebuilt`` says the statement built the
+    target's value in place (arithmetic, STRING), not copied bytes into it from elsewhere.
     """
 
     origin: str
@@ -124,6 +138,8 @@ class FlowEdge:
     target: FieldExtent
     node: str
     literal: str = ""
+    landing: tuple[int, ...] = ()
+    rebuilt: bool = False
 
 
 @dataclass(frozen=True)
@@ -679,6 +695,12 @@ def _definers(state: State, extent: FieldExtent) -> frozenset[str]:
     return frozenset(source.node for source in reaching(state, extent))
 
 
+def _landing(write: Write, source: Source) -> tuple[int, ...]:
+    if source.origin or not write.copy_start:
+        return ()
+    return (source.extent.start - write.copy_start[0],)
+
+
 def _at(
     statement: Statement,
     node_id: str,
@@ -693,7 +715,7 @@ def _at(
     produced it, and ``node`` already names that one.
     """
     moved = tuple(
-        (write.target, source)
+        (write, source)
         for write in writes_of(statement, node_id, index)
         if kept(node_id, write.target)
         for source in write.sources
@@ -703,11 +725,13 @@ def _at(
             FlowEdge(
                 origin=source.origin,
                 source=source.extent,
-                target=target,
+                target=write.target,
                 node=node_id,
                 literal=source.literal,
+                landing=_landing(write, source),
+                rebuilt=isinstance(statement, REBUILT),
             )
-            for target, source in moved
+            for write, source in moved
         ),
         defs=tuple(
             ReachingDef(

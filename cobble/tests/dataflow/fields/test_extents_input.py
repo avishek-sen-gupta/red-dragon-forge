@@ -17,6 +17,7 @@ from cobble.dataflow.fields.emit import _declared_extents
 from cobble.dataflow.fields.extents_input import declared_layouts
 from cobble.dataflow.fields.program_layout import ProgramLayout, program_layout
 from cobble.dataflow.fields.side_tables import extent_row
+from cobble.dataflow.fields.stale_extents import StaleExtents
 from cobble.dataflow.fixpoint.query import Side, store_of
 from cobble.dataflow.layout import Cell
 from cobol_asg.asg_types import CobolASG
@@ -118,6 +119,24 @@ def test_the_rows_rebuild_the_records_they_were_written_from(tmp_path: Path):
     assert _cell_at(rebuilt, "FILLER_3") == FILLER
     (menu,) = [record for record in rebuilt.records if record.name == MENU_RECORD]
     assert (menu.origin, menu.size, len(menu.cells)) == ("WORKING-STORAGE", 554, 108)
+
+
+def test_rows_written_before_the_justified_column_are_refused_not_read_as_left_aligned(
+    tmp_path: Path,
+):
+    path = _written(program_layout(_asg(MEMBER)), MEMBER, tmp_path / "extents.jsonl")
+    older = [
+        {
+            column: cells
+            for column, cells in json.loads(line).items()
+            if column != "justified"
+        }
+        for line in path.read_text(encoding="utf-8").splitlines()
+    ]
+    path.write_text("".join(f"{json.dumps(row)}\n" for row in older), encoding="utf-8")
+
+    with pytest.raises(StaleExtents, match="rerun cobble-extents"):
+        tuple(declared_layouts(path))
 
 
 def test_a_row_still_answers_the_four_fields_the_published_consumers_read(

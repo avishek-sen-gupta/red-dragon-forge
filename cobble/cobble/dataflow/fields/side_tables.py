@@ -178,6 +178,7 @@ _CELL_COLUMNS: Mapping[str, Callable[[DeclaredCell], _Column]] = MappingProxyTyp
         "occurs": lambda one: one.cell.occurs,
         "values": lambda one: one.cell.value,
         "figurative": lambda one: one.cell.value_is_figurative,
+        "justified": lambda one: one.cell.justified,
         "indexes": lambda one: one.cell.index,
         "decls": lambda one: one.cell.decl,
         "ordinals": lambda one: one.cell.ordinal,

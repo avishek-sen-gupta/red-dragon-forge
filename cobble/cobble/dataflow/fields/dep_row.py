@@ -11,7 +11,10 @@ from cobble.dataflow.fields.extent_text import ByteRange
 @dataclass(frozen=True)
 class DepRow:
     """One dep, with extents parsed into comparable ranges. ``entry`` says the
-    source's bytes may still hold what the program was entered with."""
+    source's bytes may still hold what the program was entered with; ``landing`` is
+    where the source's first byte landed in the target, when the bytes moved
+    unchanged, and nothing otherwise; ``rebuilt`` that the write built the target's value in place (arithmetic, STRING).
+    """
 
     program: str
     via: str
@@ -24,3 +27,5 @@ class DepRow:
     literal: str = ""
     entry: bool = False
     crossing: Crossing = Crossing.NONE
+    landing: tuple[int, ...] = ()
+    rebuilt: bool = False

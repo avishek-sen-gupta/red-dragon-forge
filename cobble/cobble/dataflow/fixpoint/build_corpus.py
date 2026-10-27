@@ -24,7 +24,8 @@ that aborts answers that for one member only.
 Five files, so that the graph holds only what nothing outside it could state:
 
   graph.jsonl    the FIELD endpoints (no attributes) and one FLOWS_TO per
-                 (node, source extent, target extent), each row tagged node or edge
+                 (node, source extent, target extent), each row tagged node or edge,
+                 with where the source's first byte landed when the bytes moved as is
   defs.jsonl     the definitions reaching each (node, source extent)
   aliases.jsonl  per call site and caller window, the bytes shared with a callee
   targets.jsonl  per dynamic call site, the candidate programs it can reach

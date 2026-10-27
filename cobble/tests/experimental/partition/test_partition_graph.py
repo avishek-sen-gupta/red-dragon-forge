@@ -76,6 +76,8 @@ def _dep(
     literal: str = "",
     sink: str = "",
     definers: tuple[str, ...] = (),
+    landing: tuple[int, ...] = (0,),
+    rebuilt: bool = False,
 ) -> DepRow:
     return DepRow(
         program="P",
@@ -87,6 +89,8 @@ def _dep(
         site=site,
         definers=definers,
         sink=sink,
+        landing=landing,
+        rebuilt=rebuilt,
     )
 
 
@@ -212,6 +216,58 @@ def test_moves_become_field_edges_by_the_declared_layout_and_the_writes_they_rea
     assert graph.barrier == "none"
 
 
+def test_bytes_are_placed_where_the_fixpoint_says_they_landed_and_nowhere_when_it_says_nothing() -> (
+    None
+):
+    cases = {
+        "slice": _dep(_at("OUT", 10, 20), _at("REC", 3, 6), "slice"),
+        "right": _dep(_at("OUT", 10, 20), _at("A", 0, 4), "right", landing=(5,)),
+        "cut": _dep(_at("C", 40, 44), _at("REC", 0, 10), "cut", landing=(-4,)),
+        "rewritten": _dep(_at("X", 20, 25), _at("A", 0, 4), "rewritten", landing=()),
+        "added": _dep(
+            _at("X", 20, 25), _at("A", 0, 4), "added", landing=(), rebuilt=True
+        ),
+    }
+    placed = {
+        name: {
+            (e.source, e.target): (e.alignments, e.aligned, e.rebuilt)
+            for e in field_graph(leaf_index(EXTENTS), (dep,), (), NoBarrier()).edges
+        }
+        for name, dep in cases.items()
+    }
+
+    assert placed == {
+        "slice": {
+            ("P:REC.A", "P:OUT.OUT"): (
+                (ByteAlignment(source=3, target=0, length=1),),
+                True,
+                False,
+            ),
+            ("P:REC.B", "P:OUT.OUT"): (
+                (ByteAlignment(source=0, target=1, length=2),),
+                True,
+                False,
+            ),
+        },
+        "right": {
+            ("P:REC.A", "P:OUT.OUT"): (
+                (ByteAlignment(source=0, target=5, length=4),),
+                True,
+                False,
+            ),
+        },
+        "cut": {
+            ("P:REC.B", "P:COPY.C"): (
+                (ByteAlignment(source=0, target=0, length=4),),
+                True,
+                False,
+            ),
+        },
+        "rewritten": {("P:REC.A", "P:AREA.X"): ((), False, False)},
+        "added": {("P:REC.A", "P:AREA.X"): ((), False, True)},
+    }
+
+
 def test_a_fanout_barrier_keeps_wide_crossings_out_of_clustering() -> None:
     graph = field_graph(leaf_index(EXTENTS), DEPS, LINKS, FanoutBarrier(limit=1))
 
@@ -267,6 +323,7 @@ def test_a_handover_through_a_byte_table_keeps_each_occurrence_apart_and_every_b
         site="S/m1",
         definers=(),
         sink="",
+        landing=(0,),
     )
     handover = LinkRow(
         caller="R",

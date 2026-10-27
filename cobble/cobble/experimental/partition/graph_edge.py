@@ -11,7 +11,7 @@ from pydantic import ConfigDict
 
 @dataclass(frozen=True, slots=True)
 class GraphEdge:
-    """Bytes moving from source to target, at how many sites, whether the named barrier lets clustering cross it, and where the bytes land: ``aligned`` when every site's placement is known, and how sure a dataset edge is."""
+    """Bytes moving from source to target, at how many sites, whether the named barrier lets clustering cross it, and where the bytes land: ``aligned`` when every site's placement is known, how sure a dataset edge is, and ``rebuilt`` when every site builds the target's value in place (arithmetic, STRING) rather than copying bytes into it."""
 
     source: str
     target: str
@@ -23,4 +23,5 @@ class GraphEdge:
     aligned: bool = False
     certainty: Certainty = Certainty.EXACT
     reasons: tuple[str, ...] = ()
+    rebuilt: bool = False
     __pydantic_config__ = ConfigDict(extra="forbid")

@@ -94,8 +94,12 @@ the link returns. An edge records how many sites move bytes along it, whether cl
 it, the barrier that decided that, and whether it joins two programs. It also records where the
 bytes land: each alignment is `{"source", "target", "length"}`, `length` bytes from offset `source`
 in the source field to offset `target` in the target field, the distinct placements over all its
-sites. `aligned` is true when every site's placement is known; a move through a clamped extent, and
-every origin and sink edge, has none. A field node carries its `size` in bytes.
+sites. A dep's placement comes from the fixpoint's `landing`, clipped to the bytes actually read
+and written; a source field none of whose bytes land in the target gets no edge. `aligned` is true
+when every site's placement is known; a statement that rewrites the bytes (arithmetic, STRING, a
+conversion between usages or into an edited picture), a move through a clamped extent, and every
+origin and sink edge, have none. `rebuilt` is true when every site's statement built the target's
+value in place (arithmetic, STRING); unify does not count such an edge as an unplaced copy. A field node carries its `size` in bytes.
 
 The graph file is a flat list, one object per line: every node as `{"node": {...}}`, then every
 edge as `{"edge": {...}}`.

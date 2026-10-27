@@ -204,6 +204,7 @@ def test_the_page_embeds_the_graph_with_each_field_s_component() -> None:
             "aligned": False,
             "certainty": "exact",
             "reasons": [],
+            "rebuilt": False,
         }
         for e in GRAPH.edges
     ]
