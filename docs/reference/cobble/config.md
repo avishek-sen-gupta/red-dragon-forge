@@ -45,7 +45,6 @@ full flag list with `--help`.
 | `cobble-bms-metadata` | corpus config `[bms]` | [viz](viz.md) |
 | `cobble-bms-render` | corpus config `[bms]` | [viz](viz.md) |
 | `cobble-experimental-partition-graph` | extents, traces, combine links | [partition](partition.md) (experimental) |
-| `cobble-experimental-partition-clusters` | partition graph | [partition](partition.md) (experimental) |
 | `cobble-experimental-partition-render` | partition graph and clusters | [partition](partition.md) (experimental) |
 | `cobble-experimental-aggregate-unify` | partition graph | [aggregates](aggregates.md) (experimental) |
 | `cobble-experimental-aggregate-matrix` | fixpoint defs, extents, unified classes | [aggregates](aggregates.md) (experimental) |

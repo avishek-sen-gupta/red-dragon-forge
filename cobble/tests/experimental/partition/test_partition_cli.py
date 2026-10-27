@@ -1,4 +1,4 @@
-"""The three commands chained over files: a fixpoint out-dir and extents in, graph, clusters, report and page out."""
+"""The commands chained over files: a fixpoint out-dir and extents in, graph and page out."""
 
 from __future__ import annotations
 
@@ -13,7 +13,6 @@ from tests.dataflow.fixpoint.fixpoint_dir import Row, fixpoint_dir, flow_row, si
 from tests.experimental.partition.graphs import LINKED
 
 from cobble.experimental.partition import (
-    clusters_cli,
     file_sites_cli,
     graph_cli,
     render_cli,
@@ -116,7 +115,7 @@ def _jsonl(path: Path, lines: Sequence[str]) -> Path:
     return path
 
 
-def test_the_commands_turn_a_fixpoint_out_dir_into_a_graph_clusters_a_report_and_a_page(
+def test_the_commands_turn_a_fixpoint_out_dir_into_a_graph_and_a_page(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     extents = _jsonl(
@@ -154,8 +153,7 @@ def test_the_commands_turn_a_fixpoint_out_dir_into_a_graph_clusters_a_report_and
         ],
     )
     graph_path = tmp_path / "graph" / "graph.jsonl"
-    clusters_path = tmp_path / "clusters.jsonl"
-    report_path, render_dir = tmp_path / "clusters.md", tmp_path / "render"
+    render_dir = tmp_path / "render"
 
     with caplog.at_level(logging.INFO):
         assert (
@@ -182,19 +180,6 @@ def test_the_commands_turn_a_fixpoint_out_dir_into_a_graph_clusters_a_report_and
         "partition graph: extent rows read 8/8 done",
         "partition graph: extent rows kept 7 of 8, for 2 programs",
     ]
-    assert (
-        clusters_cli.main(
-            [
-                "--graph",
-                str(graph_path),
-                "--out",
-                str(clusters_path),
-                "--report",
-                str(report_path),
-            ]
-        )
-        == 0
-    )
     assert (
         render_cli.main(
             [
@@ -227,44 +212,6 @@ def test_the_commands_turn_a_fixpoint_out_dir_into_a_graph_clusters_a_report_and
         _edge_line(("P|origin|LITERAL 'Y'", "P:IN.A")),
     ]
     assert len(graph_lines) == 14
-    assert [json.loads(line) for line in clusters_path.read_text().splitlines()] == [
-        {
-            "cluster": {
-                "id": 0,
-                "component": 0,
-                "program": "P",
-                "members": ["P:IN.A", "P:OUT.C"],
-            }
-        },
-        {
-            "cluster": {
-                "id": 1,
-                "component": 1,
-                "program": "P",
-                "members": ["P:IN.B", "P:OUT.D"],
-            }
-        },
-        {"isolated": "Q:LK.LK"},
-    ]
-    assert report_path.read_text(encoding="utf-8") == (
-        "# Field partitions (barrier fanout-8)\n"
-        "\n"
-        "2 components of 2+ fields, 2 clusters, 1 isolated field.\n"
-        "\n"
-        "## Component 0: P, 2 fields\n"
-        "\n"
-        "terminals: P FILE:F; P LITERAL 'Y'\n"
-        "\n"
-        "- cluster 0, 2 fields; records IN (1), OUT (1)\n"
-        "  - P.A, P.C\n"
-        "\n"
-        "## Component 1: P, 2 fields\n"
-        "\n"
-        "terminals: P FILE:F\n"
-        "\n"
-        "- cluster 1, 2 fields; records IN (1), OUT (1)\n"
-        "  - P.B, P.D\n"
-    )
     payload = json.loads(
         (render_dir / "programs" / "P.html")
         .read_text(encoding="utf-8")

@@ -5,7 +5,6 @@ from __future__ import annotations
 from cobble.dataflow.fields.extent_text import ByteRange
 from cobble.experimental.partition.byte_alignment import ByteAlignment
 from cobble.experimental.partition.certainty import Certainty
-from cobble.experimental.partition.clustering import cluster_set
 from cobble.experimental.partition.dataset_links import with_datasets
 from cobble.experimental.partition.dataset_site import DatasetSite
 from cobble.experimental.partition.extent_row import ExtentRow
@@ -210,7 +209,7 @@ def test_possible_and_unresolved_sites_get_unaligned_edges() -> None:
     }
 
 
-def test_dataset_edges_never_change_clusters() -> None:
+def test_dataset_edges_are_never_clustered_and_keep_the_graph_s_barrier() -> None:
     inside = FieldGraph(
         nodes=(
             GraphNode(
@@ -242,8 +241,11 @@ def test_dataset_edges_never_change_clusters() -> None:
         ),
     )
 
-    assert cluster_set(linked, 30).clusters == cluster_set(inside, 30).clusters
-    assert {edge.barrier for edge in linked.edges} == {"none"}
+    assert {
+        (edge.clustered, edge.barrier)
+        for edge in linked.edges
+        if edge not in inside.edges
+    } == {(False, "none")}
 
 
 def test_a_field_straddling_the_record_start_is_aligned_from_its_own_start() -> None:
