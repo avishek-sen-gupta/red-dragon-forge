@@ -9,7 +9,7 @@ from itertools import combinations
 from pathlib import Path
 
 import pytest
-from tests.experimental.partition.page_driver import drive
+from tests.experimental.partition.page_driver import drawn_points, drive
 from tests.experimental.partition.graphs import SPREAD_OUT
 from tests.experimental.partition.page_report import PageReport
 
@@ -25,7 +25,7 @@ from cobble.experimental.partition.render_cli import SCRIPTS, SOURCES
 from cobble.experimental.partition.field_graph import FieldGraph
 from cobble.experimental.partition.graph_edge import GraphEdge
 from cobble.experimental.partition.graph_node import GraphNode
-from cobble.experimental.partition.layout import DOT, JITTER, layout
+from cobble.experimental.partition.layout import JITTER, layout
 from cobble.experimental.partition.node_kind import NodeKind
 from cobble.experimental.partition.page import page
 
@@ -97,76 +97,82 @@ GRAPH = FieldGraph(
 )
 
 
-def test_linked_fields_sit_closer_than_a_field_nothing_links_and_no_two_dots_overlap() -> (
-    None
-):
-    points = layout(SPREAD_OUT)
+def _written(tmp_path: Path, graph: FieldGraph) -> Path:
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / SOURCES[0]).write_bytes(SCRIPTS[0].read_bytes())
+    (tmp_path / SOURCES[1]).write_bytes(SCRIPTS[1].read_bytes())
+    (tmp_path / SOURCES[2]).write_bytes(SCRIPTS[2].read_bytes())
+    out = tmp_path / "page.html"
+    out.write_text(page(graph, SOURCES), encoding="utf-8")
+    return out
+
+
+def test_the_page_lays_fields_out_in_their_patches_linked_ones_close_and_no_two_dots_overlapping(
+    tmp_path: Path,
+) -> None:
+    points = drawn_points(_written(tmp_path, SPREAD_OUT))
+    regions = {region.program: region for region in layout(SPREAD_OUT).regions}
     linked = [
         math.dist(points[f"P:REC.{a}"], points[f"P:REC.{b}"])
         for a, b in ("AB", "BC", "CD", "EF")
     ]
     apart = [math.dist(points["P:REC.H"], points[f"P:REC.{name}"]) for name in "ABCDEF"]
-    larger = [
-        points[node.id] for node in SPREAD_OUT.nodes if node.program in ("P", "Q")
-    ]
-    closest = min(math.dist(a, b) for a, b in combinations(larger, 2))
-
-    assert max(linked) < sum(apart) / len(apart)
-    assert closest >= 2 * DOT
-
-
-@pytest.mark.xfail(
-    reason="ForceAtlas2 collapses a two-field region to one spot (red-dragon-forge-liu0)",
-    strict=True,
-)
-def test_a_two_field_region_draws_two_separate_dots() -> None:
-    points = layout(SPREAD_OUT)
-
-    assert math.dist(points["S:REC.A"], points["S:REC.B"]) >= 2 * DOT
-
-
-def test_each_program_keeps_to_its_own_region_and_slots_sit_among_their_fields(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    with caplog.at_level(logging.INFO):
-        points = layout(SPREAD_OUT)
-    logged = [record.getMessage() for record in caplog.records]
-    clouds = {
-        program: [
-            points[node.id] for node in SPREAD_OUT.nodes if node.program == program
-        ]
-        for program in "PQS"
-    }
-    centres = {
-        program: (
-            sum(x for x, _ in cloud) / len(cloud),
-            sum(y for _, y in cloud) / len(cloud),
-        )
-        for program, cloud in clouds.items()
-    }
-    reach = {
-        program: max(math.dist(point, centres[program]) for point in cloud)
-        for program, cloud in clouds.items()
-    }
+    fields = [points[node.id] for node in SPREAD_OUT.nodes if node.program in "PQS"]
+    closest = min(math.dist(a, b) for a, b in combinations(fields, 2))
     middle = (
         (points["P:REC.A"][0] + points["Q:REC.A"][0]) / 2,
         (points["P:REC.A"][1] + points["Q:REC.A"][1]) / 2,
     )
 
     assert set(points) == {node.id for node in SPREAD_OUT.nodes}
-    assert layout(SPREAD_OUT) == points
+    assert max(linked) < sum(apart) / len(apart)
+    assert closest >= 2 * 0.6
     assert {
-        pair: math.dist(centres[pair[0]], centres[pair[1]])
-        >= reach[pair[0]] + reach[pair[1]]
+        node.id
+        for node in SPREAD_OUT.nodes
+        if node.program
+        and math.dist(
+            points[node.id],
+            (regions[node.program].x, regions[node.program].y),
+        )
+        > regions[node.program].radius
+    } == set()
+    assert math.dist(points["DS[0:4]"], middle) <= 3 * JITTER
+
+
+def test_each_program_starts_in_its_own_patch_and_slots_start_among_their_fields() -> (
+    None
+):
+    placement = layout(SPREAD_OUT)
+    points = placement.points
+    regions = {region.program: region for region in placement.regions}
+    middle = (
+        (points["P:REC.A"][0] + points["Q:REC.A"][0]) / 2,
+        (points["P:REC.A"][1] + points["Q:REC.A"][1]) / 2,
+    )
+
+    assert set(points) == {node.id for node in SPREAD_OUT.nodes}
+    assert layout(SPREAD_OUT) == placement
+    assert sorted(regions) == ["P", "Q", "S"]
+    assert {
+        pair: math.dist(
+            (regions[pair[0]].x, regions[pair[0]].y),
+            (regions[pair[1]].x, regions[pair[1]].y),
+        )
+        >= regions[pair[0]].radius + regions[pair[1]].radius
         for pair in (("P", "Q"), ("P", "S"), ("Q", "S"))
     } == {("P", "Q"): True, ("P", "S"): True, ("Q", "S"): True}
+    assert {
+        node.id
+        for node in SPREAD_OUT.nodes
+        if node.program
+        and math.dist(
+            points[node.id],
+            (regions[node.program].x, regions[node.program].y),
+        )
+        > regions[node.program].radius
+    } == set()
     assert math.dist(points["DS[0:4]"], middle) <= 3 * JITTER
-    assert logged == [
-        "partition render: programs laid out 1/3",
-        "partition render: programs laid out 2/3",
-        "partition render: programs laid out 3/3",
-        "partition render: programs laid out 3/3 done",
-    ]
 
 
 def test_the_page_embeds_the_graph_with_each_field_s_component() -> None:

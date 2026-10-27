@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import argparse
 import logging
-from collections.abc import Sequence
+import time
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import cobble.knowledge_graph
@@ -14,8 +15,7 @@ from cobble.experimental.partition.graph_index import GraphIndex, graph_index
 from cobble.experimental.partition.neighbourhood import neighbourhood
 from cobble.experimental.partition.page import page
 from cobble.experimental.partition.program_map import map_page, program_map
-from cobble.experimental.partition.progress import counted
-from cobble.experimental.partition.tally import RENDER, tenths
+from cobble.experimental.partition.tally import RENDER
 
 logger = logging.getLogger(__name__)
 
@@ -60,11 +60,33 @@ def _program_page(out: Path, index: GraphIndex, name: str) -> tuple[int, str]:
     return len(drawn.nodes), name
 
 
-def _pages(out: Path, index: GraphIndex) -> None:
+def _clock_text(seconds: float) -> str:
+    hours, within = divmod(int(seconds), 3600)
+    minutes, left = divmod(within, 60)
+    return f"{hours}h{minutes:02d}m{left:02d}s"
+
+
+def _noted(
+    written: tuple[int, str], number: int, total: int, spent: float
+) -> tuple[int, str]:
+    logger.info(
+        "%s: pages written %d/%d: %s, %d nodes, about %s left",
+        RENDER,
+        number,
+        total,
+        written[1],
+        written[0],
+        _clock_text(spent / number * (total - number)),
+    )
+    return written
+
+
+def write_pages(out: Path, index: GraphIndex, clock: Callable[[], float]) -> None:
     names = tuple(index.programs)
-    step = tenths(RENDER, "pages written", len(names))
+    started = clock()
     sizes = tuple(
-        _program_page(out, index, name) for name in counted(names, step, len(names))
+        _noted(_program_page(out, index, name), number, len(names), clock() - started)
+        for number, name in enumerate(names, 1)
     )
     largest = max(sizes, default=(0, ""))
     logger.info(
@@ -89,6 +111,6 @@ def main(argv: Sequence[str] = ()) -> int:
     _write(out / SOURCES[2], SCRIPTS[2].read_text(encoding="utf-8"))
     _write(out / "index.html", map_page(program_map(index), SOURCES))
     logger.info("partition render: program map -> %s", out / "index.html")
-    _pages(out, index)
+    write_pages(out, index, time.monotonic)
     logger.info("partition render: %d pages -> %s", len(index.programs), out)
     return 0

@@ -21,7 +21,8 @@ def _data(full: FieldGraph) -> PageData:
     drawn = folded(full, components)
     graph = drawn.graph
     stands = {node: run[0].id for node, run in drawn.occurrences.items()}
-    points = layout(graph)
+    placement = layout(graph)
+    points = placement.points
     degree = Counter(end for edge in graph.edges for end in (edge.source, edge.target))
     return PageData(
         barrier=graph.barrier,
@@ -46,6 +47,7 @@ def _data(full: FieldGraph) -> PageData:
             for node in graph.nodes
         ),
         edges=graph.edges,
+        regions=placement.regions,
     )
 
 

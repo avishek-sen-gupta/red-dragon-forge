@@ -20,6 +20,7 @@ from cobble.experimental.partition import (
 )
 from cobble.experimental.partition.extent_row import ExtentRow
 from cobble.experimental.partition.graph_file import write_graph
+from cobble.experimental.partition.graph_index import graph_index
 from cobble.dataflow.combine.link_row import LinkRow
 
 
@@ -513,11 +514,20 @@ def test_the_render_writes_a_map_shared_scripts_and_one_page_per_program(
     assert [
         record.getMessage()
         for record in caplog.records
-        if "pages written" in record.getMessage() or "largest" in record.getMessage()
-    ] == [
-        "partition render: pages written 1/3",
-        "partition render: pages written 2/3",
-        "partition render: pages written 3/3",
-        "partition render: pages written 3/3 done",
+        if "largest" in record.getMessage()
+    ] == ["partition render: largest neighbourhood P, 11 nodes"]
+
+
+def test_each_page_written_logs_its_program_size_and_the_time_left(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    ticks = iter((100.0, 110.0, 120.0, 130.0))
+    with caplog.at_level(logging.INFO):
+        render_cli.write_pages(tmp_path, graph_index(LINKED), lambda: next(ticks))
+
+    assert [record.getMessage() for record in caplog.records] == [
+        "partition render: pages written 1/3: P, 11 nodes, about 0h00m20s left",
+        "partition render: pages written 2/3: Q, 9 nodes, about 0h00m10s left",
+        "partition render: pages written 3/3: S, 3 nodes, about 0h00m00s left",
         "partition render: largest neighbourhood P, 11 nodes",
     ]

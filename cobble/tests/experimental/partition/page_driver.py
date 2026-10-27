@@ -83,3 +83,16 @@ def drive(path: Path) -> PageReport:
         report = _drive(browser.new_page(), path.resolve().as_uri(), [])
         browser.close()
         return report
+
+
+def drawn_points(path: Path) -> dict[str, tuple[float, float]]:
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(args=list(WEBGL))
+        page = browser.new_page()
+        page.goto(path.resolve().as_uri())
+        page.wait_for_function("typeof renderer !== 'undefined'")
+        placed = page.evaluate(
+            "Object.fromEntries(graph.mapNodes((id, d) => [id, [d.x, -d.y]]))"
+        )
+        browser.close()
+        return {node: (float(x), float(y)) for node, (x, y) in placed.items()}

@@ -54,6 +54,33 @@ DATA.edges.forEach(e => graph.addEdge(e.source, e.target, { ...e,
   size: Math.min(0.5, 0.1 + 0.1 * Math.log2(e.sites)),
   color: isSlot(e.source) || isSlot(e.target) ? (e.certainty === "exact" ? SLOT : "#aed6f1")
     : !e.clustered ? "#c0392b" : e.cross_program ? "#f5cba7" : "#bbb" }));
+const FA2 = graphologyLibrary.layoutForceAtlas2;
+const patches = new Map(DATA.regions.map(r => [r.program, new graphology.UndirectedGraph()]));
+graph.forEachNode((id, d) => { if (d.kind !== "dataset") patches.get(d.program).addNode(id, { x: d.x, y: d.y, size: d.size }); });
+graph.forEachEdge((e, d, s, t) => {
+  const patch = patches.get(graph.getNodeAttribute(s, "program"));
+  if (s !== t && patch && patch.hasNode(s) && patch.hasNode(t) && !patch.hasEdge(s, t)) patch.addEdge(s, t);
+});
+const meanOf = ids => ids.length ? [ids.reduce((a, i) => a + graph.getNodeAttribute(i, "x"), 0) / ids.length, ids.reduce((a, i) => a + graph.getNodeAttribute(i, "y"), 0) / ids.length] : null;
+const fieldsOf = slot => graph.neighbors(slot).filter(i => !isSlot(i));
+const slotOffsets = new Map(graph.filterNodes(isSlot).map(slot => {
+  const m = meanOf(fieldsOf(slot)), d = graph.getNodeAttributes(slot);
+  return [slot, m ? [d.x - m[0], d.y - m[1]] : [0, 0]];
+}));
+const spread = region => {
+  const patch = patches.get(region.program);
+  if (patch.order > 1) FA2.assign(patch, { iterations: 100, settings: { strongGravityMode: true, gravity: 1, scalingRatio: 2, adjustSizes: true, barnesHutOptimize: patch.order > 500 } });
+  const xs = patch.mapNodes((id, d) => d.x), ys = patch.mapNodes((id, d) => d.y);
+  const mx = xs.reduce((a, b) => a + b, 0) / xs.length, my = ys.reduce((a, b) => a + b, 0) / ys.length;
+  const reach = Math.max(1e-9, ...patch.mapNodes((id, d) => Math.hypot(d.x - mx, d.y - my)));
+  const k = reach + 1.4 > region.radius ? (region.radius - 1.4) / reach : 1;
+  patch.forEachNode((id, d) => graph.mergeNodeAttributes(id, { x: region.x + (d.x - mx) * k, y: -region.y + (d.y - my) * k }));
+};
+DATA.regions.forEach(spread);
+slotOffsets.forEach(([dx, dy], slot) => {
+  const m = meanOf(fieldsOf(slot));
+  if (m) graph.mergeNodeAttributes(slot, { x: m[0] + dx, y: m[1] + dy });
+});
 let grouping = "component", showTerminals = true, showBlocked = true, showDatasets = false, focus = null, focusTerminals = null, near = new Set(), hover = null, matching = null, chain = null, followed = null;
 const groupOf = d => d.component;
 const isField = id => graph.getNodeAttribute(id, "kind") === "field";

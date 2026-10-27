@@ -191,13 +191,16 @@ links to, with link counts.
 **A program's neighbourhood** is its own fields, origins and sinks; every node one edge from those;
 and, for each dataset slot among them, every node one edge from that slot, so following a dataset
 still shows all its writers and readers. It keeps every edge with both ends inside. The run logs
-every tenth of the pages and the largest neighbourhood.
+each page as it is written, with its program, node count and the time left, then the largest
+neighbourhood.
 
 Each program page draws its neighbourhood with the sigma.js and graphology builds cobble vendors, dark on
-light. Each program is laid out on its own, by one seeded networkx `forceatlas2_layout` over the
-edges among its nodes, with strong gravity and a node size, so linked fields pull together and dots
-keep apart; a region of exactly two fields still collapses to one spot (red-dragon-forge-liu0).
-Programs are then placed by a seeded `spring_layout` over what links them, call handovers
+light. The render only places each program's patch, sized from its field count, and starts its
+fields evenly inside it; the page lays each patch out when it is opened, by graphology's
+ForceAtlas2 (Barnes–Hut above 500 fields, strong gravity, sizes adjusted) over the edges among the
+patch's nodes, so linked fields pull together and dots keep apart, then scales the patch back inside
+its radius.
+The patches are placed by a seeded `spring_layout` over what links the programs, call handovers
 and datasets they share, and pushed apart until none overlap, so programs that exchange bytes tend
 to sit near each other. A dataset slot sits at the mean of the fields it links, jittered. A
 component is the connected component of a field over clustered edges inside its program, worked out

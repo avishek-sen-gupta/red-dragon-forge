@@ -1,20 +1,19 @@
-"""Places every node organically: each program force-laid over its own edges, programs placed by a force layout over what links them and pushed apart, dataset slots among the fields they link."""
+"""Places each program's patch, sized by its field count, by a force layout over what links the programs, pushed apart; starts each field evenly inside its patch and each dataset slot among the fields it links. The page lays the fields out inside their patches."""
 
 from __future__ import annotations
 
 import math
 from collections import Counter
 from collections.abc import Mapping, Sequence
-from functools import reduce
-from itertools import combinations, groupby
+from itertools import accumulate, combinations, groupby
 from operator import itemgetter
 
 import networkx as nx
 import numpy as np
 from cobble.experimental.partition.field_graph import FieldGraph
 from cobble.experimental.partition.node_kind import NodeKind
-from cobble.experimental.partition.progress import counted
-from cobble.experimental.partition.tally import RENDER, Tally
+from cobble.experimental.partition.page_region import PageRegion
+from cobble.experimental.partition.placement import Placement
 from numpy.typing import NDArray
 
 LAYOUT_SEED = 7
@@ -23,6 +22,8 @@ GAP = 4.0
 DOT = 1.4
 JITTER = 1.5
 SETTLE_STEPS = 3000
+PATCH = 4.0
+GOLDEN = math.pi * (3 - math.sqrt(5))
 
 _Point = tuple[float, float]
 _Points = NDArray[np.float64]
@@ -56,34 +57,18 @@ def _ends(graph: FieldGraph) -> _Ends:
     }
 
 
-def _local(ends: _Ends, members: Sequence[str]) -> nx.Graph[str]:
-    inside = frozenset(members)
-    local: nx.Graph[str] = nx.Graph()
-    local.add_nodes_from(members)
-    local.add_edges_from(
-        (member, end)
-        for member in members
-        for end in ends.get(member, ())
-        if end in inside
-    )
-    return local
+def _radius(size: int) -> float:
+    return PATCH * math.sqrt(size) + DOT
 
 
-def _region(ends: _Ends, members: Sequence[str]) -> dict[str, _Point]:
-    if len(members) == 1:
-        return {members[0]: (0.0, 0.0)}
-    placed = nx.forceatlas2_layout(
-        _local(ends, members),
-        seed=LAYOUT_SEED,
-        max_iter=FORCE_STEPS,
-        strong_gravity=True,
-        node_size=dict.fromkeys(members, DOT),
-    )
-    raw = np.array([placed[member] for member in members], dtype=np.float64)
-    scaled = raw - raw.mean(axis=0)
+def _region(members: Sequence[str]) -> dict[str, _Point]:
+    reach = _radius(len(members)) - DOT
     return {
-        member: (float(point[0]), float(point[1]))
-        for member, point in zip(members, scaled, strict=True)
+        member: (
+            reach * math.sqrt(i / len(members)) * math.cos(i * GOLDEN),
+            reach * math.sqrt(i / len(members)) * math.sin(i * GOLDEN),
+        )
+        for i, member in enumerate(members)
     }
 
 
@@ -127,12 +112,15 @@ def _settled(centres: _Points, radii: _Points, gap: float) -> bool:
 
 
 def _apart(start: _Points, radii: _Points, gap: float, steps: int) -> _Points:
-    return reduce(
-        lambda centres, _: (
-            centres if _settled(centres, radii, gap) else _pushed(centres, radii, gap)
-        ),
+    tried = accumulate(
         range(steps),
-        start.reshape(-1, 2),
+        lambda centres, _: _pushed(centres, radii, gap),
+        initial=start.reshape(-1, 2),
+    )
+    return next(
+        centres
+        for step, centres in enumerate(tried)
+        if step == steps or _settled(centres, radii, gap)
     )
 
 
@@ -171,26 +159,28 @@ def _among(ends: _Ends, points: Mapping[str, _Point], slot: str) -> _Points:
     )
 
 
-def layout(graph: FieldGraph) -> dict[str, _Point]:
+def layout(graph: FieldGraph) -> Placement:
     programs = _programs(graph)
     ends = _ends(graph)
     names = tuple(programs)
     owner = {node: name for name, members in programs.items() for node in members}
-    regions = {
-        name: _region(ends, programs[name])
-        for name in counted(names, Tally(RENDER, "programs laid out", 1), len(names))
-    }
-    radii = np.array(
-        [
-            max(math.hypot(x, y) for x, y in regions[name].values()) + DOT
-            for name in names
-        ],
-        dtype=np.float64,
-    )
+    regions = {name: _region(programs[name]) for name in names}
+    radii = np.array([_radius(len(programs[name])) for name in names], dtype=np.float64)
     centres = _centres(names, radii, _ties(graph, ends, owner))
     points = {
         node: (x + float(centre[0]), y + float(centre[1]))
         for name, centre in zip(names, centres, strict=True)
         for node, (x, y) in regions[name].items()
     }
-    return {**points, **_slots(graph, ends, points)}
+    return Placement(
+        points={**points, **_slots(graph, ends, points)},
+        regions=tuple(
+            PageRegion(
+                program=name,
+                x=float(centre[0]),
+                y=float(centre[1]),
+                radius=float(radius),
+            )
+            for name, centre, radius in zip(names, centres, radii, strict=True)
+        ),
+    )
