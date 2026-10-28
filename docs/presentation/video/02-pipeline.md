@@ -187,14 +187,14 @@ set of fields plus the paragraphs that use them. Because the weights cannot be n
 is something added in, not subtracted out, so it reads as "these fields go together". Those parts
 are candidate entities, found from behaviour rather than from names.
 
-Show three parts from the frozen run's first round (`jq '.[0].fit.factors[3,6,1]'
+Show three parts from the frozen run's first round (`jq '.[0].fit.factors[3,5,24]'
 $OUT/aggregates/decompose/rounds.json`), reading out the top fields and paragraphs:
 
 | part | top fields | top paragraphs | reads as |
 |---|---|---|---|
-| 3 | `ACCT-CURR-BAL`, `ACCT-CREDIT-LIMIT`, `ACCT-ACTIVE-STATUS`, `ACCT-GROUP-ID`, `ACCT-REISSUE-DATE`, `ACCT-OPEN-DATE` | `1500-B-LOOKUP-ACCT`, `2800-UPDATE-ACCOUNT-REC`, `1100-GET-ACCT-DATA` | the account |
-| 6 | `CUST-SSN`, `CUST-PHONE-NUM-1`/`-2`, `CUST-LAST-NAME`, `CUST-MIDDLE-NAME`, `CUST-PRI-CARD-HOLDER-IND` | `1200-SETUP-SCREEN-VARS`, `9400-GETCUSTDATA-BYCUST` | the customer |
-| 1 | `CARD-NUM`, `CARD-ACCT-ID`, `CARD-EMBOSSED-NAME`, the old expiry date | `9000-READ-DATA`, `1100-RECEIVE-MAP` | the card |
+| 3 | `ACCT-CURR-BAL`, `ACCT-CREDIT-LIMIT`, `ACCT-ACTIVE-STATUS`, `ACCT-GROUP-ID`, `ACCT-REISSUE-DATE`, `ACCT-OPEN-DATE` | `1100-GET-ACCT-DATA`, `1050-UPDATE-ACCOUNT`, `2800-UPDATE-ACCOUNT-REC` | the account |
+| 5 | `CUST-SSN`, `CUST-PHONE-NUM-1`/`-2`, `CUST-LAST-NAME`, `CUST-MIDDLE-NAME`, `CUST-PRI-CARD-HOLDER-IND` | `1200-SETUP-SCREEN-VARS`, `9400-GETCUSTDATA-BYCUST` | the customer |
+| 24 | `CARD-ACTIVE-STATUS`, `CARD-EXPIRAION-DATE`, `CC-CARD-NUM`, `CARD-EMBOSSED-NAME`, `CC-ACCT-ID`, and `WS-RETURN-MSG` | `9100-GETCARD-BYACCTCARD`, `5600-READ-CARD-RECORD` | the card, plus a screen message used in the same paragraphs |
 
 Then be honest about the rest: some parts are runs of `FILLER` bytes or file-status codes. They are
 real patterns of use, but not business entities; telling the two apart is interpretation, which is
