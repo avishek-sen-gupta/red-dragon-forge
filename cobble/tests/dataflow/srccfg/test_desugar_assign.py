@@ -390,3 +390,30 @@ def test_a_file_statement_names_the_record_its_fd_declares(program_of) -> None:
         (("WS-COPY", "FD-CARD-REC"), ("FILE:CARD-INPUT",)),
         (("FILE:CARD-OUTPUT",), ("OUT-REC",)),
     ]
+
+
+def test_a_set_reads_the_field_it_copies_and_no_literal(program_of) -> None:
+    """SET X TO Y reads Y; the TRUE of a condition and a number name no field."""
+
+    def _set(target: str, value: dict) -> dict:
+        return {
+            "type": "SET",
+            "set_type": "TO",
+            "targets": [{"kind": "ref", "name": target}],
+            "values": [value],
+        }
+
+    asg = program_of(
+        [
+            _set("WS-IX", {"kind": "ref", "name": "WS-N"}),
+            _set("WS-DONE", {"kind": "lit", "value": "TRUE"}),
+            _set("WS-IX", {"kind": "lit", "value": "1"}),
+        ]
+    )
+    nodes = lower_statements(asg.paragraphs[0].statements, _ctx(asg), "").nodes
+
+    assert [(node.writes, node.reads) for node in nodes] == [
+        (("WS-IX",), ("WS-N",)),
+        (("WS-DONE",), ()),
+        (("WS-IX",), ()),
+    ]

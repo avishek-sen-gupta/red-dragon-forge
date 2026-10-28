@@ -119,8 +119,8 @@ def test_undeclared_names_are_declared_as_ten_byte_text_and_their_moves_tracked(
     assert flows["6"] == ("WS-A", "CPY-PART", ("MISSING/MAIN-PARA/5.then.0",))
     assert "7" not in flows
     assert [
-        _cells_named(out, name) for name in ("WS-A", "WS-DONE", "WS-IX", "TRIM")
-    ] == [1, 0, 0, 0]
+        _cells_named(out, name) for name in ("WS-A", "WS-DONE", "WS-IX", "TRIM", "TRUE")
+    ] == [1, 0, 0, 0, 0]
     assert _literal_cells(out) == []
     counts = json.loads((out / "members" / PROGRAM / "counts.json").read_text())
     assert counts["writes"] - counts["covered"] == 2

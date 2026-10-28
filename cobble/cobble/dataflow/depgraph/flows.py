@@ -48,6 +48,8 @@ import dataclasses
 from collections.abc import Iterable, Mapping
 from typing import Callable
 
+from cobol_asg.operand_kind import OperandKind
+
 # (sources, targets). pass1 emits every source -> target pair in a block.
 Block = tuple[tuple[str, ...], tuple[str, ...]]
 
@@ -191,6 +193,9 @@ def program_context(asg) -> ProgramContext:
     )
 
 
+_SET_READS = frozenset({OperandKind.REF, OperandKind.ADDRESS_OF})
+
+
 # ── one rule per COBOL statement ─────────────────────────────────
 
 
@@ -291,9 +296,10 @@ def _inspect_patterns(s) -> tuple[str, ...]:
 
 
 def _set(s, ctx: ProgramContext) -> tuple[Block, ...]:
-    """SET X TO Y. SET ... TO TRUE and SET ... TO 1 drop out as literals in pass1."""
+    """SET X TO Y reads Y. The TRUE of SET ... TO TRUE, a 1 or ON is a literal the
+    parser marks as one, and reads no field."""
     return _block(
-        operand_names(v.text for v in s.values),
+        operand_names(v.text for v in s.values if v.kind in _SET_READS),
         operand_names(t.text for t in s.targets),
     )
 
