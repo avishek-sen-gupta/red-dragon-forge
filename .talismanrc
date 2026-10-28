@@ -473,4 +473,16 @@ fileignoreconfig:
   checksum: 9db638c4718856b828c238c4618e46506ac5cc419c4355cc08ef013939ce892f
 - filename: docs/superpowers/plans/2026-10-27-partition-render-neighbourhoods.md
   checksum: c737bea5b0e9c8020edc3837bb70b6b85f27030e34b04f0647ccca4ec598bbe6
+- filename: docs/presentation/video/05-close.md
+  checksum: 0a3c95795ebef9ed09835f9f4c45bf0bc34b94d9dcaa3e364e3b43eb8b40bbb9
+- filename: cobble/cobble/experimental/partition/copies_cli.py
+  checksum: 58d31c0115a97da10bcdf8d8f4916b9734baab810d200e5e43ded8b93da5a8fe
+- filename: docs/presentation/video/04-interpretation.md
+  checksum: 89105a13757c705e6ff4f4918bce57f434792c413bc0f701529eab7f78fa4c30
+- filename: cobble/cobble/experimental/partition/copies.py
+  checksum: c8ca0e5009541ba97b08322f9901a5a25f5a8b7eb5f2ccfe279843a7d6286aaf
+- filename: docs/superpowers/plans/2026-10-28-reverse-engineering-video.md
+  checksum: 8c7e7edfb55a9e73abc5e7739c20dde07bd896e8f5979276a75b8f8d7ba25caa
+- filename: cobble/skills/cobble-artifacts/SKILL.md
+  checksum: 9ba4c0d1f8ad0898372ecc0ff599311104aab29f5d2b24f6d976ea902d2a85a6
 version: "1.0"

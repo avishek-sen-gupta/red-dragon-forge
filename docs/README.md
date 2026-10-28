@@ -60,6 +60,11 @@ make -C docs/presentation serve
 Then open `http://127.0.0.1:8000`. `make -C docs/presentation artifacts` regenerates its
 evidence; the Makefile header lists what that needs.
 
+[The video scripts](presentation/video/README.md): the narrative and per-segment scripts for a
+recorded walk through the deterministic half of reverse engineering CardDemo. Segment 4 uses the
+`cobble-artifacts` agent skill, tracked in `cobble/skills/`; `make skills` copies it into
+`.claude/skills/`.
+
 ## Records
 
 Dated and frozen. Never edited after they are written.

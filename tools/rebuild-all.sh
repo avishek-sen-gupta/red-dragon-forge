@@ -66,8 +66,8 @@ for program in $(programs); do
   run cobble-fields-access --cfg "$OUT/srccfg/cfg-$program.jsonl" --asg-dir "$ASG" \
     --out "$OUT/accesses/$program.jsonl"
   run cobble-viz-callgraph --graph "$OUT/knowledge-graph.jsonl" --cfg "$OUT/srccfg/cfg-$program.jsonl" \
-    --out "$OUT/viz/$program"
-  run cobble-viz-sequence --cfg "$OUT/srccfg/cfg-$program.jsonl" --out "$OUT/viz/$program"
+    --out "$OUT/viz/$program/call-dep.json"
+  run cobble-viz-sequence --cfg "$OUT/srccfg/cfg-$program.jsonl" --out "$OUT/viz/$program/sequences.json"
 done
 
 step "Name-level dependency graph"

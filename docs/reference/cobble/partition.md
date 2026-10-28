@@ -229,6 +229,24 @@ this site), `selects-under-other-names` (the program has `SELECT`s, not this one
 `only-non-file-targets` (the program has only program targets), `program-unknown` (neither table
 names the program). On CardDemo all 181 sites resolve: 37 by a CICS file target, 144 by a `SELECT`.
 
+## cobble-experimental-partition-copies
+
+```text
+cobble-experimental-partition-copies --graph GRAPH --extents EXTENTS --width N --start 'NODE_ID' [--start 'NODE_ID' ...]
+```
+
+Quote each id: a file slot such as `AWS.M2.CARDDEMO.CARDDATA.VSAM.KSDS[0:16]` is a glob to the shell.
+
+Every place holding all `N` bytes of a value, followed byte by byte through `graph.jsonl` from each
+start's offset 0. The walk goes forward to every copy, through buffers of any size, then back from
+each copy no wider than the value to what fed it, never entering a wider field (where other values
+share the bytes). `rebuilt` edges are not followed. A field and the field it directly `REDEFINES`
+(from `extents.jsonl`) are one location; sibling record variants that only share bytes are not. A
+file slot reached on the way starts the walk again. Prints one line per program, file slots first,
+each place as its id plus `+base` when the value starts past offset 0. A start missing from the
+graph, holding fewer than `N` bytes, or an `N` below 1, exits 2. Edges marked `overlapping-layouts` carry no
+alignment, so a file written with several record layouts is not crossed.
+
 ## Limits
 
 - The fixpoint merges paths: a move whose subscript takes several values reaches every candidate
