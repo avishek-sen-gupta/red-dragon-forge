@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from cobble.dataflow.combine.link_row import LinkRow
 from cobble.build_graph import _build_dynamic_targets, _dynamic_call_targets
 from cobble.corpus_index import CorpusIndex
 from cobble.dataflow.fields.aliases import ALIAS_PHASE_FAILED
@@ -663,9 +664,14 @@ def test_the_run_emits_the_alias_table_and_counts_its_dead_ends(corpus, capsys):
 
     assert cli(argv) == 0
 
-    rows = _rows(out_dir / ALIASES_FILE)
-    assert {row["callee"] for row in rows} == {"XPROGB", "XPROGZ"}
-    assert [row["reason"] for row in rows if row["reason"]] == ["callee-not-in-cache"]
+    rows = tuple(
+        LinkRow.model_validate_json(line)
+        for line in (out_dir / ALIASES_FILE).read_text(encoding="utf-8").splitlines()
+    )
+    assert sorted((row.transfer, row.callee, row.reason) for row in rows) == [
+        ("LINK", "XPROGB", ""),
+        ("LINK", "XPROGZ", "callee-not-in-cache"),
+    ]
     summary = json.loads(capsys.readouterr().out.splitlines()[-1])
     assert summary["aliased"] == 1
     assert summary["alias_dead_ends"] == {"callee-not-in-cache": 1}

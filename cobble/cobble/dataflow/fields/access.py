@@ -36,6 +36,7 @@ class AccessRow:
 
     program: str
     site: str
+    node: str
     paragraph: str
     extent: FieldExtent
 
@@ -84,6 +85,7 @@ def _rows_for_node(program: str, node: Node, idx: CellIndex) -> tuple[AccessRow,
         AccessRow(
             program=program,
             site=f"{program}/{node.id}",
+            node=node.id,
             paragraph=node.paragraph,
             extent=extent,
         )

@@ -63,6 +63,7 @@ def _one_program(program: str = "PROGA") -> Cfg:
         program=program,
         nodes=(_label("MAIN"), _assign("MAIN/0", "WS-FLAG-A")),
         edges=(Edge(source="MAIN#label", target="MAIN/0", kind=EdgeKind.FLOW),),
+        entry="MAIN#label",
     )
 
 
@@ -80,6 +81,7 @@ def _branching() -> Cfg:
             Edge(source="MAIN/0", target="MAIN/1", kind=EdgeKind.TRUE),
             Edge(source="MAIN/0", target="MAIN/2", kind=EdgeKind.FALSE),
         ),
+        entry="MAIN#label",
     )
 
 
@@ -88,6 +90,7 @@ def _caller(callee: str, transfer: str = "CICS_LINK") -> Cfg:
         program="PROGA",
         nodes=(_label("MAIN"), _call("MAIN/0", callee, transfer=transfer)),
         edges=(Edge(source="MAIN#label", target="MAIN/0", kind=EdgeKind.FLOW),),
+        entry="MAIN#label",
     )
 
 
@@ -185,6 +188,7 @@ def test_a_double_quote_in_a_predicate_does_not_break_the_dot() -> None:
         program="PROGA",
         nodes=(_test_node("MAIN/0", 'WS-FLAG-A == "A"'),),
         edges=(),
+        entry="",
     )
 
     text = dot_of((cfg,))
@@ -197,6 +201,7 @@ def test_a_backslash_in_a_label_is_escaped() -> None:
         program="PROGA",
         nodes=(_test_node("MAIN/0", "WS-PATH == 'A\\B'"),),
         edges=(),
+        entry="",
     )
 
     text = dot_of((cfg,))

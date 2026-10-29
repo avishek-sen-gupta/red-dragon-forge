@@ -32,7 +32,7 @@ JSONL. Each row has a `type`:
 
 | Row | Holds |
 |---|---|
-| `program` | opens a program's CFG. The first is the seed. `"external": true` marks a program the cache does not hold |
+| `program` | opens a program's CFG. The first is the seed. `entry` is the label node of its first paragraph in source order (`""` for a program with no paragraphs; `%EXTERNAL#label` for an external one). `"external": true` marks a program the cache does not hold |
 | `node` | one node of the preceding program |
 | `edge` | one edge of the preceding program |
 | `call` | after all programs: `caller`, `node`, `transfer`, `program` (callee), `entry` (the callee node the call lands on), `resolved`, `commarea`, `expression`, `reasons`, `certain` |

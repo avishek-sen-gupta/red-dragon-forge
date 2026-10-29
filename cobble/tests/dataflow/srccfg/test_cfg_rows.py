@@ -96,11 +96,17 @@ def test_a_program_row_and_a_call_row_read_back_as_what_they_hold() -> None:
         certain=False,
     )
 
-    program = CFG_ROWS.validate_json(program_row("PROGA").model_dump_json())
+    program = CFG_ROWS.validate_json(
+        program_row("PROGA", "MAIN#label").model_dump_json()
+    )
     called = CFG_ROWS.validate_json(call_row(call).model_dump_json())
 
     assert isinstance(program, CfgProgramRow)
-    assert program.program == "PROGA"
+    assert (program.program, program.entry, program.external) == (
+        "PROGA",
+        "MAIN#label",
+        False,
+    )
     assert isinstance(called, CfgCallRow)
     assert called.to_call() == call
 
@@ -129,7 +135,7 @@ def test_reach_rows_read_back_and_a_cfg_reader_sees_only_the_graph(
         summary_row("MAIN/0", 3),
     )
     rows = (
-        program_row("PROGA"),
+        program_row("PROGA", ""),
         node_row("PROGA", NODE),
         node_row("PROGA", end),
         edge_row("PROGA", edge),
@@ -142,5 +148,5 @@ def test_reach_rows_read_back_and_a_cfg_reader_sees_only_the_graph(
         tuple(CFG_ROWS.validate_json(row.model_dump_json()) for row in reach) == reach
     )
     assert load_bundle(path).cfgs == (
-        Cfg(program="PROGA", nodes=(NODE, end), edges=(edge,)),
+        Cfg(program="PROGA", nodes=(NODE, end), edges=(edge,), entry=""),
     )

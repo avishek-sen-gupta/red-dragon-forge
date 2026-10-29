@@ -12,7 +12,10 @@ from cobble.dataflow.fields.access import (
     _names_from_node,
     accesses,
 )
+from cobble.dataflow.fields.access_extent_line import AccessExtentLine
+from cobble.dataflow.fields.access_line import AccessLine
 from cobble.dataflow.fields.access_query import _overlaps, query
+from cobble.dataflow.fields.access_report import cli
 from cobble.dataflow.srccfg.bundle import Bundle, CfgDocumentError, bundle_jsonl
 from cobble.dataflow.srccfg.cfg import Atom, Cfg, Node, NodeKind
 from cobble.dataflow.fields.trace_query import ByteRange
@@ -97,7 +100,7 @@ def _write_cfgs(path: Path, *cfgs: Cfg) -> Path:
 
 
 def _program(name: str, *nodes: Node) -> Cfg:
-    return Cfg(program=name, nodes=nodes, edges=())
+    return Cfg(program=name, nodes=nodes, edges=(), entry="")
 
 
 def _minimal_asg(program: str, fields: list[dict]) -> dict:
@@ -130,10 +133,35 @@ def test_accesses_emits_row_for_assign_read(tmp_path: Path) -> None:
 
     rows = accesses(cfg_path, asg_dir)
 
-    assert len(rows) == 1
-    assert rows[0].program == "PROG"
-    assert rows[0].extent.field_name == "WS-A"
-    assert rows[0].paragraph == "MAIN"
+    assert [
+        (row.program, row.site, row.node, row.paragraph, row.extent.field_name)
+        for row in rows
+    ] == [("PROG", "PROG/MAIN/0", "MAIN/0", "MAIN", "WS-A")]
+
+
+def test_the_accesses_table_reads_back_through_its_line_model(tmp_path: Path) -> None:
+    asg_dir, cfg = _one_assign_program(tmp_path)
+    cfg_path = _write_cfgs(tmp_path / "cfg.jsonl", cfg)
+    out = tmp_path / "accesses.jsonl"
+
+    cli(("--cfg", str(cfg_path), "--asg-dir", str(asg_dir), "--out", str(out)))
+    lines = tuple(
+        AccessLine.model_validate_json(line)
+        for line in out.read_text(encoding="utf-8").splitlines()
+    )
+
+    assert lines == (
+        AccessLine(
+            kind="access",
+            program="PROG",
+            site="PROG/MAIN/0",
+            node="MAIN/0",
+            paragraph="MAIN",
+            extent=AccessExtentLine(
+                field="WS-A", region="working_storage", start=0, end=4, clamped=False
+            ),
+        ),
+    )
 
 
 def test_accesses_emits_row_for_test_condition(tmp_path: Path) -> None:

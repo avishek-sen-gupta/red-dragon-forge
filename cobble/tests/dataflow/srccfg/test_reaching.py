@@ -874,7 +874,7 @@ def test_an_unresolved_atom_that_reads_like_a_predicate_is_still_marked() -> Non
         paragraph="MAIN",
         atom=Atom(text="INVALID KEY ", resolved=False),
     )
-    cfg = Cfg(program="PROGA", nodes=(node,), edges=())
+    cfg = Cfg(program="PROGA", nodes=(node,), edges=(), entry="")
 
     assert guard_text(cfg, ((node.id, EdgeKind.TRUE),)) == ("UNRESOLVED: INVALID KEY",)
     assert guard_text(cfg, ((node.id, EdgeKind.FALSE),)) == (
@@ -942,7 +942,7 @@ def test_the_entry_is_the_implicit_paragraph_when_the_source_has_one(asg_of) -> 
 
 
 def test_an_empty_program_answers_nothing_rather_than_failing(asg_of) -> None:
-    cfg = Cfg(program="PROGA", nodes=(), edges=())
+    cfg = Cfg(program="PROGA", nodes=(), edges=(), entry="")
 
     reaching = reaching_conditions(cfg)
 
@@ -1018,6 +1018,7 @@ def test_a_return_to_anything_but_the_calls_resume_is_not_taken() -> None:
             Edge(source="P-ONE/0", target="P-ONE#end", kind=EdgeKind.FLOW),
             Edge(source="P-ONE#end", target="MAIN/1", kind=EdgeKind.RETURN),
         ),
+        entry="",
     )
 
     reaching = reaching_conditions(cfg)

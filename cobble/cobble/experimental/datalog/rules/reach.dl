@@ -1,0 +1,28 @@
+// Valid-path reachability: a PERFORM returns to its caller, no fall-through past a performed range end, RETURN edges never followed.
+#ifndef RULES_REACH_DL
+#define RULES_REACH_DL
+#include "schema.dl"
+
+.decl intra(p:symbol, a:symbol, b:symbol, k:symbol)
+intra(P,A,B,K) :- cfg_edge(P,A,B,K), K != "PERFORM", K != "RETURN".
+.decl perform(p:symbol, s:symbol, l:symbol, r:symbol, e:symbol)
+perform(P,S,L,R,E) :- cfg_perform(P,S,R,E), R != "-", cfg_edge(P,S,L,"PERFORM").
+.decl rin(p:symbol, l:symbol, e:symbol, n:symbol)
+rin(P,L,E,L) :- perform(P,_,L,_,E).
+rin(P,L,E,B) :- rin(P,L,E,A), A != E, intra(P,A,B,_).
+rin(P,L,E,R) :- rin(P,L,E,S), summary(P,S,R).
+.decl summary(p:symbol, s:symbol, r:symbol)
+summary(P,S,R) :- perform(P,S,L,R,E), rin(P,L,E,E).
+.decl top(p:symbol, n:symbol)
+top(P,N) :- cfg_entry(P,N).
+top(P,B) :- top(P,A), intra(P,A,B,_).
+top(P,B) :- top(P,A), summary(P,A,B).
+.decl entered(p:symbol, l:symbol, e:symbol)
+entered(P,L,E) :- top(P,S), perform(P,S,L,_,E).
+entered(P,L2,E2) :- entered(P,L,E), rin(P,L,E,S), perform(P,S,L2,_,E2).
+.decl reach(p:symbol, n:symbol)
+reach(P,N) :- top(P,N).
+reach(P,N) :- entered(P,L,E), rin(P,L,E,N).
+.decl branch(p:symbol, d:symbol, br:symbol)
+branch(P,D,K) :- cfg_node(P,D,"TEST",_,_,_), cfg_edge(P,D,_,K), (K="TRUE"; K="FALSE").
+#endif

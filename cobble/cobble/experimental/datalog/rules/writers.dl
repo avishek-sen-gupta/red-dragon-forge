@@ -1,0 +1,25 @@
+// Writers of a stated target_slot(slot), split into setters (new bytes from a non-file origin or another dataset) and write-backs.
+#ifndef RULES_WRITERS_DL
+#define RULES_WRITERS_DL
+#include "bytes.dl"
+
+.decl target_slot(slot:symbol)
+.decl writer(p:symbol, field:symbol, slot:symbol)
+writer(P,F,D) :- target_slot(D), slot_edge(F,D,_,_,_), slot(F,"field",P,_,_,_,_).
+.decl walk_back(f:symbol, d:symbol, x:symbol, s:number, e:number, via:symbol)
+walk_back(F,D,F,SO,SO+L,F) :- writer(_,F,D), slot_align(F,D,SO,_,L).
+walk_back(F,D,F,0,Z,F) :- writer(_,F,D), !aligned(F,D), slot(F,_,_,_,_,_,Z).
+walk_back(F,D,X,XS,XE,Y) :- walk_back(F,D,Y,S,E,_), slot_align(X,Y,SO,TO,L), X != D,
+    LO = max(S,TO), HI = min(E,TO+L), LO < HI, XS = SO+LO-TO, XE = SO+HI-TO.
+walk_back(F,D,X,0,Z,Y) :- walk_back(F,D,Y,_,_,_), slot_edge(X,Y,_,_,_), !aligned(X,Y), X != D, slot(X,_,_,_,_,_,Z).
+.decl fed_by_target(y:symbol, d:symbol)
+fed_by_target(Y,D) :- target_slot(D), slot_edge(D,Y,_,_,_).
+.decl new_source(p:symbol, f:symbol, source:symbol, s:number, e:number)
+new_source(P,F,X,S,E) :- writer(P,F,D), walk_back(F,D,X,S,E,_), origin(X,_,K,_), K != "FILE".
+new_source(P,F,X,S,E) :- writer(P,F,D), walk_back(F,D,X,S,E,Y), origin(X,_,"FILE",_), !fed_by_target(Y,D).
+new_source(P,F,X,S,E) :- writer(P,F,D), walk_back(F,D,X,S,E,_), slot(X,"dataset",_,_,_,_,_), X != D.
+.decl setter(p:symbol, f:symbol)
+setter(P,F) :- new_source(P,F,_,_,_).
+.decl writes_back(p:symbol, f:symbol)
+writes_back(P,F) :- writer(P,F,_), !setter(P,F).
+#endif

@@ -50,7 +50,12 @@ def _move(source: str, target: str) -> dict:
 def _cfg(program_of, statements: list[dict]) -> Cfg:
     asg = program_of(statements)
     fragment = lower_statements(asg.paragraphs[0].statements, _ctx(asg), "")
-    return Cfg(program="PROGA", nodes=fragment.nodes, edges=fragment.edges)
+    return Cfg(
+        program="PROGA",
+        nodes=fragment.nodes,
+        edges=fragment.edges,
+        entry=fragment.entry,
+    )
 
 
 def _atom_texts(cfg: Cfg) -> list[str]:

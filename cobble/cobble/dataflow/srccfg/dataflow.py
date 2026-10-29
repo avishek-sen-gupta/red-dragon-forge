@@ -975,5 +975,10 @@ def with_handler_edges(cfg: Cfg) -> Cfg:
     return (
         cfg
         if not added and not any(unresolved_by_node.values())
-        else Cfg(program=cfg.program, nodes=updated_nodes, edges=(*cfg.edges, *added))
+        else Cfg(
+            program=cfg.program,
+            nodes=updated_nodes,
+            edges=(*cfg.edges, *added),
+            entry=cfg.entry,
+        )
     )

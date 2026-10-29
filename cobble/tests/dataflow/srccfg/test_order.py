@@ -27,6 +27,7 @@ def _cfg(edges: Sequence[tuple[str, str]], loose: Sequence[str] = ()) -> Cfg:
             Edge(source=source, target=target, kind=EdgeKind.FLOW)
             for source, target in edges
         ),
+        entry="",
     )
 
 

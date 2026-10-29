@@ -11,4 +11,5 @@ class CfgProgramRow(BaseModel):
 
     type: Literal[CfgRowType.PROGRAM]
     program: str
+    entry: str
     external: bool = False

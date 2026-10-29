@@ -42,6 +42,7 @@ from cobble.dataflow.depgraph.checker import (
 )
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.depgraph.config import load_depgraph_config
+from cobble.dataflow.depgraph.edge_line import EdgeLine
 from cobble.dataflow.depgraph.flows import (
     FILE_PREFIX,
     MAP_PREFIX,
@@ -161,15 +162,9 @@ def main() -> int:
                     node_programs[a].add(program)
                     node_programs[b].add(program)
                     edge_fh.write(
-                        json.dumps(
-                            {
-                                "src": a,
-                                "dst": b,
-                                "program": program,
-                                "seq": i,
-                                "verb": verb,
-                            }
-                        )
+                        EdgeLine(
+                            src=a, dst=b, program=program, seq=i, verb=verb
+                        ).model_dump_json()
                         + "\n"
                     )
 

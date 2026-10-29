@@ -50,6 +50,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
 
+from cobble.dataflow.combine.link_row import LinkRow
 from cobble.dataflow.fields.sink import Sink
 from cobble.dataflow.fields.values import EMPTY as VALUES_EMPTY
 from cobble.dataflow.fields.values import ValueSet
@@ -296,18 +297,16 @@ def alias_row(alias: CommareaAlias) -> _Row:
     """
     return (
         alias_identity(alias.caller, alias.node, alias.caller_extent),
-        json.dumps(
-            {
-                "caller": alias.caller,
-                "node": alias.node,
-                "transfer": alias.transfer,
-                "callee": alias.callee,
-                "caller_extent": alias.caller_extent,
-                "callee_extent": alias.callee_extent,
-                "returns": alias.returns,
-                "reason": alias.reason,
-            }
-        ),
+        LinkRow(
+            caller=alias.caller,
+            node=alias.node,
+            transfer=alias.transfer,
+            callee=alias.callee,
+            caller_extent=alias.caller_extent,
+            callee_extent=alias.callee_extent,
+            returns=alias.returns,
+            reason=alias.reason,
+        ).model_dump_json(),
     )
 
 

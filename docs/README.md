@@ -36,6 +36,7 @@ Commands and file shapes here can change without notice.
 |---|---|
 | Field partitions | [Field partitions](reference/cobble/partition.md): the field graph of the path traces, dataset links between file writers and readers, clusters inside each program, and the WebGL page with its datasets view |
 | Domain aggregates | [Domain aggregates](reference/cobble/aggregates.md): fields unified across programs, the field co-occurrence matrix, and NMF in rounds from strict to loose thresholds |
+| Datalog facts | [Datalog facts](reference/cobble/datalog.md): a run written as Soufflé facts and their schema, and the generic rule library a question includes |
 
 ## Roadmaps
 

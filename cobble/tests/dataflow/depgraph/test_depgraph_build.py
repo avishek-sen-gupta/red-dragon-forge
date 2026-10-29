@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from cobble.dataflow.depgraph.edge_line import EdgeLine
+
 
 def _moving(program: str, source: str, target: str) -> dict:
     return {
@@ -64,10 +66,10 @@ def test_every_program_a_member_holds_contributes_its_edges(tmp_path: Path) -> N
     )
 
     edges = [
-        json.loads(line)
+        EdgeLine.model_validate_json(line)
         for line in (tmp_path / "graph" / "edges.jsonl").read_text().splitlines()
     ]
-    assert [(e["src"], e["dst"], e["program"]) for e in edges] == [
-        ("WS-A", "WS-B", "MEMBERA"),
-        ("WS-C", "WS-D", "MEMBERA"),
+    assert edges == [
+        EdgeLine(src="WS-A", dst="WS-B", program="MEMBERA", seq=0, verb="MOVE"),
+        EdgeLine(src="WS-C", dst="WS-D", program="MEMBERA", seq=0, verb="MOVE"),
     ]

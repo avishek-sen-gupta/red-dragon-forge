@@ -370,7 +370,8 @@ cobble-fields-access --cfg CFG --asg-dir DIR --out OUT
 ```
 
 Every site in a CFG file that reads a field, with the bytes it reads: one `access` row per site
-and extent.
+and extent, holding `program`, `site` (`program/node`), `node` (the CFG node id), `paragraph` and
+`extent` (`field`, `region`, `start`, `end`, `clamped`).
 
 ## cobble-access-query
 

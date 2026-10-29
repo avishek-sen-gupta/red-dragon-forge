@@ -1,0 +1,32 @@
+// Guards: the test outcomes every valid path from a program's entry to a stated site(p, n) takes.
+#ifndef RULES_GUARDS_DL
+#define RULES_GUARDS_DL
+#include "reach.dl"
+
+.decl site(p:symbol, n:symbol)
+.decl coreach(p:symbol, w:symbol, n:symbol)
+coreach(P,W,W) :- site(P,W).
+coreach(P,W,A) :- coreach(P,W,B), cfg_edge(P,A,B,_).
+.decl cand(p:symbol, d:symbol, k:symbol)
+cand(P,D,K) :- site(P,W), branch(P,D,K), reach(P,D), coreach(P,W,D).
+.decl step(p:symbol, d:symbol, k:symbol, a:symbol, b:symbol)
+step(P,D,K,A,B) :- cand(P,D,K), intra(P,A,B,K2), (A != D ; K2 != K).
+.decl arin(p:symbol, d:symbol, k:symbol, l:symbol, e:symbol, n:symbol)
+arin(P,D,K,L,E,L) :- cand(P,D,K), perform(P,_,L,_,E).
+arin(P,D,K,L,E,B) :- arin(P,D,K,L,E,A), A != E, step(P,D,K,A,B).
+arin(P,D,K,L,E,R) :- arin(P,D,K,L,E,S), asummary(P,D,K,S,R).
+.decl asummary(p:symbol, d:symbol, k:symbol, s:symbol, r:symbol)
+asummary(P,D,K,S,R) :- perform(P,S,L,R,E), arin(P,D,K,L,E,E).
+.decl atop(p:symbol, d:symbol, k:symbol, n:symbol)
+atop(P,D,K,N) :- cand(P,D,K), cfg_entry(P,N).
+atop(P,D,K,B) :- atop(P,D,K,A), step(P,D,K,A,B).
+atop(P,D,K,B) :- atop(P,D,K,A), asummary(P,D,K,A,B).
+.decl aentered(p:symbol, d:symbol, k:symbol, l:symbol, e:symbol)
+aentered(P,D,K,L,E) :- atop(P,D,K,S), perform(P,S,L,_,E).
+aentered(P,D,K,L2,E2) :- aentered(P,D,K,L,E), arin(P,D,K,L,E,S), perform(P,S,L2,_,E2).
+.decl avoid(p:symbol, d:symbol, k:symbol, n:symbol)
+avoid(P,D,K,N) :- atop(P,D,K,N), site(P,N).
+avoid(P,D,K,N) :- aentered(P,D,K,L,E), arin(P,D,K,L,E,N), site(P,N).
+.decl guard(p:symbol, w:symbol, d:symbol, br:symbol, text:symbol, resolved:symbol)
+guard(P,W,D,K,T,R) :- site(P,W), reach(P,W), cand(P,D,K), !avoid(P,D,K,W), cfg_pred(P,D,_,_,_,T,R).
+#endif

@@ -22,6 +22,8 @@ class TargetSite(BaseModel):
     caller: str
     node: str
     kind: TargetKind = TargetKind.PROGRAM
+    transfer: str = ""
+    expression: str = ""
     candidates: tuple[str, ...] = ()
     reasons: tuple[str, ...] = ()
     outside: tuple[str, ...] = ()

@@ -134,10 +134,12 @@ LINKS = (
     LinkRow(
         caller="P",
         node="n1",
+        transfer="CALL",
         callee="Q",
         caller_extent="REC@working_storage[0:10]",
         callee_extent="LK@linkage[0:10]",
         returns=True,
+        reason="",
     ),
 )
 
@@ -347,10 +349,12 @@ def test_a_handover_through_a_byte_table_keeps_each_occurrence_apart_and_every_b
     handover = LinkRow(
         caller="R",
         node="x1",
+        transfer="CALL",
         callee="S",
         caller_extent="CA@working_storage[0:4]",
         callee_extent="DFH@linkage[0:4]",
         returns=False,
+        reason="",
     )
 
     graph = field_graph(leaf_index(extents), (moved_in,), (handover,), NoBarrier())

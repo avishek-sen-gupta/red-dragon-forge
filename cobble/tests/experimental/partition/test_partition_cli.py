@@ -154,10 +154,12 @@ def test_the_commands_turn_a_fixpoint_out_dir_into_a_graph_and_a_page(
             LinkRow(
                 caller="P",
                 node="n",
+                transfer="CALL",
                 callee="Q",
                 caller_extent="OUT@working_storage[8:16]",
                 callee_extent="LK@linkage[0:8]",
                 returns=False,
+                reason="",
             ).model_dump_json()
         ],
     )

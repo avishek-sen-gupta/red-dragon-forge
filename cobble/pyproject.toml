@@ -83,6 +83,7 @@ cobble-experimental-aggregate-matrix = "cobble.experimental.aggregates.matrix_cl
 cobble-experimental-aggregate-decompose = "cobble.experimental.aggregates.decompose_cli:main"
 cobble-experimental-aggregate-class-share = "cobble.experimental.aggregates.class_share_cli:main"
 cobble-experimental-aggregate-scorecard = "cobble.experimental.aggregates.scorecard_cli:main"
+cobble-experimental-datalog-facts = "cobble.experimental.datalog.facts_cli:main"
 
 # The project is installed (editable) into the venv so that [project.scripts]
 # exists at all -- `uv run diagnose-copybooks` needs an installed entry point,

@@ -43,7 +43,7 @@ def _rows(cfg: Cfg, seed: str, first: ReachVisit) -> Iterator[CfgRow]:
         initial=_advanced(cfg, _begun(seed), (first,)),
     )
     return chain(
-        (program_row(cfg.program), node_row(cfg.program, cfg.node(seed))),
+        (program_row(cfg.program, cfg.entry), node_row(cfg.program, cfg.node(seed))),
         chain.from_iterable(
             level.written for level in takewhile(_still_writing, levels)
         ),

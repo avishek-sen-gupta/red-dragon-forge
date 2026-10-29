@@ -75,7 +75,14 @@ def build_program(asg, source_file: str = "") -> Cfg:
             *resolve_targets(nodes, frozenset(node.id for node in nodes)),
             *_altered(asg, nodes, frozenset(node.id for node in nodes)),
         ),
+        entry=_entry(order),
     )
+
+
+def _entry(order: Sequence[ParagraphRef]) -> str:
+    if not order:
+        return ""
+    return label_id(order[0].name)
 
 
 def _altered(asg, nodes: Sequence[Node], known: frozenset[str]) -> tuple[Edge, ...]:

@@ -35,11 +35,12 @@ def _caller(callee: str, program: str = "PROGA") -> Cfg:
         program=program,
         nodes=(_label("MAIN"), _call("MAIN/0", callee)),
         edges=(Edge(source="MAIN#label", target="MAIN/0", kind=EdgeKind.FLOW),),
+        entry="MAIN#label",
     )
 
 
 def _callee(program: str = "PROGB") -> Cfg:
-    return Cfg(program=program, nodes=(_label("MAIN"),), edges=())
+    return Cfg(program=program, nodes=(_label("MAIN"),), edges=(), entry="MAIN#label")
 
 
 def test_a_node_id_is_qualified_with_its_program() -> None:
@@ -105,6 +106,6 @@ def test_a_program_with_no_calls_resolves_to_nothing() -> None:
 
 def test_a_callee_with_no_nodes_resolves_to_nothing() -> None:
     """An empty CFG has no entry to point at."""
-    empty = Cfg(program="PROGB", nodes=(), edges=())
+    empty = Cfg(program="PROGB", nodes=(), edges=(), entry="")
 
     assert resolved_calls((_caller("PROGB"), empty)) == ()

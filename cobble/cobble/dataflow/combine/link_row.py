@@ -12,7 +12,9 @@ class LinkRow(BaseModel):
 
     caller: str
     node: str
+    transfer: str
     callee: str
     caller_extent: str
     callee_extent: str
     returns: bool
+    reason: str

@@ -101,4 +101,7 @@ run cobble-experimental-aggregate-scorecard --matrix "$OUT/aggregates/matrix.npz
   --meta "$OUT/aggregates/meta.json" --unified "$OUT/aggregates/unified.jsonl" \
   --min-occurrences 4 2 --k 30 10
 
+step "Datalog facts of the whole run"
+run cobble-experimental-datalog-facts --run "$OUT" --out "$OUT/datalog"
+
 step "Done: every artefact is under $OUT"

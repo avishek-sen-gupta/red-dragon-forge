@@ -200,6 +200,7 @@ def _cfg(program: str = "PROGA") -> Cfg:
             Edge(source="MAIN/1", target="A#label", kind=EdgeKind.PERFORM),
             Edge(source="A#label", target="A/0", kind=EdgeKind.FLOW),
         ),
+        entry="MAIN#label",
     )
 
 

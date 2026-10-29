@@ -133,6 +133,7 @@ def test_a_cfg_indexes_successors_and_predecessors_by_node() -> None:
         program="PROGA",
         nodes=(_assign("a"), _assign("b")),
         edges=(Edge(source="a", target="b", kind=EdgeKind.FLOW),),
+        entry="",
     )
 
     assert cfg.successors("a") == (Edge(source="a", target="b", kind=EdgeKind.FLOW),)
@@ -144,7 +145,7 @@ def test_a_cfg_indexes_successors_and_predecessors_by_node() -> None:
 def test_asking_for_a_node_that_is_not_there_raises() -> None:
     """A missing node means an edge was built against an id nothing emitted --
     always a bug in lowering, never a query a caller should get an answer to."""
-    cfg = Cfg(program="PROGA", nodes=(), edges=())
+    cfg = Cfg(program="PROGA", nodes=(), edges=(), entry="")
 
     with pytest.raises(KeyError):
         cfg.node("a")

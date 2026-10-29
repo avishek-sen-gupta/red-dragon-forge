@@ -36,6 +36,7 @@ def _cfg(program: str = "PROGA") -> Cfg:
             Edge(source="MAIN/0", target="A#label", kind=EdgeKind.PERFORM),
             Edge(source="A#label", target="A/0", kind=EdgeKind.FLOW),
         ),
+        entry="MAIN#label",
     )
 
 
@@ -141,6 +142,7 @@ def test_two_unrelated_pieces_are_a_hard_error_not_a_disconnected_render(
             ),
         ),
         edges=(*_cfg().edges, Edge(source="Z#label", target="Z/0", kind=EdgeKind.FLOW)),
+        entry="MAIN#label",
     )
     out = tmp_path / "sub"
 

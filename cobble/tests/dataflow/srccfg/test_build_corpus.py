@@ -196,6 +196,7 @@ def test_an_edge_kind_is_written_by_name(
         program="PROGA",
         nodes=(Node(id="MAIN/0", kind=NodeKind.NOP, paragraph="MAIN"),),
         edges=(Edge(source="MAIN/0", target="MAIN/0", kind=EdgeKind.TRUE),),
+        entry="",
     )
 
     edge_line = bundle_jsonl(Bundle(seed="PROGA", cfgs=(cfg,))).splitlines()[-1]

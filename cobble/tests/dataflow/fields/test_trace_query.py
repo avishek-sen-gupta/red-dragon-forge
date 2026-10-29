@@ -271,10 +271,12 @@ def _link(caller: str, node: str, area: str) -> str:
         LinkRow(
             caller=caller,
             node=node,
+            transfer="CALL",
             callee="CALLEE",
             caller_extent=area,
             callee_extent="LS-REC@linkage[0:8]",
             returns=True,
+            reason="",
         ).model_dump_json()
         + "\n"
     )

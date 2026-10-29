@@ -15,7 +15,7 @@ from cobble.dataflow.srccfg.build import (
     label_id,
     paragraph_order,
 )
-from cobble.dataflow.srccfg.cfg import EdgeKind, NodeKind
+from cobble.dataflow.srccfg.cfg import EdgeKind, NodeKind, external_cfg
 from cobble.dataflow.srccfg.synthetic import IMPLICIT_FIRST
 
 
@@ -536,3 +536,36 @@ def test_a_program_with_more_paragraphs_than_the_interpreter_stack_is_ordered(
     order = paragraph_order(asg)
 
     assert [ref.name for ref in order] == [*names[:-1], "P0000%2"]
+
+
+def test_a_programs_entry_is_its_first_paragraphs_label_even_when_looped_back_to(
+    asg_of,
+) -> None:
+    """The entry is where source order starts, not a node no edge reaches: a later
+    GO TO back to the first paragraph leaves it the entry."""
+    cfg = build_program(
+        asg_of(
+            {
+                "program_id": "PROGA",
+                "paragraphs": [
+                    {"name": "1000-FIRST", "statements": [_move("'F'", "WS-A")]},
+                    {"name": "2000-SECOND", "statements": [_goto("1000-FIRST")]},
+                ],
+            }
+        )
+    )
+
+    assert cfg.entry == "1000-FIRST#label"
+    assert [e.kind for e in cfg.predecessors("1000-FIRST#label")] == [EdgeKind.GOTO]
+
+
+def test_an_external_programs_entry_is_its_one_node() -> None:
+    cfg = external_cfg("PROGX")
+
+    assert (cfg.entry, cfg.external) == ("%EXTERNAL#label", True)
+
+
+def test_a_program_with_no_paragraphs_has_no_entry(asg_of) -> None:
+    cfg = build_program(asg_of({"program_id": "PROGA", "paragraphs": []}))
+
+    assert (cfg.entry, cfg.nodes) == ("", ())

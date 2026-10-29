@@ -87,11 +87,12 @@ def _caller(
         program=program,
         nodes=(_label("MAIN"), _call("MAIN/0", callee, resolved, transfer, using)),
         edges=(Edge(source="MAIN#label", target="MAIN/0", kind=EdgeKind.FLOW),),
+        entry="MAIN#label",
     )
 
 
 def _callee(program: str = "PROGB") -> Cfg:
-    return Cfg(program=program, nodes=(_label("MAIN"),), edges=())
+    return Cfg(program=program, nodes=(_label("MAIN"),), edges=(), entry="MAIN#label")
 
 
 def _bundle(*cfgs: Cfg) -> Bundle:
@@ -120,9 +121,15 @@ def test_a_bundle_round_trips_through_its_rows(tmp_path: Path) -> None:
         cfgs=(
             _caller("PROGB"),
             _callee(),
-            Cfg(program="PROGC", nodes=(), edges=()),
-            Cfg(program="PROGD", nodes=(breaking,), edges=()),
-            Cfg(program="PROGE", nodes=(EXTERNAL_ENTRY,), edges=(), external=True),
+            Cfg(program="PROGC", nodes=(), edges=(), entry=""),
+            Cfg(program="PROGD", nodes=(breaking,), edges=(), entry=breaking.id),
+            Cfg(
+                program="PROGE",
+                nodes=(EXTERNAL_ENTRY,),
+                edges=(),
+                entry=EXTERNAL_ENTRY.id,
+                external=True,
+            ),
         ),
         calls=_bundle(_caller("PROGB"), _callee()).calls,
     )
@@ -169,7 +176,8 @@ def test_rows_come_program_first_and_every_edge_after_both_its_nodes() -> None:
     (
         ('{"cfgs": [], "calls": []}\n', 1),
         (
-            '{"type": "program", "program": "PROGA"}\n{"type": "node", "program": "PRO',
+            '{"type": "program", "program": "PROGA", "entry": "MAIN#label"}\n'
+            '{"type": "node", "program": "PRO',
             2,
         ),
     ),
@@ -200,7 +208,7 @@ def test_a_row_naming_a_program_no_program_row_opened_is_refused(
     tmp_path: Path,
 ) -> None:
     stray = '{"type": "edge", "program": "GHOST", "source": "A", "target": "B", "kind": "FLOW"}'
-    text = f'{{"type": "program", "program": "PROGA"}}\n{stray}\n'
+    text = f'{{"type": "program", "program": "PROGA", "entry": ""}}\n{stray}\n'
 
     with pytest.raises(CfgDocumentError, match="GHOST"):
         load_bundle(_written(tmp_path, text))
@@ -238,6 +246,7 @@ def _dynamic_caller() -> Cfg:
             _dynamic("MAIN/2", "WS-NONE"),
         ),
         edges=(),
+        entry="MAIN#label",
     )
 
 
@@ -402,6 +411,7 @@ def _all_three() -> Cfg:
             Edge(source="MAIN/0", target="MAIN/1", kind=EdgeKind.FLOW),
             Edge(source="MAIN/1", target="MAIN/2", kind=EdgeKind.FLOW),
         ),
+        entry="MAIN#label",
     )
 
 

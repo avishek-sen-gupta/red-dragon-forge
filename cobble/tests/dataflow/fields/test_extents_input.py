@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.fields.emit import _declared_extents
+from cobble.dataflow.fields.extent_line import ExtentLine
 from cobble.dataflow.fields.extents_input import declared_layouts
 from cobble.dataflow.fields.program_layout import ProgramLayout, program_layout
 from cobble.dataflow.fields.side_tables import extent_row
@@ -180,3 +181,35 @@ def test_a_row_still_answers_the_four_fields_the_published_consumers_read(
     (found,) = store.field("PROGA.WS-B")
     assert [(one.start, one.end) for one in found.ranges] == [(4, 8)]
     assert store.touching(found.ranges, Side.TARGET) == ()
+
+
+def test_a_row_reads_back_through_its_line_model(program_of, field, layout_of):
+    asg = program_of(
+        [],
+        data_fields=[
+            field(1, "REC", children=[field(5, "WS-A", "X(4)", offset=0)]),
+        ],
+    )
+    lines = {
+        line.id: line
+        for _, row in (
+            extent_row(one) for one in _declared_extents(layout_of(asg), "PROGA")
+        )
+        for line in (ExtentLine.model_validate_json(row),)
+    }
+
+    assert lines["PROGA.WS-A"] == ExtentLine(
+        id="PROGA.WS-A",
+        program="PROGA",
+        extents=("WS-A@working_storage[0:4]",),
+        names=("WS-A",),
+        records=("REC",),
+        paths=(("REC", "WS-A"),),
+        levels=(5,),
+        pics=("X(4)",),
+        usages=("DISPLAY",),
+        occurs=(0,),
+        origins=("WORKING-STORAGE",),
+        values=("",),
+        redefines=("",),
+    )

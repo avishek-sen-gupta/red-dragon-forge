@@ -51,6 +51,7 @@ def _one_program(program: str = "PROGA") -> Cfg:
         program=program,
         nodes=(_label("MAIN"), _assign("MAIN/0", "WS-FLAG-A")),
         edges=(Edge(source="MAIN#label", target="MAIN/0", kind=EdgeKind.FLOW),),
+        entry="MAIN#label",
     )
 
 
@@ -73,6 +74,7 @@ def _branching() -> Cfg:
             Edge(source="MAIN/0", target="MAIN/1", kind=EdgeKind.TRUE),
             Edge(source="MAIN/0", target="MAIN/2", kind=EdgeKind.FALSE),
         ),
+        entry="MAIN#label",
     )
 
 
@@ -90,6 +92,7 @@ def _caller(callee: str) -> Cfg:
             ),
         ),
         edges=(Edge(source="MAIN#label", target="MAIN/0", kind=EdgeKind.FLOW),),
+        entry="MAIN#label",
     )
 
 

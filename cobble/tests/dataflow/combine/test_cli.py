@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pytest
 from cobble.dataflow.combine.cli import cli
+from cobble.dataflow.fixpoint.target_kind import TargetKind
+from cobble.dataflow.fixpoint.target_site import TargetSite
 from cobble.dataflow.jumps.fact import Fact
 from cobble.dataflow.jumps.jump import Jump
 from cobble.dataflow.jumps.jump_kind import JumpKind
@@ -91,6 +93,15 @@ def test_a_member_named_twice_is_linked_once_and_reports_the_outside(
             outside=(),
         )
     ]
+    (line,) = (tmp_path / "out" / "targets.jsonl").read_text().splitlines()
+    assert TargetSite.model_validate_json(line) == TargetSite(
+        caller="B",
+        node="X",
+        kind=TargetKind.PROGRAM,
+        transfer="CICS_XCTL",
+        expression="WS-NEXT",
+        candidates=("M",),
+    )
     assert _messages(caplog) == [
         "combine: 1 rounds, 0 discovered edges",
         "combine: 0 outside jumps with unresolved targets, "

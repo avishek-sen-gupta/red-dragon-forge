@@ -62,6 +62,7 @@ CFG = Cfg(
         Edge(source=site, target=f"{target}#label", kind=EdgeKind.PERFORM)
         for site, target in SITES
     ),
+    entry="0000-MAIN#label",
 )
 
 

@@ -159,6 +159,7 @@ class Cfg:
     program: str
     nodes: tuple[Node, ...]
     edges: tuple[Edge, ...]
+    entry: str
     external: bool = False
 
     @cached_property
@@ -250,4 +251,10 @@ def _join(left: Fragment, right: Fragment) -> Fragment:
 
 def external_cfg(program: str) -> Cfg:
     """A program known only as a call target: one node, no edges, marked external."""
-    return Cfg(program=program, nodes=(EXTERNAL_ENTRY,), edges=(), external=True)
+    return Cfg(
+        program=program,
+        nodes=(EXTERNAL_ENTRY,),
+        edges=(),
+        entry=EXTERNAL_ENTRY.id,
+        external=True,
+    )
