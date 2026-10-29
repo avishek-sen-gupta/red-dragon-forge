@@ -11,8 +11,6 @@ from pathlib import Path
 from catnip.dataset import Dataset, Relabeller
 from catnip.labels import Label
 from catnip.system_catalog import NotCataloged, SystemCatalog
-from interpreter.cobol.cee3abd_abend import user_abend
-from interpreter.cobol.return_code_readback import read_return_code
 from interpreter.cobol.symbolic_return_code_error import SymbolicReturnCodeError
 from interpreter.func_name import FuncName
 from interpreter.project.program_entry import ProgramEntry
@@ -31,6 +29,7 @@ from zos.cobol.io.dataset_files import DatasetFileIOProvider
 from zos.cobol.io.file_bindings import FileBindings
 from zos.cobol.io.file_definitions import program_files_of
 from zos.cobol.io.program_files import ProgramFilesIOProvider
+from zos.program_outcome import program_abends, program_return_code
 
 from red_dragon_forge.config_error import ConfigError
 from red_dragon_forge.plain_run import PlainRun
@@ -65,18 +64,18 @@ def _bindings(catalog: SystemCatalog, plain: PlainRun) -> FileBindings:
     )
 
 
-def _completed(plain: PlainRun, vm: VMState) -> int:
-    abends = user_abend(vm)
+def _completed(package: Package, plain: PlainRun, vm: VMState) -> int:
+    abends = program_abends(vm)
     if abends:
         sys.stdout.write(f"{abends[0].rendered()}\n")
         return 1
-    sys.stdout.write(f"RC {_return_code(plain, vm)}\n")
+    sys.stdout.write(f"RC {_return_code(package, plain, vm)}\n")
     return 0
 
 
-def _return_code(plain: PlainRun, vm: VMState) -> int:
+def _return_code(package: Package, plain: PlainRun, vm: VMState) -> int:
     try:
-        return read_return_code(vm)
+        return program_return_code(package.image, plain.program, vm)
     except SymbolicReturnCodeError:
         sys.stderr.write(
             f"forge-run: warning: {plain.program}'s RETURN-CODE is unknown;"
@@ -85,7 +84,7 @@ def _return_code(plain: PlainRun, vm: VMState) -> int:
         return 0
 
 
-def _reported(plain: PlainRun, outcome: RunOutcome) -> int:
+def _reported(package: Package, plain: PlainRun, outcome: RunOutcome) -> int:
     match outcome:
         case Suspended():
             sys.stderr.write(
@@ -94,13 +93,15 @@ def _reported(plain: PlainRun, outcome: RunOutcome) -> int:
             )
             return 1
         case _:
-            return _ended(plain, outcome)
+            return _ended(package, plain, outcome)
 
 
-def _ended(plain: PlainRun, outcome: Completed | BudgetExhausted) -> int:
+def _ended(
+    package: Package, plain: PlainRun, outcome: Completed | BudgetExhausted
+) -> int:
     match outcome:
         case Completed(vm=vm):
-            return _completed(plain, vm)
+            return _completed(package, plain, vm)
         case BudgetExhausted():
             sys.stdout.write(f"budget exhausted after {plain.max_steps} steps\n")
             return 1
@@ -133,4 +134,4 @@ def run_plain(
             initial_vm=initial_vm_state(io_provider=provider),
             permit_unresolved_call_targets=permit_unresolved_call_targets,
         )
-    return _reported(plain, outcome)
+    return _reported(package, plain, outcome)

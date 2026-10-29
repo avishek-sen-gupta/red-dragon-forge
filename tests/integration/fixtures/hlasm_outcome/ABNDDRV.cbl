@@ -1,0 +1,10 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. ABNDDRV.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 WS-X PIC X(5).
+       PROCEDURE DIVISION.
+           CALL 'ASMABND'.
+           MOVE 'AFTER' TO WS-X.
+           DISPLAY WS-X.
+           STOP RUN.

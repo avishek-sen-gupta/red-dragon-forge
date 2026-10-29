@@ -63,7 +63,8 @@ run: `env.toml: cics.timezone: invalid timezone: Mars/Base`.
 directory, which supplies its record format and length. A name not in the catalog stops the run
 before the program starts; plain mode never creates a dataset. A dataset cataloged with a pending
 label takes its label from the FD on its first OPEN OUTPUT or EXTEND. An abend wins over the
-return code. A RETURN-CODE left unknown by a tolerated CALL reports `RC 0`, with a warning on
+return code. An HLASM entry's return code is R15; an HLASM abend (`ABEND 42` gives `U0042`) is
+reported whichever language the entry is. A RETURN-CODE left unknown by a tolerated CALL reports `RC 0`, with a warning on
 stderr: `forge-run: warning: P's RETURN-CODE is unknown; reported as 0`.
 
 `[tolerant] permit_unresolved_call_targets` is passed to every program run in every mode: the

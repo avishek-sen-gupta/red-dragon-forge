@@ -11,10 +11,8 @@ from catnip.dataset import Relabeller
 from infrastructure.zos.abend.system_abend import SystemAbend
 from interpreter.address import Address
 from interpreter.cobol.call_arguments import call_arguments
-from interpreter.cobol.cee3abd_abend import user_abend
 from interpreter.cobol.io_provider import CobolIOProvider
 from interpreter.cobol.program_object import ARGUMENTS_PARAM
-from interpreter.cobol.return_code_readback import read_return_code
 from interpreter.func_name import FuncName
 from interpreter.project.program_entry import ProgramEntry
 from interpreter.project.types import LinkedProgram
@@ -36,6 +34,7 @@ from jackal.results import Abended, Completed, ProgramResult
 from jackal.value_parts import resolve
 from zos.cobol.io.program_file import ProgramFile
 from zos.cobol.io.program_files import ProgramFilesIOProvider
+from zos.program_outcome import program_abends, program_return_code
 
 DEFAULT_PROGRAM_STEP_BUDGET = 500_000
 CPU_TIME_EXCEEDED = SystemAbend(0x322)
@@ -76,30 +75,32 @@ def run_cobol_step(
         initial_vm=_initial_vm(step, provider),
         permit_unresolved_call_targets=permit_unresolved_call_targets,
     )
-    return program_result(outcome)
+    return program_result(program, outcome)
 
 
-def program_result(outcome: RunOutcome) -> ProgramResult:
+def program_result(program: CompiledProgram, outcome: RunOutcome) -> ProgramResult:
     match outcome:
         case Suspended():
             raise BatchProgramSuspended()
         case _:
-            return _ended(outcome)
+            return _ended(program, outcome)
 
 
-def _ended(outcome: RunCompleted | BudgetExhausted) -> ProgramResult:
+def _ended(
+    program: CompiledProgram, outcome: RunCompleted | BudgetExhausted
+) -> ProgramResult:
     match outcome:
         case RunCompleted(vm=vm):
-            return _completed_or_abended(vm)
+            return _completed_or_abended(program, vm)
         case BudgetExhausted():
             return Abended(CPU_TIME_EXCEEDED)
 
 
-def _completed_or_abended(vm: VMState) -> ProgramResult:
-    abends = user_abend(vm)
+def _completed_or_abended(program: CompiledProgram, vm: VMState) -> ProgramResult:
+    abends = program_abends(vm)
     if abends:
         return Abended(abends[0])
-    return Completed(read_return_code(vm))
+    return Completed(program_return_code(program.linked, program.entry.name, vm))
 
 
 def _initial_vm(step: ProgramStep[StepReference], provider: CobolIOProvider) -> VMState:

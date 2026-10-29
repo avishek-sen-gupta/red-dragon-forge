@@ -166,7 +166,8 @@ changes a record's length with file status 44
 ([decision record](../../records/design/2026-10-12-jackal-variable-records.md)). `PARM=` is passed in as an OS halfword-prefixed parameter region
 (`jackal.parm`). Each program runs on red-dragon's resumable entry point with its own budget
 of interpreter steps, `JobRunner`'s `program_step_budget` (the CLI gives 500,000). A program
-that ends gives `Completed` with the return code read back from the VM. One still running
+that ends gives `Completed` with the return code read back from the VM (R15 for an HLASM program;
+an HLASM abend gives `Abended` as a COBOL one does). One still running
 when its budget runs out abends `S322`, as z/OS ends a step that exceeds its CPU time.
 A program that calls LE's `CEE3ABD` abends with that user code (`Unnnn`; a bare call gives
 U0000). `CEE3ABD` is a COBOL stub in red-dragon's `interpreter/cobol/le_stubs/`, last on the CALL
