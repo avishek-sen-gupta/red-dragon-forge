@@ -48,10 +48,10 @@ CICS, SQL or JCL knowledge of its own.
 | `run_preparation.py` | What every mode starts from: its config, the opened package and its `Coprocessing`. |
 | `plain_command.py` | `[plain]` (`PlainEnv`), through `plain_mode.py`. Imports neither jackal nor cics. |
 | `jcl_command.py` | `[jcl]` (`JclEnv`): the job, run by jackal's `JobRunner`. Imports no cics. |
-| `cics_command.py` | `[cics]` (`CicsEnv`): the region served over TN3270; `cics_region` assembles it in process. Imports no jackal. |
+| `cics_command.py` | `[cics]` (`CicsEnv`): the region served over TN3270; `cics_region` assembles it in process. `region_builtins` composes the region's other builtins: coprocessing's, red-dragon's default HLASM run inputs (host clock with STIMER's wait, empty PARM, no DDs) and the floating-point tables, so a transaction can `CALL` an HLASM program in the package. Imports no jackal. |
 | `coprocessors.py` | The coprocessors a build may name, each with its compile spec and the programs it requires linked. |
 | `coprocessing.py` | `Coprocessing`: what a package's `sql` adds to a run — squall's `SqlRuntime` (its builtins and three unit-of-work hooks) and the abend rollback. `db2_connection.py` builds it; with no `sql` the runtime is empty and its hooks are no-ops. `[plain]` and `[jcl]` compose its builtins into their table; `[cics]` also packs its hooks into cicada's `TransactionHooks`. |
-| `floating_point_builtins.py` | The HLASM binary, hexadecimal, decimal and PFPO floating-point tables as one; `[plain]` and `[jcl]` compose it into their table. |
+| `floating_point_builtins.py` | The HLASM binary, hexadecimal, decimal and PFPO floating-point tables as one; `[plain]`, `[jcl]` and `[cics]` compose it into their table. |
 | `plain_mode.py` | `[plain]`: runs one program from the package image, with no job, step or DD, and reports RC, abend or budget exhaustion; an HLASM entry reports R15 (the entry address if it never sets it), and an HLASM abend under a COBOL entry is reported. HLASM gets red-dragon's default run inputs: the host clock (with STIMER's wait), an empty PARM and no DDs. |
 | `db2_connection.py` | The `[sql]` Db2 connection: installs squall's runtime over it and returns the `Coprocessing`. |
 | `run.py` | `run_program(linked, specs, …)` runs a compiled program through the one spec that owns execution. CICS owns execution; SQL is synchronous and owns none. |

@@ -13,6 +13,12 @@ from cics.tn3270.session import run_session
 from cics.tn3270.wire import bind, serve_forever
 from cics.transaction_hooks import TransactionHooks
 from cics.vsam.file_table import FileTableError
+from interpreter.func_name import FuncName
+from interpreter.hlasm_run_inputs.run_input_builtins import (
+    unsupplied_run_input_builtins,
+)
+from interpreter.vm.builtin import Builtin
+from interpreter.vm.builtins import compose_builtins
 from litter.manifest import Manifest
 from litter.package import Package
 from squall.sql_runtime import SqlRuntime
@@ -21,6 +27,7 @@ from red_dragon_forge.cics_run import CicsRun
 from red_dragon_forge.config_error import ConfigError
 from red_dragon_forge.coprocessing import Coprocessing
 from red_dragon_forge.env_config import EnvConfig
+from red_dragon_forge.floating_point_builtins import floating_point_builtins
 from red_dragon_forge.run_preparation import prepared
 
 logger = logging.getLogger(__name__)
@@ -54,6 +61,14 @@ def transaction_hooks(sql: SqlRuntime) -> TransactionHooks:
     )
 
 
+def region_builtins(
+    coprocessing: Mapping[FuncName, Builtin],
+) -> Mapping[FuncName, Builtin]:
+    return compose_builtins(
+        coprocessing, unsupplied_run_input_builtins(), floating_point_builtins()
+    )
+
+
 def _region(
     base: Path, config: CicsEnv, package: Package, coprocessing: Coprocessing
 ) -> ServedRegion:
@@ -63,7 +78,7 @@ def _region(
         on_abend=coprocessing.on_abend,
         permit_unresolved_call_targets=config.tolerant.permit_unresolved_call_targets,
         hooks=transaction_hooks(coprocessing.sql),
-        other_builtins=coprocessing.builtins,
+        other_builtins=region_builtins(coprocessing.builtins),
         clock=config.cics.clock(),
     )
 
