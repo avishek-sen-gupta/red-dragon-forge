@@ -52,7 +52,7 @@ The section present picks the mode.
 | Mode | What runs | Output and exit status |
 |---|---|---|
 | `[plain]` | the image entered at `program`, with `max_steps` as its budget; no job, DD or disposition | one line: `RC <n>`, exit 0; or the abend (`U1234`), exit 1; or `budget exhausted after <n> steps`, exit 1 |
-| `[jcl]` | the job, run by jackal against the package | jackal's per-step lines and exit status ([jackal CLI](../jackal/cli.md)) |
+| `[jcl]` | the job, run by jackal against the package | jackal's per-step lines and exit status ([jackal CLI](../jackal/cli.md)); an HLASM step gets the host clock, no DD definitions and its own `PARM=` |
 | `[cics]` | a region assembled from the package (`cics.tn3270.region.assemble_region`), served until interrupted | |
 
 `[cics] timezone` is the zone `ASKTIME` reads the region's local time in, and `datform` is the

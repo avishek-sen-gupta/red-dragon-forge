@@ -10,8 +10,10 @@ from pathlib import Path
 from catnip.system_catalog import SystemCatalog
 from interpreter.cobol.symbolic_return_code_error import SymbolicReturnCodeError
 from interpreter.func_name import FuncName
+from interpreter.hlasm_run_inputs.job_parm_builtins import NO_PARM, job_parm_builtins
 from interpreter.project.program_entry import ProgramEntry
 from interpreter.vm.builtin import Builtin
+from interpreter.vm.builtins import compose_builtins
 from jackal.allocation import DdEnvironment, allocate, dispose, release
 from jackal.catalog import DatasetCatalog
 from jackal.cobol_step import CompiledProgram, run_cobol_step
@@ -53,6 +55,7 @@ from jackal.tso_step import dsn_runs, run_tso_step
 from jackal.unknown_return_code import UnknownReturnCodeStrategy
 from jackal.unresolved import UnresolvedReferenceStrategy, referbacks_resolved
 from jackal.utilities import UTILITIES
+from jackal.value_parts import resolve
 from litter.package import Package
 from zos.cobol.io.file_definitions import program_files_of
 
@@ -286,6 +289,9 @@ class JobRunner:
             catalog.workdir,
             self._program_step_budget,
             catalog,
-            builtins=self._builtins,
+            builtins=compose_builtins(
+                self._builtins,
+                job_parm_builtins(resolve(step.parm) if step.parm else NO_PARM),
+            ),
             permit_unresolved_call_targets=self._permit_unresolved_call_targets,
         )

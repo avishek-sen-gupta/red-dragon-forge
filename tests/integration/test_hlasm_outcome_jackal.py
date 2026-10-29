@@ -42,3 +42,28 @@ def test_hlasm_steps_report_their_return_code_and_their_abend(tmp_path: Path) ->
     ]
 
     assert outcomes == [Completed(8), Abended(UserAbend(42))]
+
+
+def test_each_hlasm_step_gets_its_own_parm(tmp_path: Path) -> None:
+    runner = JobRunner(
+        package=open_package(built_outcome_package(tmp_path, (), ("PARMLEN",))),
+        system=SystemCatalog(tmp_path / "system"),
+        unresolved=RaiseErrorStrategy(),
+        missing_data=StrictAllocation(),
+        missing_program=AbendMissingProgram(),
+        unknown_return_code=RaiseUnknownReturnCode(),
+        program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
+        builtins=core_builtins(),
+    )
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    jcl = (
+        "//J JOB 1\n//S1 EXEC PGM=PARMLEN,PARM='ABC'\n"
+        "//S2 EXEC PGM=PARMLEN,PARM='WXYZ'\n//S3 EXEC PGM=PARMLEN\n"
+    )
+
+    outcomes: list[StepOutcome] = [
+        s.outcome for s in runner.run(parse_jcl(jcl), scratch).steps
+    ]
+
+    assert outcomes == [Completed(3), Completed(4), Completed(0)]
