@@ -487,4 +487,6 @@ fileignoreconfig:
   checksum: 9ba4c0d1f8ad0898372ecc0ff599311104aab29f5d2b24f6d976ea902d2a85a6
 - filename: docs/superpowers/specs/2026-10-29-hlasm-forge-runtime-design.md
   checksum: 923c25f74eda94408eae162b559c20494b3515a76296f06f59e259cd7ce455e9
+- filename: tests/integration/fixtures/hlasm_fp/ASMFP.asm
+  checksum: 1f67dcf54a4e6f1d852ae6fd843fb03e5994e58ad8b30f4a0fc0cebd0f38aad5
 version: "1.0"

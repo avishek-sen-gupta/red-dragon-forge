@@ -14,6 +14,7 @@ from litter.manifest import Manifest
 
 from red_dragon_forge.config_error import ConfigError
 from red_dragon_forge.env_config import EnvConfig
+from red_dragon_forge.floating_point_builtins import floating_point_builtins
 from red_dragon_forge.plain_mode import run_plain
 from red_dragon_forge.plain_run import PlainRun
 from red_dragon_forge.run_preparation import prepared
@@ -37,7 +38,10 @@ def run_plain_mode(path: Path, environ: Mapping[str, str]) -> int:
         SystemCatalog(path.parent / config.paths.system),
         config.plain,
         compose_builtins(
-            core_builtins(), unsupplied_run_input_builtins(), coprocessing.builtins
+            core_builtins(),
+            unsupplied_run_input_builtins(),
+            floating_point_builtins(),
+            coprocessing.builtins,
         ),
         config.tolerant.permit_unresolved_call_targets,
     )

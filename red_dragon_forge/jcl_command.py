@@ -29,6 +29,7 @@ from litter.package import Package
 from red_dragon_forge.config_error import ConfigError
 from red_dragon_forge.coprocessing import Coprocessing
 from red_dragon_forge.env_config import EnvConfig
+from red_dragon_forge.floating_point_builtins import floating_point_builtins
 from red_dragon_forge.jcl_run import JclRun
 from red_dragon_forge.run_preparation import prepared
 
@@ -55,7 +56,10 @@ def _runner(
         program_step_budget=budget,
         proclib_dirs=proclib_dirs,
         builtins=compose_builtins(
-            core_builtins(), _run_inputs(), coprocessing.builtins
+            core_builtins(),
+            _run_inputs(),
+            floating_point_builtins(),
+            coprocessing.builtins,
         ),
         permit_unresolved_call_targets=config.tolerant.permit_unresolved_call_targets,
     )

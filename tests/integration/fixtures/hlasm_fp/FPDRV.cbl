@@ -1,0 +1,14 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. FPDRV.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 WS-RESULTS.
+          05 WS-BFP PIC S9(9) COMP.
+          05 WS-HFP PIC S9(9) COMP.
+          05 WS-DFP PIC S9(9) COMP.
+       PROCEDURE DIVISION.
+           CALL 'ASMFP' USING WS-RESULTS.
+           DISPLAY 'BFP ' WS-BFP.
+           DISPLAY 'HFP ' WS-HFP.
+           DISPLAY 'DFP ' WS-DFP.
+           STOP RUN.
