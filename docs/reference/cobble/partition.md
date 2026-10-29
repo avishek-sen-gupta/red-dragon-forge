@@ -62,10 +62,12 @@ table element is a node of its own, with its subscripts from the extents table:
 `COMEN01C:DFHCOMMAREA.LK-COMMAREA(9)`, `X(2,5)` for a nested table. A handover into a byte table
 in linkage and the `MOVE` out of it then keep each byte apart, so the caller's `CDEMO-USER-ID`
 reaches the callee's `CDEMO-USER-ID` through occurrences 25 to 32 and not through one node every
-commarea field shares. A computed subscript reaches every occurrence it may hit. Each program's origins (`LITERAL`, `FILE:`, `%CICS-STATE`,
-`%CALL:`) and sinks (`FILE:`, `MAP:`, `TSQ:`, `TDQ:`, `TRANSID:`) are nodes of their own. A literal
-origin is one node per literal as written, `P|origin|LITERAL 'Y'` apart from
-`P|origin|LITERAL SPACES`, so a program's literals do not meet in one hub. `SPACE` and `SPACES`
+commarea field shares. A computed subscript reaches every occurrence it may hit. Each program's origins and sinks
+([field-dataflow.md](field-dataflow.md#extents) lists the kinds) are nodes of their own, with id
+`P|origin|<text>` or `P|sink|<text>` and the typed value in the node's `origin` or `sink` field
+(`{"kind": "NONE", ...}` on every other node). Ids are opaque keys: read the field, not the id. A
+literal origin is one node per literal as written, `P|origin|LITERAL:'Y'` apart from
+`P|origin|LITERAL:SPACES`, so a program's literals do not meet in one hub. `SPACE` and `SPACES`
 stay two nodes.
 
 A dep row's range resolves to the elementary fields declared under the field it names that

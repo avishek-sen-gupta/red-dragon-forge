@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from cobble.dataflow.fields.extent_text import NO_RANGE, ByteRange
+from cobble.dataflow.fields.origin import NO_ORIGIN, Origin
+from cobble.dataflow.fields.origin_kind import OriginKind
+from cobble.dataflow.fields.sink import NO_SINK, Sink
+from cobble.dataflow.fields.sink_kind import SinkKind
 from cobble.dataflow.fields.dep_row import DepRow
 from cobble.dataflow.fixpoint.target_kind import TargetKind
 from cobble.dataflow.fixpoint.target_site import TargetSite
@@ -25,11 +29,11 @@ def _read(program: str, site: str, file: str) -> DepRow:
         program=program,
         via="",
         target=_record(program),
-        origin=f"FILE:{file}",
+        origin=Origin(OriginKind.FILE, file),
         source=NO_RANGE,
         site=f"{program}/{site}",
         definers=(),
-        sink="",
+        sink=NO_SINK,
     )
 
 
@@ -38,11 +42,11 @@ def _write(program: str, site: str, file: str) -> DepRow:
         program=program,
         via="",
         target=NO_RANGE,
-        origin="",
+        origin=NO_ORIGIN,
         source=_record(program),
         site=f"{program}/{site}",
         definers=(),
-        sink=f"FILE:{file}",
+        sink=Sink(SinkKind.FILE, file),
     )
 
 
@@ -189,40 +193,59 @@ def test_a_site_with_no_binding_is_unresolved_not_dropped() -> None:
 
 
 def test_a_call_s_write_back_and_a_write_with_no_source_are_not_file_sites() -> None:
-    """The fixpoint credits what a call hands back to a %CALL: origin, not to a
+    """The fixpoint credits what a call hands back to a CALL origin, not to a
     file, so the caller's write-back is told apart from the callee's file read by
     its origin alone."""
     callee = DepRow(
         program="K",
         via="",
         target=_record("K"),
-        origin="FILE:X",
+        origin=Origin(OriginKind.FILE, "X"),
         source=NO_RANGE,
         site="K/P/0",
         definers=(),
-        sink="",
+        sink=NO_SINK,
     )
     write_back = DepRow(
         program="C",
         via="",
         target=_record("C"),
-        origin="%CALL:K",
+        origin=Origin(OriginKind.CALL, "K"),
         source=NO_RANGE,
         site="C/CALL/0",
         definers=(),
-        sink="",
+        sink=NO_SINK,
     )
     sourceless = DepRow(
         program="C",
         via="",
         target=NO_RANGE,
-        origin="",
+        origin=NO_ORIGIN,
         source=NO_RANGE,
         site="C/W/0",
         definers=(),
-        sink="FILE:Y",
+        sink=Sink(SinkKind.FILE, "Y"),
     )
 
     assert file_sites((write_back, callee, sourceless)) == (
         FileSite("K", "K/P/0", "X", _record("K"), False),
+    )
+
+
+def test_written_record_is_resolved_by_its_sink() -> None:
+    """A WRITE whose dep carries both a FILE sink and a FILE origin is the sink's
+    written site, never also a read of the origin's file."""
+    written = DepRow(
+        program="P",
+        via="",
+        target=_record("P", "IN-REC"),
+        origin=Origin(OriginKind.FILE, "IN"),
+        source=_record("P"),
+        site="P/W/0",
+        definers=(),
+        sink=Sink(SinkKind.FILE, "OUT"),
+    )
+
+    assert file_sites((written,)) == (
+        FileSite("P", "P/W/0", "OUT", _record("P"), True),
     )

@@ -9,6 +9,10 @@ from pathlib import Path
 from typing import TypedDict
 
 import pytest
+from cobble.dataflow.fields.origin import NO_ORIGIN, Origin
+from cobble.dataflow.fields.origin_kind import OriginKind
+from cobble.dataflow.fields.sink import NO_SINK, Sink
+from cobble.dataflow.fields.sink_kind import SinkKind
 from tests.dataflow.fixpoint.fixpoint_dir import Row, fixpoint_dir, flow_row, sink_row
 from tests.experimental.partition.graphs import LINKED
 
@@ -57,15 +61,14 @@ def _flow(
     node: str,
     target: _Range,
     source: _Range | None,
-    origin: str = "",
-    literal: str = "",
+    origin: Origin = NO_ORIGIN,
 ) -> Row:
     return flow_row(
-        program, node, _text(target), _text(source) if source else "", origin, literal
+        program, node, _text(target), _text(source) if source else "", origin
     )
 
 
-def _sink(program: str, node: str, source: _Range, sink: str) -> Row:
+def _sink(program: str, node: str, source: _Range, sink: Sink) -> Row:
     return sink_row(program, node, _text(source), sink)
 
 
@@ -135,9 +138,15 @@ def test_the_commands_turn_a_fixpoint_out_dir_into_a_graph_and_a_page(
         tmp_path / "fixpoint",
         [
             _flow("P", "1", _range("OUT", 8, 16), _range("IN", 0, 8)),
-            _flow("P", "2", _range("A", 0, 4), None, origin="LITERAL", literal="'Y'"),
+            _flow(
+                "P",
+                "2",
+                _range("A", 0, 4),
+                None,
+                origin=Origin(OriginKind.LITERAL, "'Y'"),
+            ),
         ],
-        [_sink("P", "3", _range("OUT", 8, 16), "FILE:F")],
+        [_sink("P", "3", _range("OUT", 8, 16), Sink(SinkKind.FILE, "F"))],
     )
     links = _jsonl(
         tmp_path / "links.jsonl",
@@ -198,7 +207,7 @@ def test_the_commands_turn_a_fixpoint_out_dir_into_a_graph_and_a_page(
         "P:IN.B",
         "P:OUT.C",
         "P:OUT.D",
-        "P|origin|LITERAL 'Y'",
+        "P|origin|LITERAL:'Y'",
         "P|sink|FILE:F",
         "Q:LK.LK",
     ]
@@ -209,7 +218,7 @@ def test_the_commands_turn_a_fixpoint_out_dir_into_a_graph_and_a_page(
         _edge_line(("P:OUT.C", "Q:LK.LK"), ((0, 0, 4),), cross_program=True),
         _edge_line(("P:OUT.D", "P|sink|FILE:F")),
         _edge_line(("P:OUT.D", "Q:LK.LK"), ((0, 4, 4),), cross_program=True),
-        _edge_line(("P|origin|LITERAL 'Y'", "P:IN.A")),
+        _edge_line(("P|origin|LITERAL:'Y'", "P:IN.A")),
     ]
     assert len(graph_lines) == 14
     payload = json.loads(
@@ -223,7 +232,7 @@ def test_the_commands_turn_a_fixpoint_out_dir_into_a_graph_and_a_page(
         ("P:IN.B", 1),
         ("P:OUT.C", 0),
         ("P:OUT.D", 1),
-        ("P|origin|LITERAL 'Y'", -1),
+        ("P|origin|LITERAL:'Y'", -1),
         ("P|sink|FILE:F", -1),
         ("Q:LK.LK", -1),
     ]
@@ -261,10 +270,22 @@ def _dataset_inputs(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
     fixpoint = fixpoint_dir(
         tmp_path / "fixpoint",
         [
-            _flow("R", "1", _range("RIN", 0, 8), None, origin="FILE:IN-FILE"),
-            _flow("R", "9", _range("RCICS", 8, 16), None, origin="FILE:LIT-ACCT"),
+            _flow(
+                "R",
+                "1",
+                _range("RIN", 0, 8),
+                None,
+                origin=Origin(OriginKind.FILE, "IN-FILE"),
+            ),
+            _flow(
+                "R",
+                "9",
+                _range("RCICS", 8, 16),
+                None,
+                origin=Origin(OriginKind.FILE, "LIT-ACCT"),
+            ),
         ],
-        [_sink("P", "3", _range("OUT", 8, 16), "FILE:OUT-FILE")],
+        [_sink("P", "3", _range("OUT", 8, 16), Sink(SinkKind.FILE, "OUT-FILE"))],
     )
     graph = _jsonl(
         tmp_path / "knowledge-graph.jsonl",

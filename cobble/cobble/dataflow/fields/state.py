@@ -42,6 +42,7 @@ from types import MappingProxyType
 from typing import TypeVar
 
 from cobble.dataflow.fields.extent_index import ExtentIndex, extent_index
+from cobble.dataflow.fields.origin import Origin
 from cobble.dataflow.fields.spans import EVERY_BYTE, Spans, overlaps, union, without
 from cobble.dataflow.fields.values import (
     EMPTY as VALUES_EMPTY,
@@ -54,9 +55,6 @@ from cobble.dataflow.fields.values import (
 )
 from cobol_memory.field_extent import FieldExtent, Precision
 from cobol_memory.region_id import RegionId
-
-LITERAL = "LITERAL"
-CICS_STATE = "%CICS-STATE"
 
 # A value that came from outside the program's storage -- a literal, a file, a
 # callee -- has an origin instead of an extent. Zero length is what makes this
@@ -75,17 +73,15 @@ NOWHERE = FieldExtent(
 class Source:
     """Where a value came from: another extent, or a synthetic origin.
 
-    ``origin`` is empty exactly when ``extent`` is real storage, and ``extent`` is
-    ``NOWHERE`` exactly when ``origin`` names one. ``node`` is the CFG node id that
-    wrote it, which is how a reader recovers the guard conditions this lattice
-    deliberately does not carry. ``literal`` is the literal as written when the
-    origin is one, and empty otherwise.
+    ``origin`` is ``NO_ORIGIN`` exactly when ``extent`` is real storage, and
+    ``extent`` is ``NOWHERE`` exactly when ``origin`` names one. ``node`` is the CFG
+    node id that wrote it, which is how a reader recovers the guard conditions this
+    lattice deliberately does not carry.
     """
 
-    origin: str
+    origin: Origin
     extent: FieldExtent
     node: str
-    literal: str = ""
 
 
 _NO_SOURCES: Mapping[FieldExtent, frozenset[Source]] = MappingProxyType({})

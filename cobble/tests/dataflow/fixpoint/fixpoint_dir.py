@@ -6,6 +6,8 @@ import json
 from collections.abc import Sequence
 from pathlib import Path
 
+from cobble.dataflow.fields.origin import NO_ORIGIN, Origin
+from cobble.dataflow.fields.sink import Sink
 from cobble.dataflow.fixpoint.member_counts import MemberCounts
 
 Row = tuple[str, str]
@@ -16,8 +18,7 @@ def flow_row(
     node: str,
     target: str,
     source: str,
-    origin: str = "",
-    literal: str = "",
+    origin: Origin = NO_ORIGIN,
     landing: tuple[int, ...] = (0,),
 ) -> Row:
     return (
@@ -34,9 +35,8 @@ def flow_row(
                     "node": node,
                     "source_extent": source,
                     "target_extent": target,
-                    "origin": origin,
-                    "literal": literal,
-                    "landing": [] if origin else list(landing),
+                    "origin": dict(origin.wire()),
+                    "landing": list(landing) if origin.is_storage else [],
                     "rebuilt": False,
                 },
             }
@@ -48,7 +48,7 @@ def sink_row(
     program: str,
     node: str,
     source: str,
-    sink: str,
+    sink: Sink,
     definers: Sequence[str] = (),
 ) -> Row:
     return (
@@ -57,7 +57,7 @@ def sink_row(
             {
                 "program": program,
                 "node": node,
-                "sink": sink,
+                "sink": dict(sink.wire()),
                 "source_extent": source,
                 "definers": list(definers),
             }

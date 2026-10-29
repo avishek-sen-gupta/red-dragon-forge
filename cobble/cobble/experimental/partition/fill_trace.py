@@ -27,7 +27,9 @@ def read_of(dep: DepRow) -> FillQuery:
 
 def written_rows(deps: Sequence[DepRow]) -> Rows:
     written = sorted(
-        (dep.site, i) for i, dep in enumerate(deps) if dep.target.known and not dep.sink
+        (dep.site, i)
+        for i, dep in enumerate(deps)
+        if dep.target.known and dep.sink.is_none
     )
     return {
         site: tuple(deps[i] for _, i in group)

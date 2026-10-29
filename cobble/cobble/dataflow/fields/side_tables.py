@@ -50,6 +50,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
 
+from cobble.dataflow.fields.sink import Sink
 from cobble.dataflow.fields.values import EMPTY as VALUES_EMPTY
 from cobble.dataflow.fields.values import ValueSet
 from cobble.dataflow.fixpoint.target_kind import TargetKind
@@ -154,7 +155,7 @@ class ProgramSink:
 
     program: str
     node: str
-    sink: str
+    sink: Sink
     source_extent: str
     definers: tuple[str, ...]
 
@@ -232,7 +233,7 @@ def defs_identity(program: str, node: str, extent: str) -> str:
 
 
 def sink_identity(sink: ProgramSink) -> str:
-    return "\x00".join((sink.program, sink.node, sink.sink, sink.source_extent))
+    return "\x00".join((sink.program, sink.node, sink.sink.text(), sink.source_extent))
 
 
 def alias_identity(caller: str, node: str, caller_extent: str) -> str:
@@ -275,7 +276,7 @@ def sink_row(sink: ProgramSink) -> _Row:
             {
                 "program": sink.program,
                 "node": sink.node,
-                "sink": sink.sink,
+                "sink": sink.sink.wire(),
                 "source_extent": sink.source_extent,
                 "definers": list(sink.definers),
             }

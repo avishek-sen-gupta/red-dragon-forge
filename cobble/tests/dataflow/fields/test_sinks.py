@@ -3,7 +3,13 @@
 from __future__ import annotations
 
 import pytest
-from cobble.dataflow.fields.sinks import Sink, sinks_of
+import json
+
+from cobble.dataflow.fields.side_tables import ProgramSink, sink_row
+from cobble.dataflow.fields.sink import Sink
+from cobble.dataflow.fields.sink_kind import SinkKind
+from cobble.dataflow.fields.sink_site import SinkSite
+from cobble.dataflow.fields.sinks import sinks_of
 from cobol_asg.ref_mod import RefModOperand
 
 
@@ -30,27 +36,56 @@ FILES = {"OUT-REC": "OUTF"}
                 "record_name": "OUT-REC",
                 "from_field": {"name": "WS-REC"},
             },
-            (Sink(name="FILE:OUTF", operand=RefModOperand(name="OUT-REC")),),
+            (
+                SinkSite(
+                    sink=Sink(SinkKind.FILE, "OUTF"),
+                    operand=RefModOperand(name="OUT-REC"),
+                ),
+            ),
         ),
         (
             {"type": "REWRITE", "record_name": "OUT-REC"},
-            (Sink(name="FILE:OUTF", operand=RefModOperand(name="OUT-REC")),),
+            (
+                SinkSite(
+                    sink=Sink(SinkKind.FILE, "OUTF"),
+                    operand=RefModOperand(name="OUT-REC"),
+                ),
+            ),
         ),
         (
             _cics("WRITE", FILE=("KSDS", True), FROM=("WS-REC", False)),
-            (Sink(name="FILE:KSDS", operand=RefModOperand(name="WS-REC")),),
+            (
+                SinkSite(
+                    sink=Sink(SinkKind.FILE, "KSDS"),
+                    operand=RefModOperand(name="WS-REC"),
+                ),
+            ),
         ),
         (
             _cics("REWRITE", FILE=("KSDS", True), FROM=("WS-REC", False)),
-            (Sink(name="FILE:KSDS", operand=RefModOperand(name="WS-REC")),),
+            (
+                SinkSite(
+                    sink=Sink(SinkKind.FILE, "KSDS"),
+                    operand=RefModOperand(name="WS-REC"),
+                ),
+            ),
         ),
         (
             _cics("SEND MAP", MAP=("MAP1", True), FROM=("WS-OUT", False)),
-            (Sink(name="MAP:MAP1", operand=RefModOperand(name="WS-OUT")),),
+            (
+                SinkSite(
+                    sink=Sink(SinkKind.MAP, "MAP1"),
+                    operand=RefModOperand(name="WS-OUT"),
+                ),
+            ),
         ),
         (
             _cics("SEND MAP", MAP=("MAP1", True), MAPSET=("SET1", True)),
-            (Sink(name="MAP:MAP1", operand=RefModOperand(name="MAP1O")),),
+            (
+                SinkSite(
+                    sink=Sink(SinkKind.MAP, "MAP1"), operand=RefModOperand(name="MAP1O")
+                ),
+            ),
         ),
         (
             {
@@ -64,15 +99,30 @@ FILES = {"OUT-REC": "OUTF"}
         ),
         (
             _cics("WRITEQ TS", QUEUE=("Q1", True), FROM=("WS-ITEM", False)),
-            (Sink(name="TSQ:Q1", operand=RefModOperand(name="WS-ITEM")),),
+            (
+                SinkSite(
+                    sink=Sink(SinkKind.TS_QUEUE, "Q1"),
+                    operand=RefModOperand(name="WS-ITEM"),
+                ),
+            ),
         ),
         (
             _cics("WRITEQ TD", QUEUE=("CSSL", True), FROM=("WS-LINE", False)),
-            (Sink(name="TDQ:CSSL", operand=RefModOperand(name="WS-LINE")),),
+            (
+                SinkSite(
+                    sink=Sink(SinkKind.TD_QUEUE, "CSSL"),
+                    operand=RefModOperand(name="WS-LINE"),
+                ),
+            ),
         ),
         (
             _cics("START", TRANSID=("T001", True), FROM=("WS-DATA", False)),
-            (Sink(name="TRANSID:T001", operand=RefModOperand(name="WS-DATA")),),
+            (
+                SinkSite(
+                    sink=Sink(SinkKind.TRANSID, "T001"),
+                    operand=RefModOperand(name="WS-DATA"),
+                ),
+            ),
         ),
         (_cics("START", TRANSID=("T001", True)), ()),
         (_cics("READ", FILE=("KSDS", True), INTO=("WS-REC", False)), ()),
@@ -84,3 +134,14 @@ def test_an_output_statement_names_its_sink_and_what_goes_out(
 ):
     (parsed,) = program_of([statement]).paragraphs[0].statements
     assert sinks_of(parsed, FILES) == expected
+
+
+def test_a_sink_row_writes_its_sink_as_a_kind_and_a_name() -> None:
+    row = ProgramSink(
+        program="P",
+        node="P/1",
+        sink=Sink(SinkKind.FILE, "OUT"),
+        source_extent="WORKING-STORAGE:0+8",
+        definers=("P/0",),
+    )
+    assert json.loads(sink_row(row)[1])["sink"] == {"kind": "FILE", "name": "OUT"}

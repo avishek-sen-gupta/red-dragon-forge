@@ -21,13 +21,32 @@ targets, query), `dataflow/combine/`, `dataflow/depgraph/`.
 ## Extents
 
 An extent reads `NAME@region[start:end]`. A trailing `~` marks a clamped range: a computed
-subscript lands somewhere inside it. A field id is `<program>.<field>`. Synthetic origins
-(`<program>.LITERAL`, `FILE:<name>`, `MAP:<map>`, `%CICS-STATE`, `%CALL:<target>`, `FUNCTION:<name>`)
-are not storage. A `RECEIVE MAP` writes its `INTO` field, or the map's input record `<map>I`
-when `INTO` is absent, from `MAP:<map>`. A `MOVE FUNCTION f(...)` reads the fields its
-arguments name, as a `COMPUTE` does; a function reading no field, such as `CURRENT-DATE`, is
-the `FUNCTION:<name>` origin, e.g. `FUNCTION:CURRENT-DATE`. `ASKTIME` and `ASSIGN` write every
-field they name, and any command its `RESP` and `RESP2`, from `%CICS-STATE`.
+subscript lands somewhere inside it. A field id is `<program>.<field>`.
+
+A value that is not storage has an **origin**: a `kind` and a `name`. Bytes that leave a program
+have a **sink**, of the same shape. Artifacts carry both as `{"kind": ..., "name": ...}` objects;
+an origin adds `"unplaced"`, the target operand that had no extent, when there is one. Readers
+test `kind`. The text form `KIND:name` (`KIND` alone when `name` is empty) builds ids, labels and
+trace output, and nothing parses it.
+
+| origin kind | name | written by |
+|---|---|---|
+| `LITERAL` | the literal as written (`'Y'`, `SPACES`, `0`); empty for `INITIALIZE` | a `MOVE` of a literal or figurative constant, `INITIALIZE` |
+| `FILE` | the file (or the field holding its name) | `READ`, CICS file verbs |
+| `MAP` | the map | `RECEIVE MAP` |
+| `CALL` | the member, without quotes | `CALL 'X'`, CICS `LINK`/`XCTL` with a literal `PROGRAM` |
+| `DYNAMIC_CALL` | the field holding the member | `CALL WS-X`, CICS `LINK`/`XCTL` with a variable `PROGRAM` |
+| `CICS_STATE` | empty | `RESP`, `RESP2`, `ASKTIME`, `ASSIGN`, other CICS receivers |
+| `FUNCTION` | the function, e.g. `CURRENT-DATE` | a function reading no field |
+| `UNKNOWN_FIELD` | the undeclared name | a source with no declaration |
+| `FIGURATIVE`, `LENGTH_OF` | empty | an unresolved figurative or `LENGTH OF` operand |
+| `UNRESOLVED_OPERAND` | one undeclared operand; one source per name | `COMPUTE`, `STRING`, arithmetic |
+| `UNMODELLED` | the statement verb | a write the transfer does not model |
+
+Sink kinds are `FILE`, `MAP`, `TS_QUEUE`, `TD_QUEUE` and `TRANSID`, named by the file, map,
+queue or transaction id as written. A `RECEIVE MAP` writes its `INTO` field, or the map's input
+record `<map>I` when `INTO` is absent, from `MAP:<map>`. A `MOVE FUNCTION f(...)` reads the fields
+its arguments name, as a `COMPUTE` does.
 
 ## cobble-extents
 
@@ -105,7 +124,7 @@ write of the names its CFG node lists (`INSPECT REPLACING`/`CONVERTING` lists it
 read and written): it adds a definer, removes nothing, and adds the reason
 `unmodelled`. `EXEC SQL ... INTO` and `FETCH ... INTO` are not modelled.
 
-The graph is intra-program. A `CALL` or `LINK` contributes a `%CALL:<target>` source;
+The graph is intra-program. A `CALL` or `LINK` contributes a `CALL` or `DYNAMIC_CALL` origin;
 `aliases.jsonl` states which bytes the site shares with its callee.
 
 ### Budgets
@@ -126,11 +145,12 @@ back edge too.
 
 | File | One row per | Holds |
 |---|---|---|
-| `graph.jsonl` | `FIELD` endpoint, and `(node, source extent, target extent)` | node rows carry only the id; edge rows are `FLOWS_TO` with the `node` that moved the bytes, `landing`: the offset in the target where the source's first byte landed, when the statement moved the bytes unchanged, or `[]` when it rewrote them (see below), and `rebuilt`: true when the statement built the target's value in place (`ADD`, `SUBTRACT`, `MULTIPLY`, `DIVIDE`, `COMPUTE`, `STRING`) |
+| `graph.jsonl` | `FIELD` endpoint, and `(node, source extent, target extent)` | node rows carry only the id, an origin's being `<program>.<origin text>` (`PROGA.LITERAL:'Y'`, one node per literal value); edge rows are `FLOWS_TO` with the `node` that moved the bytes, `origin` (the object above, kind `NONE` for storage), `landing`: the offset in the target where the source's first byte landed, when the statement moved the bytes unchanged, or `[]` when it rewrote them (see below), and `rebuilt`: true when the statement built the target's value in place (`ADD`, `SUBTRACT`, `MULTIPLY`, `DIVIDE`, `COMPUTE`, `STRING`) |
 | `defs.jsonl` | `(program, node, source extent)` read that feeds a write | `definers` (statements whose writes reach the read; empty for a `VALUE` or nothing), `values` (quoted literals only), `reasons` |
 | `aliases.jsonl` | call site and caller window | `caller_extent` and `callee_extent` of the shared window, or the reason none is shared and the callee it stopped on |
 | `targets.jsonl` | dynamic `CALL`/`XCTL`/`LINK` site, and dynamic CICS file site | `caller`, `node`, `kind` (`program` or `file`), `transfer`, `expression`, `candidates`, `reasons`, `dropped` (values that cannot name a program, or a CICS file); a file row also carries `operand`, its operand's fact (`extent`, `values`, `writers`, `reasons`), which the combine walks back from |
 | `jumps.jsonl` | jump, exit, `RETRIEVE` and entry | what it hands over: target, transaction id, areas |
+| `sinks.jsonl` | `(program, node, sink, source extent)` | `sink` (the object above) and the `definers` of the bytes that leave |
 | `members/<MEMBER>/` | finished member | that member's five tables and `counts.json` |
 
 The human report goes to stderr; a JSON summary goes to stdout. The summary carries
@@ -419,7 +439,7 @@ only when it started inside the callee.
 
 Output is a tree, one line per row, each source under the write that read it. A branch already
 shown is printed once more with `(see above)` and not expanded. Origins (`FILE:`, `MAP:`,
-`LITERAL`, `%CALL:`, `FUNCTION:`) are backward leaves, sinks forward ones. The rows are the
+`LITERAL:`, `CALL:`, `FUNCTION:`) are backward leaves, sinks forward ones, each printed in the text form. The rows are the
 fixpoint's, merged over paths; a run capped with `--sweeps` that did not settle has fewer reaching
 definitions, so its tree can be smaller.
 

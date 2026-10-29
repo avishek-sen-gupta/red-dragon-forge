@@ -6,6 +6,8 @@ from dataclasses import dataclass
 
 from cobble.dataflow.fields.crossing import Crossing
 from cobble.dataflow.fields.extent_text import ByteRange
+from cobble.dataflow.fields.origin import Origin
+from cobble.dataflow.fields.sink import Sink
 
 
 @dataclass(frozen=True)
@@ -19,12 +21,11 @@ class DepRow:
     program: str
     via: str
     target: ByteRange
-    origin: str
+    origin: Origin
     source: ByteRange
     site: str
     definers: tuple[str, ...]
-    sink: str
-    literal: str = ""
+    sink: Sink
     entry: bool = False
     crossing: Crossing = Crossing.NONE
     landing: tuple[int, ...] = ()

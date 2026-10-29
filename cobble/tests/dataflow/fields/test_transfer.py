@@ -5,6 +5,8 @@ from __future__ import annotations
 import pytest
 from cics.statements import CicsOperand, ExecCicsStatement
 from cobble.dataflow.fields.extent import operand_extents
+from cobble.dataflow.fields.origin import Origin
+from cobble.dataflow.fields.origin_kind import OriginKind
 from cobble.dataflow.fields.state import EMPTY, reaching, values_at
 from cobble.dataflow.fields.transfer import transfer, write_operands
 from cobble.dataflow.fields.values import of_value
@@ -17,10 +19,10 @@ from cobol_asg.ref_mod import RefModOperand
 def names_reaching():
     """Every origin or source field name reaching one named operand."""
 
-    def reaching_at(state, index, name: str, **operand) -> set[str]:
+    def reaching_at(state, index, name: str, **operand) -> set[Origin | str]:
         (extent,) = operand_extents(RefModOperand(name=name, **operand), index).extents
         return {
-            source.origin or source.extent.field_name
+            source.extent.field_name if source.origin.is_storage else source.origin
             for source in reaching(state, extent)
         }
 
@@ -190,9 +192,9 @@ def test_a_figurative_constant_source_reaches_the_target_as_a_literal(
         data_fields=[field(1, "REC", children=[field(5, "WS-A", "X(4)", offset=0)])],
     )
     state, index = after(asg)
-    (extent,) = operand_extents(RefModOperand(name="WS-A"), index).extents
-    assert names_reaching(state, index, "WS-A") == {"LITERAL"}
-    assert {source.literal for source in reaching(state, extent)} == {"SPACES"}
+    assert names_reaching(state, index, "WS-A") == {
+        Origin(OriginKind.LITERAL, "SPACES")
+    }
 
 
 def test_a_computed_subscript_target_is_a_weak_update(
@@ -251,8 +253,8 @@ def test_initialize_gives_every_member_a_literal(
         ],
     )
     state, index = after(asg)
-    assert names_reaching(state, index, "WS-A") == {"LITERAL"}
-    assert names_reaching(state, index, "WS-B") == {"LITERAL"}
+    assert names_reaching(state, index, "WS-A") == {Origin(OriginKind.LITERAL, "")}
+    assert names_reaching(state, index, "WS-B") == {Origin(OriginKind.LITERAL, "")}
 
 
 def test_add_gives_the_target_the_union_of_its_operands(
@@ -379,7 +381,9 @@ def test_read_into_marks_the_target_as_coming_from_the_file(
         data_fields=[field(1, "REC", children=[field(5, "WS-REC", "X(8)", offset=0)])],
     )
     state, index = after(asg)
-    assert names_reaching(state, index, "WS-REC") == {"FILE:CUSTFILE"}
+    assert names_reaching(state, index, "WS-REC") == {
+        Origin(OriginKind.FILE, "CUSTFILE")
+    }
 
 
 @pytest.mark.parametrize("verb", ["WRITE", "REWRITE"])
@@ -430,7 +434,7 @@ def test_call_using_by_reference_marks_the_argument_as_written_by_the_callee(
         ],
     )
     state, index = after(asg)
-    assert names_reaching(state, index, "WS-A") == {"%CALL:SUBPROG"}
+    assert names_reaching(state, index, "WS-A") == {Origin(OriginKind.CALL, "SUBPROG")}
     assert names_reaching(state, index, "WS-B") == set()
 
 
@@ -454,7 +458,9 @@ def test_a_call_through_a_data_item_credits_a_sink_no_member_can_be(
         ],
     )
     state, index = after(asg)
-    assert names_reaching(state, index, "WS-A") == {"%CALL:%DYNAMIC:WS-PROG"}
+    assert names_reaching(state, index, "WS-A") == {
+        Origin(OriginKind.DYNAMIC_CALL, "WS-PROG")
+    }
 
 
 def test_exec_cics_read_into_marks_the_target_as_coming_from_the_file_or_dataset(
@@ -499,7 +505,12 @@ def test_exec_cics_read_into_marks_the_target_as_coming_from_the_file_or_dataset
     assert [
         names_reaching(state, index, name)
         for name in ("WS-REC", "WS-USER", "WS-RESP", "WS-RESP2")
-    ] == [{"FILE:CUSTFILE"}, {"FILE:WS-USRSEC-FILE"}, {"%CICS-STATE"}, {"%CICS-STATE"}]
+    ] == [
+        {Origin(OriginKind.FILE, "CUSTFILE")},
+        {Origin(OriginKind.FILE, "WS-USRSEC-FILE")},
+        {Origin(OriginKind.CICS_STATE, "")},
+        {Origin(OriginKind.CICS_STATE, "")},
+    ]
 
 
 def test_exec_cics_receive_map_writes_the_screen_into_its_map_record(
@@ -544,7 +555,11 @@ def test_exec_cics_receive_map_writes_the_screen_into_its_map_record(
     state, index = after(asg)
     assert [
         names_reaching(state, index, name) for name in ("WS-MAP", "MAPBI", "WS-TERM")
-    ] == [{"MAP:MAPA"}, {"MAP:MAPB"}, {"%CICS-STATE"}]
+    ] == [
+        {Origin(OriginKind.MAP, "MAPA")},
+        {Origin(OriginKind.MAP, "MAPB")},
+        {Origin(OriginKind.CICS_STATE, "")},
+    ]
 
 
 def test_exec_cics_link_marks_the_commarea_as_written_by_the_callee(
@@ -564,7 +579,9 @@ def test_exec_cics_link_marks_the_commarea_as_written_by_the_callee(
         data_fields=[field(1, "REC", children=[field(5, "WS-COMM", "X(8)", offset=0)])],
     )
     state, index = after(asg)
-    assert names_reaching(state, index, "WS-COMM") == {"%CALL:'SUBPROG'"}
+    assert names_reaching(state, index, "WS-COMM") == {
+        Origin(OriginKind.CALL, "SUBPROG")
+    }
 
 
 def test_an_unhandled_statement_leaves_the_state_untouched(program_of, field, after):
@@ -594,7 +611,9 @@ def test_compute_with_stub_source_tags_it_by_name(
         ],
     )
     state, index = after(asg)
-    assert names_reaching(state, index, "WS-PRICE") == {"FIELD:EXTERN-PRICE"}
+    assert names_reaching(state, index, "WS-PRICE") == {
+        Origin(OriginKind.UNRESOLVED_OPERAND, "EXTERN-PRICE")
+    }
 
 
 def test_compute_with_mixed_sources_includes_stub_names(
@@ -627,8 +646,7 @@ def test_compute_with_mixed_sources_includes_stub_names(
     )
     state, index = after(asg)
     result = names_reaching(state, index, "WS-PRICE")
-    assert "WS-A" in result
-    assert "FIELD:EXTERN-DISCOUNT" in result
+    assert result == {"WS-A", Origin(OriginKind.UNRESOLVED_OPERAND, "EXTERN-DISCOUNT")}
 
 
 def test_a_subscripted_cics_commarea_is_written_at_its_own_occurrence(
@@ -660,7 +678,7 @@ def test_a_subscripted_cics_commarea_is_written_at_its_own_occurrence(
     reached = names_reaching(
         state, index, "WS-COMMS", subscripts=(LiteralNode(value="2"),)
     )
-    assert reached == {"%CALL:'SUBPROG'"}
+    assert reached == {Origin(OriginKind.CALL, "SUBPROG")}
 
 
 def test_an_unsubscripted_cics_commarea_is_written_exactly_as_before(
@@ -680,7 +698,9 @@ def test_an_unsubscripted_cics_commarea_is_written_exactly_as_before(
         data_fields=[field(1, "REC", children=[field(5, "WS-COMM", "X(8)", offset=0)])],
     )
     state, index = after(asg)
-    assert names_reaching(state, index, "WS-COMM") == {"%CALL:'SUBPROG'"}
+    assert names_reaching(state, index, "WS-COMM") == {
+        Origin(OriginKind.CALL, "SUBPROG")
+    }
 
 
 def test_a_literal_move_carries_its_text_fitted_to_the_target(
@@ -753,7 +773,7 @@ def test_a_move_from_a_function_reads_the_fields_its_arguments_name(
     state, index = after(asg)
     assert [
         names_reaching(state, index, name) for name in ("WS-B", "WS-C", "WS-D")
-    ] == [{"WS-A"}, {"WS-A"}, {"FUNCTION:CURRENT-DATE"}]
+    ] == [{"WS-A"}, {"WS-A"}, {Origin(OriginKind.FUNCTION, "CURRENT-DATE")}]
 
 
 def test_a_link_or_xctl_writes_its_commarea_and_nothing_without_one() -> None:
@@ -791,3 +811,71 @@ def test_asktime_and_assign_write_every_field_they_name_from_cics_state() -> Non
         [operand.name for operand in write_operands(ExecCicsStatement(verb, options))]
         for verb, options in cases
     ] == [["WS-ABS"], ["WS-APPLID", "WS-SYSID"]]
+
+
+def test_cics_link_program_literal_and_variable(
+    program_of, field, after, names_reaching
+):
+    """PROGRAM('SUBPROG') names a member, quotes stripped; PROGRAM(WS-PGM) names the
+    field holding one, which no member can be mistaken for."""
+    asg = program_of(
+        [
+            {
+                "type": "EXEC_CICS",
+                "verb": "LINK",
+                "options": {
+                    "PROGRAM": {"text": "'SUBPROG'", "is_literal": True},
+                    "COMMAREA": {"text": "WS-A", "is_literal": False},
+                },
+            },
+            {
+                "type": "EXEC_CICS",
+                "verb": "XCTL",
+                "options": {
+                    "PROGRAM": {"text": "WS-PGM", "is_literal": False},
+                    "COMMAREA": {"text": "WS-B", "is_literal": False},
+                },
+            },
+        ],
+        data_fields=[
+            field(
+                1,
+                "REC",
+                children=[
+                    field(5, "WS-A", "X(4)", offset=0),
+                    field(5, "WS-B", "X(4)", offset=4),
+                    field(5, "WS-PGM", "X(8)", offset=8),
+                ],
+            )
+        ],
+    )
+    state, index = after(asg)
+    assert [names_reaching(state, index, name) for name in ("WS-A", "WS-B")] == [
+        {Origin(OriginKind.CALL, "SUBPROG")},
+        {Origin(OriginKind.DYNAMIC_CALL, "WS-PGM")},
+    ]
+
+
+def test_unresolved_operands_one_source_each(program_of, field, after, names_reaching):
+    asg = program_of(
+        [
+            {
+                "type": "COMPUTE",
+                "expression": {
+                    "kind": "binop",
+                    "op": "+",
+                    "left": {"kind": "ref", "name": "EXT-A"},
+                    "right": {"kind": "ref", "name": "EXT-B"},
+                },
+                "targets": [{"name": "WS-PRICE"}],
+            }
+        ],
+        data_fields=[
+            field(1, "REC", children=[field(5, "WS-PRICE", "9(8)", offset=0)])
+        ],
+    )
+    state, index = after(asg)
+    assert names_reaching(state, index, "WS-PRICE") == {
+        Origin(OriginKind.UNRESOLVED_OPERAND, "EXT-A"),
+        Origin(OriginKind.UNRESOLVED_OPERAND, "EXT-B"),
+    }

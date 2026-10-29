@@ -6,6 +6,8 @@ import pytest
 from cobble.corpus_index import CorpusIndex
 from cobble.dataflow.fields.emit import field_id, graph_records
 from cobble.dataflow.fields.side_tables import ProgramSink
+from cobble.dataflow.fields.sink import Sink
+from cobble.dataflow.fields.sink_kind import SinkKind
 from cobble.dataflow.fixpoint.fixpoint import analyse
 from cobble.file_location import FileLocationReason, NoFileLocation
 from cobble.knowledge_graph.graph_types import EdgeKind, NodeKind
@@ -227,7 +229,7 @@ def test_an_occurs_element_owns_one_range_per_occurrence_not_one_span(
 def test_a_group_initialize_is_one_edge_at_the_group_not_one_per_child(
     records_of, two_fields
 ):
-    """Both children were written, both from LITERAL, both by this statement.
+    """Both children were written, both from one LITERAL, both by this statement.
 
     So the per-child edges said one thing twice, differing only in a target
     extent REC's own extent contains -- and REC, WS-A and WS-B all publish
@@ -248,6 +250,7 @@ def test_a_synthetic_origin_becomes_its_own_field_node(records_of, field):
     (edge,) = _flows(records.edges)
     assert edge.source == "PROGA.LITERAL"
     assert edge.attrs["source_extent"] == ""
+    assert edge.attrs["origin"] == {"kind": "LITERAL", "name": ""}
 
 
 def test_a_synthetic_origin_has_no_entry_rather_than_an_empty_range(records_of, field):
@@ -268,8 +271,8 @@ def test_a_synthetic_origin_has_no_entry_rather_than_an_empty_range(records_of, 
 def test_a_synthetic_source_names_its_origin_and_literal_and_storage_names_neither(
     records_of, two_fields
 ):
-    """Two literals moved into one field stay two edges: the literal is part of
-    what the edge says, so a dedupe on the attrs cannot fold them together."""
+    """Two literals moved into one field stay two edges from two source nodes: the
+    literal is the origin's name, so a dedupe on the attrs cannot fold them together."""
     records = records_of(
         [
             {"type": "MOVE", "operands": [{"name": "'A'"}, {"name": "WS-A"}]},
@@ -280,13 +283,14 @@ def test_a_synthetic_source_names_its_origin_and_literal_and_storage_names_neith
     )
 
     assert sorted(
-        (edge.attrs["node"], edge.attrs["origin"], edge.attrs["literal"])
+        (edge.attrs["node"], edge.source, edge.attrs["origin"])
         for edge in _flows(records.edges)
     ) == [
-        ("MAIN/0", "LITERAL", "'A'"),
-        ("MAIN/1", "LITERAL", "'B'"),
-        ("MAIN/2", "", ""),
+        ("MAIN/0", "PROGA.LITERAL:'A'", {"kind": "LITERAL", "name": "'A'"}),
+        ("MAIN/1", "PROGA.LITERAL:'B'", {"kind": "LITERAL", "name": "'B'"}),
+        ("MAIN/2", "PROGA.WS-A", {"kind": "NONE", "name": ""}),
     ]
+    assert all("literal" not in edge.attrs for edge in _flows(records.edges))
 
 
 def test_bytes_leaving_by_a_sink_are_a_row_naming_the_sink_and_their_definers(
@@ -315,9 +319,43 @@ def test_bytes_leaving_by_a_sink_are_a_row_naming_the_sink_and_their_definers(
         ProgramSink(
             program="PROGA",
             node="MAIN/1",
-            sink="MAP:MAP1",
+            sink=Sink(SinkKind.MAP, "MAP1"),
             source_extent="WS-B@working_storage[4:8]",
             definers=("MAIN/0",),
         ),
     )
     assert [edge.attrs["node"] for edge in _flows(records.edges)] == ["MAIN/0"]
+
+
+def test_literal_with_a_dot_keeps_its_program(records_of, two_fields):
+    """A literal's text is the origin's name and is never split, so a dot inside it
+    leaves the program, the part before the id's first dot, intact."""
+    records = records_of(
+        [{"type": "MOVE", "operands": [{"name": "'.'"}, {"name": "WS-A"}]}],
+        two_fields,
+    )
+    (edge,) = _flows(records.edges)
+    assert edge.source == "PROGA.LITERAL:'.'"
+    assert edge.source.split(".", 1) == ["PROGA", "LITERAL:'.'"]
+    assert edge.attrs["origin"] == {"kind": "LITERAL", "name": "'.'"}
+
+
+def test_a_received_map_is_a_source_node_named_by_its_kind(records_of, field):
+    records = records_of(
+        [
+            {
+                "type": "EXEC_CICS",
+                "verb": "RECEIVE MAP",
+                "options": {
+                    "MAP": {"text": "MAP1", "is_literal": True},
+                    "INTO": {"text": "WS-A", "is_literal": False},
+                },
+            }
+        ],
+        [field(1, "REC", offset=0, children=[field(5, "WS-A", "X(4)", offset=0)])],
+    )
+    (edge,) = _flows(records.edges)
+    assert (edge.source, edge.attrs["origin"]) == (
+        "PROGA.MAP:MAP1",
+        {"kind": "MAP", "name": "MAP1"},
+    )

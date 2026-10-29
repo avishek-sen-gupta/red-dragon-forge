@@ -76,7 +76,10 @@ def _move(source: str, target: str) -> dict:
 
 def _pairs(flow) -> set[tuple[str, str]]:
     return {
-        (edge.origin or edge.source.field_name, edge.target.field_name)
+        (
+            edge.source.field_name if edge.origin.is_storage else edge.origin.text(),
+            edge.target.field_name,
+        )
         for edge in flow.edges
     }
 

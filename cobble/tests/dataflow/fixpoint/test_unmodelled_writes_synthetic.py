@@ -52,8 +52,8 @@ def test_an_unmodelled_write_is_a_definer_a_flow_and_doubt_never_a_proven_target
         ("WS-P3", ["PROGA"], ["unmodelled"]),
     ]
     assert sorted((edge.source, edge.target) for edge in edges) == [
-        ("UNMODEL.ACCEPT", "UNMODEL.WS-P1"),
-        ("UNMODEL.SET", "UNMODEL.WS-P3"),
+        ("UNMODEL.UNMODELLED:ACCEPT", "UNMODEL.WS-P1"),
+        ("UNMODEL.UNMODELLED:SET", "UNMODEL.WS-P3"),
         ("UNMODEL.WS-IN", "UNMODEL.WS-P2"),
     ]
     assert (counts.writes, counts.covered, counts.unmodelled) == (3, 3, 3)

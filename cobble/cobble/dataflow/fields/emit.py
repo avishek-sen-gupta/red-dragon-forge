@@ -71,17 +71,17 @@ def field_id(program: str, name: str) -> str:
 def _source_name(edge: FlowEdge, index: CellIndex) -> str:
     """An origin where there is one; a field name otherwise.
 
-    ``origin`` is non-empty exactly when the extent is NOWHERE, whose own
+    ``origin`` is not storage exactly when the extent is NOWHERE, whose own
     ``field_name`` is empty -- so this branch is what stops a synthetic source
     from being emitted as ``<program>.``.
     """
-    if edge.origin:
-        return edge.origin
+    if not edge.origin.is_storage:
+        return edge.origin.text()
     return smallest_covering(edge.source, index)
 
 
 def _source_extent(edge: FlowEdge) -> str:
-    return "" if edge.origin else extent_text(edge.source)
+    return extent_text(edge.source) if edge.origin.is_storage else ""
 
 
 def _attrs(edge: FlowEdge) -> dict[str, AttrValue]:
@@ -89,8 +89,7 @@ def _attrs(edge: FlowEdge) -> dict[str, AttrValue]:
         "node": edge.node,
         "source_extent": _source_extent(edge),
         "target_extent": extent_text(edge.target),
-        "origin": edge.origin,
-        "literal": edge.literal,
+        "origin": edge.origin.wire(),
         "landing": list(edge.landing),
         "rebuilt": edge.rebuilt,
     }

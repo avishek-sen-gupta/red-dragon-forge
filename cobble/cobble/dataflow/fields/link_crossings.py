@@ -10,6 +10,8 @@ from cobble.dataflow.combine.link_row import LinkRow
 from cobble.dataflow.fields.crossing import Crossing
 from cobble.dataflow.fields.dep_row import DepRow
 from cobble.dataflow.fields.extent_text import ByteRange, byte_range
+from cobble.dataflow.fields.origin import NO_ORIGIN
+from cobble.dataflow.fields.sink import NO_SINK
 from cobble.dataflow.fields.values import UnresolvedReason
 from cobble.dataflow.fixpoint.build_corpus import JUMPS_FILE, MEMBERS_DIR
 from cobble.dataflow.jumps.fact import Fact
@@ -80,7 +82,7 @@ def _row(
         program=written.program,
         via="",
         target=written,
-        origin="",
+        origin=NO_ORIGIN,
         source=part,
         site=f"{link.caller}/{link.node}",
         definers=tuple(
@@ -88,7 +90,7 @@ def _row(
                 f"{part.program}/{writer}" for fact in facts for writer in fact.writers
             )
         ),
-        sink="",
+        sink=NO_SINK,
         entry=_from_entry(part, facts),
         crossing=crossing,
     )

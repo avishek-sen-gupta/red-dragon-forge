@@ -56,7 +56,7 @@ groups and redefinitions over it. Held on the edge they were duplicated per path
 and deduplicated by endpoint, which dropped all but one. ``fields.query`` joins
 them back; nothing about a flow is recoverable only from a fan-out.
 
-The graph is intra-program: a CALL or LINK contributes a synthetic %CALL:<target>
+The graph is intra-program: a CALL or LINK contributes a synthetic CALL:<target>
 source and no callee summary. aliases.jsonl states which bytes that site shares
 with its callee, but it is not an edge -- naming several members analyses each one
 independently, so no edge crosses a program.

@@ -164,9 +164,9 @@ across = (out / "COSGN00C-user-id-across-calls.txt").read_text()
 def node_id(label, ids):
     return ids.setdefault(label, f"n{len(ids)}")
 
-# Origin rows (LITERAL, %CICS-STATE) are leaves of no interest on a slide; a field
+# Origin rows (LITERAL:<text>, CICS_STATE) are leaves of no interest on a slide; a field
 # nested under one is attached to the nearest field above it in the tree instead.
-ORIGINS = {"LITERAL", "%CICS-STATE"}
+ORIGINS = {"LITERAL", "CICS_STATE"}
 
 def tree_edges(text):
     stack, edges = [], set()
@@ -177,8 +177,8 @@ def tree_edges(text):
         depth, name = len(m.group(1)), m.group(2).split("@")[0]
         while stack and stack[-1][0] >= depth:
             stack.pop()
-        parent = next((n for _, n in reversed(stack) if n not in ORIGINS), None)
-        if parent and name not in ORIGINS and name != parent:
+        parent = next((n for _, n in reversed(stack) if n.partition(":")[0] not in ORIGINS), None)
+        if parent and name.partition(":")[0] not in ORIGINS and name != parent:
             edges.add((name, parent))
         stack.append((depth, name))
     return sorted(edges)

@@ -18,7 +18,7 @@ make carddemo-all
 ```
 
 ```bash
-RUN=cobble/out-carddemo-20261028-1640-rebuild-all   # the directory the run printed; update it after a rebuild
+RUN=cobble/out-carddemo-20261030-0308-rebuild-all   # the directory the run printed; update it after a rebuild
 ```
 
 All commands below use `$RUN` relative to the repo root unless they `cd cobble`, where it is

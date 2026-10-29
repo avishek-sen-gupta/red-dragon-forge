@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from types import MappingProxyType
 
+from cobble.dataflow.fields.origin import NO_ORIGIN
 from cobble.dataflow.fields.state import (
     EMPTY,
     Source,
@@ -31,7 +32,7 @@ def _extent(start: int, length: int, precision=Precision.EXACT, name="WS-A"):
 
 
 def _source(name: str) -> Source:
-    return Source(origin="", extent=_extent(100, 4, name=name), node="MAIN/0")
+    return Source(origin=NO_ORIGIN, extent=_extent(100, 4, name=name), node="MAIN/0")
 
 
 def _names(state, read) -> set[str]:

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
-from cobble.dataflow.depgraph.flows import FILE_PREFIX
 from cobble.dataflow.fields.dep_row import DepRow
+from cobble.dataflow.fields.origin_kind import OriginKind
+from cobble.dataflow.fields.sink_kind import SinkKind
 from cobble.dataflow.fixpoint.target_kind import TargetKind
 from cobble.dataflow.fixpoint.target_site import TargetSite
 from cobble.experimental.partition.certainty import Certainty
@@ -22,12 +23,6 @@ UNRESOLVED_MARK = "?"
 _Binding = tuple[str, tuple[str, ...]]
 
 
-def _named(terminal: str) -> str:
-    return (
-        terminal.removeprefix(FILE_PREFIX) if terminal.startswith(FILE_PREFIX) else ""
-    )
-
-
 def _written(dep: DepRow, name: str) -> tuple[FileSite, ...]:
     if not dep.source.known:
         return ()
@@ -41,11 +36,11 @@ def _read(dep: DepRow, name: str) -> tuple[FileSite, ...]:
 
 
 def _uses(dep: DepRow) -> tuple[FileSite, ...]:
-    written = _named(dep.sink)
-    if written:
-        return _written(dep, written)
-    read = _named(dep.origin)
-    return _read(dep, read) if read else ()
+    if dep.sink.kind is SinkKind.FILE and dep.sink.name:
+        return _written(dep, dep.sink.name)
+    if dep.origin.kind is OriginKind.FILE and dep.origin.name:
+        return _read(dep, dep.origin.name)
+    return ()
 
 
 def file_sites(deps: Sequence[DepRow]) -> tuple[FileSite, ...]:

@@ -12,7 +12,12 @@ from tests.dataflow.fields.test_fields_build_corpus import (  # noqa: F401
 from cobble.dataflow.fields.dep_row import DepRow
 from cobble.dataflow.fields.extent_text import NO_RANGE, byte_range
 from cobble.dataflow.fixpoint.build_corpus import SINKS_FILE, cli
+from cobble.dataflow.fields.origin import NO_ORIGIN, Origin
+from cobble.dataflow.fields.origin_kind import OriginKind
+from cobble.dataflow.fields.sink import NO_SINK, Sink
+from cobble.dataflow.fields.sink_kind import SinkKind
 from cobble.dataflow.fixpoint.provenance import MissingProvenance, provenance
+from tests.dataflow.fixpoint.fixpoint_dir import fixpoint_dir, flow_row, sink_row
 
 
 def _literal_moved_and_sent(program_id: str) -> dict:
@@ -51,36 +56,56 @@ def test_a_fixpoint_out_dir_reads_back_as_flow_and_sink_rows(corpus):
             program="PROGA",
             via="",
             target=ws_a,
-            origin="LITERAL",
+            origin=Origin(OriginKind.LITERAL, "'X'"),
             source=NO_RANGE,
             site="PROGA/MAIN/0",
             definers=(),
-            sink="",
-            literal="'X'",
+            sink=NO_SINK,
         ),
         DepRow(
             program="PROGA",
             via="",
             target=ws_b,
-            origin="",
+            origin=NO_ORIGIN,
             source=ws_a,
             site="PROGA/MAIN/1",
             definers=("PROGA/MAIN/0",),
-            sink="",
+            sink=NO_SINK,
             landing=(0,),
         ),
         DepRow(
             program="PROGA",
             via="",
             target=NO_RANGE,
-            origin="",
+            origin=NO_ORIGIN,
             source=ws_b,
             site="PROGA/MAIN/2",
             definers=("PROGA/MAIN/1",),
-            sink="MAP:MAP1",
+            sink=Sink(SinkKind.MAP, "MAP1"),
         ),
     )
 
     (out_dir / "members" / "MEMBERA" / SINKS_FILE).unlink()
     with pytest.raises(MissingProvenance, match="MEMBERA"):
+        tuple(provenance(out_dir))
+
+
+@pytest.mark.parametrize("old", ["graph", "sinks"])
+def test_old_sink_rows_are_stale(tmp_path, old):
+    """A run written before origins and sinks were typed is rebuilt, not misread."""
+    flow = flow_row("P", "1", "A@working_storage[0:4]", "B@working_storage[4:8]")
+    sink = sink_row("P", "2", "A@working_storage[0:4]", Sink(SinkKind.FILE, "OUT"))
+    stale = {
+        "graph": (flow[0], flow[1].replace('{"kind": "NONE", "name": ""}', '""')),
+        "sinks": (
+            sink[0],
+            sink[1].replace('{"kind": "FILE", "name": "OUT"}', '"FILE:OUT"'),
+        ),
+    }[old]
+    out_dir = fixpoint_dir(
+        tmp_path,
+        flows=[stale if old == "graph" else flow],
+        sinks=[stale if old == "sinks" else sink],
+    )
+    with pytest.raises(MissingProvenance, match="^.*/members/P has no provenance"):
         tuple(provenance(out_dir))

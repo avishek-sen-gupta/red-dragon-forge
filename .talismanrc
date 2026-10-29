@@ -489,4 +489,10 @@ fileignoreconfig:
   checksum: 923c25f74eda94408eae162b559c20494b3515a76296f06f59e259cd7ce455e9
 - filename: tests/integration/fixtures/hlasm_fp/ASMFP.asm
   checksum: 1f67dcf54a4e6f1d852ae6fd843fb03e5994e58ad8b30f4a0fc0cebd0f38aad5
+- filename: docs/reference/cobble/partition.md
+  checksum: bbbc9bbeb1d294282b04fc3f10918811997014e9f8c157578cbc88592e3c87ec
+- filename: docs/superpowers/specs/cobble/2026-10-30-typed-origins-and-sinks-design.md
+  checksum: 268d74baf3d92ca8c901ad3f2b3f78f0d3a528a8db5ef33f990f819cab790971
+- filename: docs/superpowers/plans/2026-10-30-typed-origins-and-sinks.md
+  checksum: f4393b0d4dca71522641706a9e299f5bfe8f40eaad616315450b588809c4a483
 version: "1.0"

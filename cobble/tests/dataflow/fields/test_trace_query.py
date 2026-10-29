@@ -17,6 +17,10 @@ from tests.dataflow.fixpoint.fixpoint_dir import (
 
 from cobble.dataflow.combine.link_row import LinkRow
 from cobble.dataflow.fields.dep_row import DepRow
+from cobble.dataflow.fields.origin import NO_ORIGIN, Origin
+from cobble.dataflow.fields.origin_kind import OriginKind
+from cobble.dataflow.fields.sink import NO_SINK, Sink
+from cobble.dataflow.fields.sink_kind import SinkKind
 from cobble.dataflow.fields.extent_text import ByteRange
 from cobble.dataflow.fields.values import UnresolvedReason
 from cobble.dataflow.jumps.fact import Fact
@@ -74,7 +78,7 @@ def _dep(
     source_field: str = "",
     source_start: int = 0,
     source_end: int = 0,
-    origin: str = "",
+    origin: Origin = NO_ORIGIN,
     site: str = "",
     definers: list[str] | None = None,
     via: str = "",
@@ -89,7 +93,7 @@ def _dep(
             "end": source_end,
             "clamped": False,
         }
-        if not origin
+        if origin.is_storage
         else None
     )
     return {
@@ -105,7 +109,7 @@ def _dep(
         },
         "origin": origin,
         "source": source,
-        **({} if origin else {"source_program": source_program or program}),
+        **({"source_program": source_program or program} if origin.is_storage else {}),
         "site": site or f"{program}/PARA/0",
         "definers": definers or [],
     }
@@ -128,8 +132,8 @@ def _row(
     source: ByteRange,
     site: str,
     definers: tuple[str, ...] = (),
-    origin: str = "",
-    sink: str = "",
+    origin: Origin = NO_ORIGIN,
+    sink: Sink = NO_SINK,
 ) -> DepRow:
     return DepRow(
         program=site.split("/", 1)[0],
@@ -151,10 +155,16 @@ _TWO_WRITERS = (
     _row(_ws("X", 0, 4), _ws("A", 10, 14), "P/S1"),
     _row(_ws("X", 0, 4), _ws("C", 20, 24), "P/S5"),
     _row(_ws("Y", 30, 34), _ws("X", 0, 4), "P/S3", definers=("P/S1",)),
-    _row(_ws("Z", 40, 44), _NOWHERE, "P/S2", origin="LITERAL"),
+    _row(_ws("Z", 40, 44), _NOWHERE, "P/S2", origin=Origin(OriginKind.LITERAL, "'Y'")),
     _row(_ws("Y", 30, 34), _ws("Z", 40, 44), "P/S4", definers=("P/S2",)),
     _row(_ws("W", 50, 54), _ws("X", 0, 4), "P/S6", definers=("P/S5",)),
-    _row(_NOWHERE, _ws("Y", 30, 34), "P/S7", definers=("P/S3",), sink="FILE:OUT"),
+    _row(
+        _NOWHERE,
+        _ws("Y", 30, 34),
+        "P/S7",
+        definers=("P/S3",),
+        sink=Sink(SinkKind.FILE, "OUT"),
+    ),
 )
 
 
@@ -166,7 +176,7 @@ def test_backward_is_a_tree_of_the_writes_that_reach_each_read() -> None:
         "  <- X@working_storage[0:4]  at P/S3",
         "    <- A@working_storage[10:14]  at P/S1",
         "  <- Z@working_storage[40:44]  at P/S4",
-        "    <- LITERAL  at P/S2",
+        "    <- LITERAL:'Y'  at P/S2",
     )
 
 
@@ -189,7 +199,9 @@ def test_a_write_that_reaches_itself_is_shown_once() -> None:
     """ADD 1 TO X reads the X it wrote on the last iteration: the walk stops
     there rather than repeating, and says the branch is above."""
     rows = (
-        _row(_ws("X", 0, 4), _NOWHERE, "P/INIT", origin="LITERAL"),
+        _row(
+            _ws("X", 0, 4), _NOWHERE, "P/INIT", origin=Origin(OriginKind.LITERAL, "0")
+        ),
         _row(_ws("X", 0, 4), _ws("X", 0, 4), "P/ADD", definers=("P/ADD", "P/INIT")),
     )
 
@@ -197,8 +209,8 @@ def test_a_write_that_reaches_itself_is_shown_once() -> None:
         "X@working_storage[0:4]",
         "  <- X@working_storage[0:4]  at P/ADD",
         "    <- X@working_storage[0:4]  at P/ADD  (see above)",
-        "    <- LITERAL  at P/INIT",
-        "  <- LITERAL  at P/INIT  (see above)",
+        "    <- LITERAL:0  at P/INIT",
+        "  <- LITERAL:0  at P/INIT  (see above)",
     )
 
 
@@ -281,16 +293,40 @@ def test_a_walk_crosses_a_link_through_the_writes_that_reach_each_side(
     out = fixpoint_dir(
         tmp_path / "fixpoint",
         [
-            flow_row("CALLER", "S1", "WS-AREA@working_storage[0:4]", "", "LITERAL"),
-            flow_row("CALLER", "S9", "WS-AREA@working_storage[0:4]", "", "LITERAL"),
-            flow_row("CALLER", "S2", "WS-REC@working_storage[0:8]", "", "%CALL:CALLEE"),
+            flow_row(
+                "CALLER",
+                "S1",
+                "WS-AREA@working_storage[0:4]",
+                "",
+                Origin(OriginKind.LITERAL, "'Y'"),
+            ),
+            flow_row(
+                "CALLER",
+                "S9",
+                "WS-AREA@working_storage[0:4]",
+                "",
+                Origin(OriginKind.LITERAL, "'Y'"),
+            ),
+            flow_row(
+                "CALLER",
+                "S2",
+                "WS-REC@working_storage[0:8]",
+                "",
+                Origin(OriginKind.CALL, "CALLEE"),
+            ),
             flow_row(
                 "CALLER",
                 "C3",
                 "WS-RESULT@working_storage[20:24]",
                 "WS-OUT@working_storage[4:8]",
             ),
-            flow_row("OTHER", "O1", "OT-REC@working_storage[0:4]", "", "LITERAL"),
+            flow_row(
+                "OTHER",
+                "O1",
+                "OT-REC@working_storage[0:4]",
+                "",
+                Origin(OriginKind.LITERAL, "'Y'"),
+            ),
             flow_row("CALLEE", "R1", "LS-OUT@linkage[4:8]", "LS-AREA@linkage[0:4]"),
         ],
         [],
@@ -332,11 +368,11 @@ def test_a_walk_crosses_a_link_through_the_writes_that_reach_each_side(
     assert query(crossed, BACKWARD, "CALLER.WS-RESULT") == (
         "WS-RESULT@working_storage[20:24]",
         "  <- WS-OUT@working_storage[4:8]  at CALLER/C3",
-        "    <- %CALL:CALLEE  at CALLER/S2",
+        "    <- CALL:CALLEE  at CALLER/S2",
         "    <- LS-OUT@linkage[4:8]  at CALLER/S2",
         "      <- LS-AREA@linkage[0:4]  at CALLEE/R1",
         "        <- WS-AREA@working_storage[0:4]  at CALLER/S2",
-        "          <- LITERAL  at CALLER/S1",
+        "          <- LITERAL:'Y'  at CALLER/S1",
     )
     assert query(crossed, FORWARD, "CALLER.WS-AREA") == (
         "WS-AREA@working_storage[0:4]",

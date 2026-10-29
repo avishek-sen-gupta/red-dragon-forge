@@ -223,7 +223,7 @@ def test_each_member_and_the_corpus_write_the_sinks_its_bytes_leave_by(corpus):
         {
             "program": program,
             "node": "MAIN/1",
-            "sink": "MAP:MAP1",
+            "sink": {"kind": "MAP", "name": "MAP1"},
             "source_extent": "WS-B@working_storage[4:8]",
             "definers": ["MAIN/0"],
         }
@@ -1197,9 +1197,9 @@ def test_the_build_reads_the_graph_and_targets_the_fixpoint_wrote(tmp_path, corp
 
     _fields, flows = read_graph(out_dir / GRAPH_FILE)
     assert [(flow.source, flow.target, flow.attrs["node"]) for flow in flows] == [
-        ("XPROGA.%CALL:WS-TARGET", "XPROGA.WS-TARGET", "MAIN/0"),
-        ("XPROGA.LITERAL", "XPROGA.WS-TARGET", "MAIN/1"),
-        ("XPROGA.%CALL:WS-TARGET", "XPROGA.WS-TARGET", "MAIN/2"),
+        ("XPROGA.DYNAMIC_CALL:WS-TARGET", "XPROGA.WS-TARGET", "MAIN/0"),
+        ("XPROGA.LITERAL:'XPROGB'", "XPROGA.WS-TARGET", "MAIN/1"),
+        ("XPROGA.DYNAMIC_CALL:WS-TARGET", "XPROGA.WS-TARGET", "MAIN/2"),
     ]
 
     graph = ensure_parent(tmp_path / "build" / "corpus.jsonl")

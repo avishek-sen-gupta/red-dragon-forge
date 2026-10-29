@@ -67,7 +67,10 @@ from cobble.dataflow.fields.extent import CellIndex, cell_index, operand_extents
 from cobble.dataflow.fields.file_read import FileRead
 from cobble.dataflow.fields.image import initial_image
 from cobble.dataflow.fields.program_layout import NO_LAYOUT, ProgramLayout, layout_of
-from cobble.dataflow.fields.sinks import Sink, sinks_of
+from cobble.dataflow.fields.origin import Origin
+from cobble.dataflow.fields.sink import Sink
+from cobble.dataflow.fields.sink_site import SinkSite
+from cobble.dataflow.fields.sinks import sinks_of
 from cobble.dataflow.fields.state import (
     EMPTY,
     Source,
@@ -122,8 +125,7 @@ class FlowEdge:
     """One value reaching one extent at one statement.
 
     ``origin`` names a value that is not storage -- a literal, a file, a callee --
-    and is empty exactly when ``source`` is a real range; ``literal`` is the
-    literal as written when the origin is one.
+    and is ``NO_ORIGIN`` exactly when ``source`` is a real range.
 
     Where the value was last defined is deliberately absent. One source extent at
     one node can have many reaching definers, so carrying the definer here made
@@ -136,11 +138,10 @@ class FlowEdge:
     target's value in place (arithmetic, STRING), not copied bytes into it from elsewhere.
     """
 
-    origin: str
+    origin: Origin
     source: FieldExtent
     target: FieldExtent
     node: str
-    literal: str = ""
     landing: tuple[int, ...] = ()
     rebuilt: bool = False
 
@@ -151,7 +152,7 @@ class FlowSink:
     a queue written -- and the statements that last wrote them there."""
 
     node: str
-    sink: str
+    sink: Sink
     source: FieldExtent
     definers: tuple[str, ...]
 
@@ -733,7 +734,7 @@ def _definers(state: State, extent: FieldExtent) -> frozenset[str]:
 
 
 def _landing(write: Write, source: Source) -> tuple[int, ...]:
-    if source.origin or not write.copy_start:
+    if not source.origin.is_storage or not write.copy_start:
         return ()
     return (source.extent.start - write.copy_start[0],)
 
@@ -764,7 +765,6 @@ def _at(
                 source=source.extent,
                 target=write.target,
                 node=node_id,
-                literal=source.literal,
                 landing=_landing(write, source),
                 rebuilt=isinstance(statement, REBUILT),
             )
@@ -778,7 +778,7 @@ def _at(
                 held=values_at(state, source.extent),
             )
             for _, source in moved
-            if not source.origin
+            if source.origin.is_storage
         ),
     )
 
@@ -890,7 +890,7 @@ def analyse(
     )
 
 
-def _sinks_at(statement: Statement, files: Mapping[str, str]) -> tuple[Sink, ...]:
+def _sinks_at(statement: Statement, files: Mapping[str, str]) -> tuple[SinkSite, ...]:
     """A WRITE of a record no SELECT names has no file to name, so it is no sink."""
     try:
         return sinks_of(statement, files)
@@ -909,7 +909,7 @@ def _sunk(
         dict.fromkeys(
             FlowSink(
                 node=node_id,
-                sink=sink.name,
+                sink=sink.sink,
                 source=extent,
                 definers=tuple(sorted(_definers(after, extent))),
             )

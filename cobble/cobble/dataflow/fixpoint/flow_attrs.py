@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from cobble.dataflow.fields.origin import Origin
 from pydantic import BaseModel, ConfigDict
 
 
@@ -15,7 +16,6 @@ class FlowAttrs(BaseModel):
     node: str
     source_extent: str
     target_extent: str
-    origin: str
-    literal: str
+    origin: Origin
     landing: tuple[int, ...]
     rebuilt: bool

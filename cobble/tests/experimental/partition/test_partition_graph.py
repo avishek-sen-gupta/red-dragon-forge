@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from cobble.dataflow.fields.extent_text import NO_RANGE, ByteRange
+from cobble.dataflow.fields.origin import NO_ORIGIN, Origin
+from cobble.dataflow.fields.origin_kind import OriginKind
+from cobble.dataflow.fields.sink import NO_SINK, Sink
+from cobble.dataflow.fields.sink_kind import SinkKind
 from cobble.dataflow.fields.dep_row import DepRow
 from cobble.experimental.partition.byte_alignment import ByteAlignment
 from cobble.experimental.partition.extent_row import ExtentRow
@@ -72,9 +76,8 @@ def _dep(
     source: ByteRange,
     site: str,
     *,
-    origin: str = "",
-    literal: str = "",
-    sink: str = "",
+    origin: Origin = NO_ORIGIN,
+    sink: Sink = NO_SINK,
     definers: tuple[str, ...] = (),
     landing: tuple[int, ...] = (0,),
     rebuilt: bool = False,
@@ -84,7 +87,6 @@ def _dep(
         via="",
         target=target,
         origin=origin,
-        literal=literal,
         source=source,
         site=site,
         definers=definers,
@@ -98,16 +100,33 @@ DEPS = (
     _dep(_at("OUT", 10, 20), _at("REC", 0, 10), "s1"),
     _dep(_at("COPY", 40, 50), _at("REC", 0, 10), "s2"),
     _dep(_at("X", 20, 25), _at("A", 0, 4), "s3"),
-    _dep(_at("A", 0, 4), NO_RANGE, "s4", origin="LITERAL", literal="'Y'"),
-    _dep(NO_RANGE, _at("REC", 0, 10), "s5", sink="FILE:F"),
+    _dep(_at("A", 0, 4), NO_RANGE, "s4", origin=Origin(OriginKind.LITERAL, "'Y'")),
+    _dep(NO_RANGE, _at("REC", 0, 10), "s5", sink=Sink(SinkKind.FILE, "F")),
     _dep(_at("T", 32, 34), _at("A", 0, 4), "s6"),
     _dep(_at("OUT", 10, 20), _at("REC", 0, 10), "s7"),
     _dep(_at("C", 40, 44), _at("Z", 20, 30), "s8", definers=("s3",)),
     _dep(_at("OUT", 10, 20), _at("D", 44, 50), "s9", definers=("s2",)),
-    _dep(NO_RANGE, _at("OUT", 10, 20), "s10", sink="FILE:G", definers=("s1",)),
+    _dep(
+        NO_RANGE,
+        _at("OUT", 10, 20),
+        "s10",
+        sink=Sink(SinkKind.FILE, "G"),
+        definers=("s1",),
+    ),
     _dep(_at("ACC", 60, 70), _at("SRC", 80, 90), "s11"),
-    _dep(NO_RANGE, _at("ACC", 60, 70), "s12", sink="FILE:H", definers=("s11",)),
-    _dep(_at("AREA", 20, 30), NO_RANGE, "s13", origin="LITERAL", literal="SPACES"),
+    _dep(
+        NO_RANGE,
+        _at("ACC", 60, 70),
+        "s12",
+        sink=Sink(SinkKind.FILE, "H"),
+        definers=("s11",),
+    ),
+    _dep(
+        _at("AREA", 20, 30),
+        NO_RANGE,
+        "s13",
+        origin=Origin(OriginKind.LITERAL, "SPACES"),
+    ),
     _dep(_at("D", 44, 50), _at("X", 20, 25), "s14", definers=("s13",)),
 )
 
@@ -144,8 +163,8 @@ def test_moves_become_field_edges_by_the_declared_layout_and_the_writes_they_rea
         ("P:TAB.T(2)", NodeKind.FIELD, "P", "TAB"),
         ("Q:LK.LA", NodeKind.FIELD, "Q", "LK"),
         ("Q:LK.LB", NodeKind.FIELD, "Q", "LK"),
-        ("P|origin|LITERAL 'Y'", NodeKind.ORIGIN, "P", ""),
-        ("P|origin|LITERAL SPACES", NodeKind.ORIGIN, "P", ""),
+        ("P|origin|LITERAL:'Y'", NodeKind.ORIGIN, "P", ""),
+        ("P|origin|LITERAL:SPACES", NodeKind.ORIGIN, "P", ""),
         ("P|sink|FILE:F", NodeKind.SINK, "P", ""),
         ("P|sink|FILE:G", NodeKind.SINK, "P", ""),
         ("P:ACC.ID", NodeKind.FIELD, "P", "ACC"),
@@ -164,10 +183,10 @@ def test_moves_become_field_edges_by_the_declared_layout_and_the_writes_they_rea
         ("P:AREA.Z", "P:COPY.C", 1, True),
         ("P:AREA.X", "P:COPY.C", 1, True),
         ("P:COPY.D", "P:OUT.OUT", 1, True),
-        ("P|origin|LITERAL 'Y'", "P:REC.A", 1, True),
-        ("P|origin|LITERAL SPACES", "P:AREA.X", 1, True),
-        ("P|origin|LITERAL SPACES", "P:AREA.Y", 1, True),
-        ("P|origin|LITERAL SPACES", "P:AREA.Z", 1, True),
+        ("P|origin|LITERAL:'Y'", "P:REC.A", 1, True),
+        ("P|origin|LITERAL:SPACES", "P:AREA.X", 1, True),
+        ("P|origin|LITERAL:SPACES", "P:AREA.Y", 1, True),
+        ("P|origin|LITERAL:SPACES", "P:AREA.Z", 1, True),
         ("P:AREA.X", "P:COPY.D", 1, True),
         ("P:REC.A", "P|sink|FILE:F", 1, True),
         ("P:REC.B", "P|sink|FILE:F", 1, True),
@@ -198,7 +217,7 @@ def test_moves_become_field_edges_by_the_declared_layout_and_the_writes_they_rea
         in {
             ("P:REC.A", "P:OUT.OUT"),
             ("P:REC.B", "P:OUT.OUT"),
-            ("P|origin|LITERAL 'Y'", "P:REC.A"),
+            ("P|origin|LITERAL:'Y'", "P:REC.A"),
             ("P:REC.A", "P|sink|FILE:F"),
         }
     } == {
@@ -210,7 +229,7 @@ def test_moves_become_field_edges_by_the_declared_layout_and_the_writes_they_rea
             (ByteAlignment(source=0, target=4, length=6),),
             True,
         ),
-        ("P|origin|LITERAL 'Y'", "P:REC.A"): ((), False),
+        ("P|origin|LITERAL:'Y'", "P:REC.A"): ((), False),
         ("P:REC.A", "P|sink|FILE:F"): ((), False),
     }
     assert graph.barrier == "none"
@@ -316,13 +335,13 @@ def test_a_handover_through_a_byte_table_keeps_each_occurrence_apart_and_every_b
         target=ByteRange(
             program="S", region="working_storage", start=0, end=4, name="SA", known=True
         ),
-        origin="",
+        origin=NO_ORIGIN,
         source=ByteRange(
             program="S", region="linkage", start=0, end=4, name="DFH", known=True
         ),
         site="S/m1",
         definers=(),
-        sink="",
+        sink=NO_SINK,
         landing=(0,),
     )
     handover = LinkRow(
@@ -448,7 +467,7 @@ def test_a_read_through_a_long_chain_of_branching_copies_and_a_loop_back_reaches
         NO_RANGE,
         _record(depth),
         "out",
-        sink="FILE:F",
+        sink=Sink(SinkKind.FILE, "F"),
         definers=(f"a{depth}", f"b{depth}"),
     )
 
@@ -467,3 +486,26 @@ def test_a_read_through_a_long_chain_of_branching_copies_and_a_loop_back_reaches
         ("P:R0.A", "P|sink|FILE:F", 1, True),
         ("P:R0.B", "P|sink|FILE:F", 1, True),
     }
+
+
+def test_a_terminal_node_carries_its_typed_origin_or_sink() -> None:
+    graph = field_graph(leaf_index(EXTENTS), DEPS, LINKS, NoBarrier())
+    by_id = {node.id: node for node in graph.nodes}
+
+    assert (
+        by_id["P|origin|LITERAL:'Y'"].origin,
+        by_id["P|origin|LITERAL:'Y'"].sink,
+        by_id["P|origin|LITERAL:'Y'"].label,
+        by_id["P|sink|FILE:F"].sink,
+        by_id["P|sink|FILE:F"].origin,
+        by_id["P:REC.A"].origin,
+        by_id["P:REC.A"].sink,
+    ) == (
+        Origin(OriginKind.LITERAL, "'Y'"),
+        NO_SINK,
+        "P LITERAL:'Y'",
+        Sink(SinkKind.FILE, "F"),
+        NO_ORIGIN,
+        NO_ORIGIN,
+        NO_SINK,
+    )

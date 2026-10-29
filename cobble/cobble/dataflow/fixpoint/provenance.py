@@ -9,6 +9,8 @@ from pathlib import Path
 
 from cobble.dataflow.fields.dep_row import DepRow
 from cobble.dataflow.fields.extent_text import NO_RANGE, ByteRange, byte_range
+from cobble.dataflow.fields.origin import NO_ORIGIN
+from cobble.dataflow.fields.sink import NO_SINK
 from cobble.dataflow.fields.values import UnresolvedReason
 from cobble.dataflow.fixpoint import rows
 from cobble.dataflow.fixpoint.build_corpus import (
@@ -76,12 +78,23 @@ def _attrs(directory: Path, edge: GraphEdge) -> FlowAttrs:
         return FlowAttrs.model_validate(edge.attrs)
     except ValidationError as error:
         raise _stale(
-            directory, "an edge lacks its origin, landing or rebuilt flag"
+            directory, "an edge lacks its typed origin, landing or rebuilt flag"
         ) from error
 
 
+def _sink(directory: Path, row: rows.Row) -> SinkRow:
+    try:
+        return SinkRow.model_validate(row)
+    except ValidationError as error:
+        raise _stale(directory, "a sink row lacks its typed sink") from error
+
+
 def _flow(program: str, attrs: FlowAttrs, definers: _Reaching) -> DepRow:
-    source = byte_range(attrs.source_extent, program) if not attrs.origin else NO_RANGE
+    source = (
+        byte_range(attrs.source_extent, program)
+        if attrs.origin.is_storage
+        else NO_RANGE
+    )
     reaching = definers.get((attrs.node, attrs.source_extent), _UNREACHED)
     return DepRow(
         program=program,
@@ -91,8 +104,7 @@ def _flow(program: str, attrs: FlowAttrs, definers: _Reaching) -> DepRow:
         source=source,
         site=f"{program}/{attrs.node}",
         definers=tuple(f"{program}/{definer}" for definer in reaching.definers),
-        sink="",
-        literal=attrs.literal,
+        sink=NO_SINK,
         entry=_from_entry(source, reaching),
         landing=attrs.landing,
         rebuilt=attrs.rebuilt,
@@ -106,7 +118,7 @@ def _sunk(program: str, row: SinkRow, definers: _Reaching) -> DepRow:
         program=program,
         via="",
         target=NO_RANGE,
-        origin="",
+        origin=NO_ORIGIN,
         source=source,
         site=f"{program}/{row.node}",
         definers=tuple(f"{program}/{definer}" for definer in row.definers),
@@ -129,7 +141,7 @@ def _member_rows(directory: Path, number: int, total: int) -> Iterator[DepRow]:
         if isinstance(row, GraphEdge) and row.kind is EdgeKind.FLOWS_TO
     )
     yield from (
-        _sunk(counts.program, SinkRow.model_validate(row), definers)
+        _sunk(counts.program, _sink(directory, row), definers)
         for row in rows.stream(directory / SINKS_FILE)
     )
 

@@ -3,28 +3,17 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
 from types import MappingProxyType
 
 from cics.statements import CicsOperand, ExecCicsStatement, operand_reference
+from cobble.dataflow.fields.sink import Sink
+from cobble.dataflow.fields.sink_kind import SinkKind
+from cobble.dataflow.fields.sink_site import SinkSite
 from cobble.dataflow.fields.transfer import Statement
 from cobol_asg.cobol_statements import RewriteStatement, WriteStatement
 from cobol_asg.ref_mod import RefModOperand
 
-FILE_SINK = "FILE:"
-MAP_SINK = "MAP:"
-TS_QUEUE_SINK = "TSQ:"
-TD_QUEUE_SINK = "TDQ:"
-TRANSID_SINK = "TRANSID:"
 MAP_OUTPUT_SUFFIX = "O"
-
-
-@dataclass(frozen=True)
-class Sink:
-    """One destination outside the program, and the operand whose bytes go there."""
-
-    name: str
-    operand: RefModOperand
 
 
 def _text(statement: ExecCicsStatement, *options: str) -> str:
@@ -39,42 +28,44 @@ def _text(statement: ExecCicsStatement, *options: str) -> str:
     )
 
 
-def _from(statement: ExecCicsStatement, sink: str) -> tuple[Sink, ...]:
+def _from(statement: ExecCicsStatement, sink: Sink) -> tuple[SinkSite, ...]:
     value = statement.options.get("FROM")
     if not isinstance(value, CicsOperand):
         return ()
-    return (Sink(name=sink, operand=operand_reference(value)),)
+    return (SinkSite(sink=sink, operand=operand_reference(value)),)
 
 
-def _cics_file(statement: ExecCicsStatement) -> tuple[Sink, ...]:
-    return _from(statement, FILE_SINK + _text(statement, "FILE", "DATASET"))
+def _cics_file(statement: ExecCicsStatement) -> tuple[SinkSite, ...]:
+    return _from(statement, Sink(SinkKind.FILE, _text(statement, "FILE", "DATASET")))
 
 
-def _cics_send_map(statement: ExecCicsStatement) -> tuple[Sink, ...]:
+def _cics_send_map(statement: ExecCicsStatement) -> tuple[SinkSite, ...]:
     """Without FROM, BMS sends the map's symbolic output record; MAPONLY sends no data."""
     if "MAPONLY" in statement.options:
         return ()
     map_name = _text(statement, "MAP", "MAPNAME")
-    sink = MAP_SINK + map_name
+    sink = Sink(SinkKind.MAP, map_name)
     sent = _from(statement, sink)
     if sent:
         return sent
-    return (Sink(name=sink, operand=RefModOperand(name=map_name + MAP_OUTPUT_SUFFIX)),)
+    return (
+        SinkSite(sink=sink, operand=RefModOperand(name=map_name + MAP_OUTPUT_SUFFIX)),
+    )
 
 
-def _cics_writeq_ts(statement: ExecCicsStatement) -> tuple[Sink, ...]:
-    return _from(statement, TS_QUEUE_SINK + _text(statement, "QUEUE", "QNAME"))
+def _cics_writeq_ts(statement: ExecCicsStatement) -> tuple[SinkSite, ...]:
+    return _from(statement, Sink(SinkKind.TS_QUEUE, _text(statement, "QUEUE", "QNAME")))
 
 
-def _cics_writeq_td(statement: ExecCicsStatement) -> tuple[Sink, ...]:
-    return _from(statement, TD_QUEUE_SINK + _text(statement, "QUEUE"))
+def _cics_writeq_td(statement: ExecCicsStatement) -> tuple[SinkSite, ...]:
+    return _from(statement, Sink(SinkKind.TD_QUEUE, _text(statement, "QUEUE")))
 
 
-def _cics_start(statement: ExecCicsStatement) -> tuple[Sink, ...]:
-    return _from(statement, TRANSID_SINK + _text(statement, "TRANSID"))
+def _cics_start(statement: ExecCicsStatement) -> tuple[SinkSite, ...]:
+    return _from(statement, Sink(SinkKind.TRANSID, _text(statement, "TRANSID")))
 
 
-_CICS_SINKS: Mapping[str, Callable[[ExecCicsStatement], tuple[Sink, ...]]] = (
+_CICS_SINKS: Mapping[str, Callable[[ExecCicsStatement], tuple[SinkSite, ...]]] = (
     MappingProxyType(
         {
             "WRITE": _cics_file,
@@ -88,15 +79,19 @@ _CICS_SINKS: Mapping[str, Callable[[ExecCicsStatement], tuple[Sink, ...]]] = (
 )
 
 
-def _no_sinks(statement: ExecCicsStatement) -> tuple[Sink, ...]:
+def _no_sinks(statement: ExecCicsStatement) -> tuple[SinkSite, ...]:
     return ()
 
 
-def sinks_of(statement: Statement, files: Mapping[str, str]) -> tuple[Sink, ...]:
+def sinks_of(statement: Statement, files: Mapping[str, str]) -> tuple[SinkSite, ...]:
     """``files`` maps an FD record name to the file it is written to."""
     if isinstance(statement, WriteStatement | RewriteStatement):
         name = statement.record_name.upper()
-        return (Sink(name=FILE_SINK + files[name], operand=RefModOperand(name=name)),)
+        return (
+            SinkSite(
+                sink=Sink(SinkKind.FILE, files[name]), operand=RefModOperand(name=name)
+            ),
+        )
     if isinstance(statement, ExecCicsStatement):
         handler = _CICS_SINKS.get(statement.verb.upper(), _no_sinks)
         return handler(statement)

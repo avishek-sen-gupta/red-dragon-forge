@@ -1,5 +1,7 @@
 """A Fact is the settled state's answer for some bytes at one node."""
 
+from cobble.dataflow.fields.origin import NO_ORIGIN, Origin
+from cobble.dataflow.fields.origin_kind import OriginKind
 from cobble.dataflow.fields.state import EMPTY, NOWHERE, Source, write
 from cobble.dataflow.fields.values import UnresolvedReason, ValueSet
 from cobble.dataflow.jumps.fact import Fact
@@ -14,8 +16,12 @@ STATE = write(
     WS,
     frozenset(
         {
-            Source(origin="", extent=LK, node="MAIN/2"),
-            Source(origin="LITERAL", extent=NOWHERE, node="MAIN/9"),
+            Source(origin=NO_ORIGIN, extent=LK, node="MAIN/2"),
+            Source(
+                origin=Origin(OriginKind.LITERAL, "'PROGA'"),
+                extent=NOWHERE,
+                node="MAIN/9",
+            ),
         }
     ),
     ValueSet(values=frozenset({b"PROGA   "})),

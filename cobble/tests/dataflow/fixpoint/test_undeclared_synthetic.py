@@ -8,6 +8,8 @@ from collections.abc import Callable
 from pathlib import Path
 
 from cobble.dataflow.fields.extents_input import declared_layouts
+from cobble.dataflow.fields.origin import Origin
+from cobble.dataflow.fields.origin_kind import OriginKind
 from cobble.dataflow.fixpoint.provenance import provenance
 from cobble.dataflow.srccfg.literals import is_literal
 
@@ -139,4 +141,4 @@ def test_without_synthesis_an_undeclared_name_is_an_unknown_origin(
         dep.origin
         for dep in provenance(out)
         if dep.target.name == "WS-B" and not dep.source.known
-    } == {"UNKNOWN:CPY-AMT"}
+    } == {Origin(OriginKind.UNKNOWN_FIELD, "CPY-AMT")}

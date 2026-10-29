@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from cobble.dataflow.fields.sink import Sink
 from pydantic import BaseModel, ConfigDict
 
 
@@ -12,6 +13,6 @@ class SinkRow(BaseModel):
 
     program: str
     node: str
-    sink: str
+    sink: Sink
     source_extent: str
     definers: tuple[str, ...]

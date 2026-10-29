@@ -48,7 +48,7 @@ class NodeKind(Enum):
     # is a JCL-level identity a job's DD statement assigns independently.
     COBOL_FILE = "COBOL_FILE"
     # A COBOL data field, or a synthetic origin a field's bytes came from
-    # (LITERAL, FILE:<name>, %CICS-STATE, %CALL:<target>). id is
+    # (LITERAL:<text>, FILE:<name>, CICS_STATE, CALL:<member>). id is
     # "<program>.<field>" because a field name is only unique within a program
     # — two copybooks routinely give one piece of storage two names.
     FIELD = "FIELD"

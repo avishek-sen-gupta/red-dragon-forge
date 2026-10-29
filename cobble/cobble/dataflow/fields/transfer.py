@@ -25,7 +25,7 @@ one.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import reduce
 from itertools import chain
 from types import MappingProxyType
@@ -35,10 +35,10 @@ from cobble.asg_walk import descend
 from cobble.dataflow.fields.extent import CellIndex, OperandExtents, operand_extents
 from cobble.dataflow.fields.file_read import FileRead
 from cobble.dataflow.fields.move_kind import MoveKind
+from cobble.dataflow.fields.origin import NO_ORIGIN, Origin
+from cobble.dataflow.fields.origin_kind import OriginKind
 from cobble.dataflow.fields.state import (
-    CICS_STATE,
     EMPTY,
-    LITERAL,
     NOWHERE,
     Source,
     State,
@@ -107,7 +107,7 @@ _CICS_RECEIVERS = ("INTO", "SET")
 _CICS_SYSTEM_VERBS = frozenset({"ASKTIME", "ASSIGN"})
 _CICS_RESPONSES = ("RESP", "RESP2")
 _RECEIVE_MAP = "RECEIVE MAP"
-_MAP_ORIGIN = "MAP:"
+_CICS_STATE = Origin(OriginKind.CICS_STATE, "")
 _MAP_INPUT_SUFFIX = "I"
 
 
@@ -133,46 +133,41 @@ def _one_applied(state: State, entry: Write) -> State:
 
 
 def _from_extents(extents: tuple[FieldExtent, ...], node: str) -> frozenset[Source]:
-    return frozenset(Source(origin="", extent=extent, node=node) for extent in extents)
+    return frozenset(
+        Source(origin=NO_ORIGIN, extent=extent, node=node) for extent in extents
+    )
 
 
-def _synthetic(origin: str, node: str) -> frozenset[Source]:
+def _synthetic(origin: Origin, node: str) -> frozenset[Source]:
     return frozenset({Source(origin=origin, extent=NOWHERE, node=node)})
 
 
 def _unresolved(operand: RefModOperand, reason: str, node: str) -> frozenset[Source]:
-    literal = operand.name if is_literal(operand.name) else ""
-    return frozenset(
-        {
-            Source(
-                origin=_unresolved_origin(operand, reason),
-                extent=NOWHERE,
-                node=node,
-                literal=literal,
-            )
-        }
-    )
+    return _synthetic(_unresolved_origin(operand, reason), node)
 
 
-_NAMED_ORIGINS: Mapping[str, str] = MappingProxyType(
-    {"unknown-name": "UNKNOWN", "function": "FUNCTION"}
+_REASON_KINDS: Mapping[str, OriginKind] = MappingProxyType(
+    {
+        "unknown-name": OriginKind.UNKNOWN_FIELD,
+        "function": OriginKind.FUNCTION,
+        "figurative": OriginKind.FIGURATIVE,
+        "length-of": OriginKind.LENGTH_OF,
+    }
 )
 
 
-def _unresolved_origin(operand: RefModOperand, reason: str) -> str:
+def _unresolved_origin(operand: RefModOperand, reason: str) -> Origin:
     """A literal reads no storage, and neither does LENGTH OF or a FUNCTION.
 
-    For a field name that simply has no declared extent (e.g. a SQL host
-    variable from an unparsed DCLGEN struct), embed the name so backward
-    provenance queries say ``UNKNOWN:FIELD-NAME`` rather than the opaque
-    ``UNKNOWN-NAME``; a function reading no field is ``FUNCTION:CURRENT-DATE``.
+    A field name with no declared extent (e.g. a SQL host variable from an
+    unparsed DCLGEN struct) keeps its name, as a function reading no field does.
     """
     if is_literal(operand.name):
-        return LITERAL
-    prefix = _NAMED_ORIGINS.get(reason, "")
-    if prefix and operand.name:
-        return f"{prefix}:{operand.name}"
-    return reason.upper()
+        return Origin(OriginKind.LITERAL, operand.name)
+    kind = _REASON_KINDS.get(reason, OriginKind.NONE)
+    if kind in (OriginKind.UNKNOWN_FIELD, OriginKind.FUNCTION):
+        return Origin(kind, operand.name)
+    return Origin(kind, "")
 
 
 def _literal_value(operand: RefModOperand, width: int) -> ValueSet:
@@ -534,7 +529,7 @@ def _initialize_writes(
     """
     return _origin_writes(
         _initialize_targets(statement),
-        LITERAL,
+        Origin(OriginKind.LITERAL, ""),
         node,
         index,
         values=because(UnresolvedReason.NOT_A_LITERAL),
@@ -544,7 +539,7 @@ def _initialize_writes(
 def _named_stubs(reads: tuple[RefModOperand, ...], index: CellIndex) -> tuple[str, ...]:
     """Names of read operands that have no resolvable extents and are not literals.
 
-    Used to emit a ``FIELD:<name>`` synthetic source so backward provenance
+    Used to emit one ``UNRESOLVED_OPERAND`` source each so backward provenance
     queries name the unresolvable input rather than reporting nothing.  Fields
     from unstaged copybooks are the common case.
     """
@@ -566,7 +561,7 @@ def _union_writes(
     """Every target takes every operand: no digit-level correspondence to model.
 
     When a read operand has no resolvable extents but carries a name that is not
-    a literal, a synthetic ``FIELD:<name>`` source is emitted so backward
+    a literal, a synthetic ``UNRESOLVED_OPERAND`` source is emitted so backward
     provenance queries name the unresolvable input rather than reporting nothing.
 
     A ``STRING``/arithmetic/``COMPUTE`` result is never a literal, so the value
@@ -577,9 +572,15 @@ def _union_writes(
         for operand in reads
         for extent in operand_extents(operand, index).extents
     )
-    stubs = _named_stubs(reads, index)
-    stub_src = _synthetic(f"FIELD:{','.join(stubs)}", node) if stubs else frozenset()
-    sources = _from_extents(every, node) | stub_src
+    stubs = frozenset(
+        Source(
+            origin=Origin(OriginKind.UNRESOLVED_OPERAND, name),
+            extent=NOWHERE,
+            node=node,
+        )
+        for name in _named_stubs(reads, index)
+    )
+    sources = _from_extents(every, node) | stubs
     return (
         Write(target, sources, values=because(UnresolvedReason.NOT_A_LITERAL))
         for operand in targets
@@ -662,7 +663,7 @@ def _string_writes(
 
 def _origin_writes(
     operands: tuple[RefModOperand, ...],
-    origin: str,
+    origin: Origin,
     node: str,
     index: CellIndex,
     values: ValueSet,
@@ -682,7 +683,9 @@ def _origin_writes(
         return iter(resolved)
     stub_targets = tuple(op for op in operands if op.name and not is_literal(op.name))
     return iter(
-        Write(NOWHERE, _synthetic(f"{origin}→{op.name}", node), values=values)
+        Write(
+            NOWHERE, _synthetic(replace(origin, unplaced=op.name), node), values=values
+        )
         for op in stub_targets
     )
 
@@ -696,7 +699,7 @@ def _read_writes(
 ) -> Iterator[Write]:
     return _origin_writes(
         _read_targets(statement),
-        f"FILE:{statement.file_name}",
+        Origin(OriginKind.FILE, statement.file_name),
         node,
         index,
         values=because(UnresolvedReason.FROM_FILE),
@@ -712,7 +715,7 @@ def _file_read_writes(
 ) -> Iterator[Write]:
     return _origin_writes(
         statement.targets,
-        f"FILE:{statement.file_name}",
+        Origin(OriginKind.FILE, statement.file_name),
         node,
         index,
         values=because(UnresolvedReason.FROM_FILE),
@@ -734,23 +737,34 @@ def _call_targets(statement: CallStatement) -> tuple[RefModOperand, ...]:
     return (*passed, *given)
 
 
-def _call_origin(statement: CallStatement) -> str:
-    """The cross-program sink a CALL's BY REFERENCE arguments are credited to.
+def _call_origin(statement: CallStatement) -> Origin:
+    """The cross-program origin a CALL's BY REFERENCE arguments are credited to.
 
     The write itself is never dropped when the callee is dynamic -- the argument
     really is written by somebody, and saying otherwise would claim it still holds
-    what the caller put there. What changes is the sink: ``%CALL:%DYNAMIC:WS-PROG``
-    rather than ``%CALL:WS-PROG``, because the bare form is indistinguishable from a
-    member actually named WS-PROG and would be joined to one. The ``%`` sigil marks
-    it synthetic the way ``%CICS-STATE`` does, and keeping the field name leaves the
-    reader a reaching-definitions query for the candidate callees.
+    what the caller put there. What changes is the kind: ``DYNAMIC_CALL`` rather
+    than ``CALL``, so it is never joined to a member actually named WS-PROG, and
+    keeping the field name leaves the reader a reaching-definitions query for the
+    candidate callees.
     """
     target = statement.target
     match target.identifier:
         case None:
-            return f"%CALL:{target.literal}"
+            return Origin(OriginKind.CALL, target.literal)
         case identifier:
-            return f"%CALL:%DYNAMIC:{identifier.name.strip().upper()}"
+            return _dynamic_call(identifier.name)
+
+
+def _dynamic_call(name: str) -> Origin:
+    return Origin(OriginKind.DYNAMIC_CALL, name.strip().upper())
+
+
+def _cics_call_origin(statement: ExecCicsStatement) -> Origin:
+    """A LINK or XCTL to a quoted member names it; to a field, names the field."""
+    program = statement.options.get("PROGRAM")
+    if isinstance(program, CicsOperand) and program.is_literal:
+        return Origin(OriginKind.CALL, program.text.strip().strip("'\""))
+    return _dynamic_call(_option(statement, "PROGRAM"))
 
 
 def _call_writes(
@@ -793,12 +807,14 @@ def _map_name(statement: ExecCicsStatement) -> str:
     return _option(statement, "MAP") or _option(statement, "MAPNAME")
 
 
-def _cics_origin(statement: ExecCicsStatement) -> str:
+def _cics_origin(statement: ExecCicsStatement) -> Origin:
     if statement.verb.upper() in _CICS_FILE_VERBS:
-        return f"FILE:{_option(statement, 'FILE') or _option(statement, 'DATASET')}"
+        return Origin(
+            OriginKind.FILE, _option(statement, "FILE") or _option(statement, "DATASET")
+        )
     if statement.verb.upper() == _RECEIVE_MAP:
-        return _MAP_ORIGIN + _map_name(statement)
-    return CICS_STATE
+        return Origin(OriginKind.MAP, _map_name(statement))
+    return _CICS_STATE
 
 
 def _cics_values(statement: ExecCicsStatement) -> ValueSet:
@@ -861,7 +877,7 @@ def _cics_writes(
         _cics_received(statement, node, index),
         _origin_writes(
             _cics_responses(statement),
-            CICS_STATE,
+            _CICS_STATE,
             node,
             index,
             values=because(UnresolvedReason.NOT_A_LITERAL),
@@ -875,7 +891,7 @@ def _cics_received(
     if statement.verb.upper() in _CICS_CALL_VERBS:
         return _origin_writes(
             _cics_receivers(statement),
-            f"%CALL:{_option(statement, 'PROGRAM')}",
+            _cics_call_origin(statement),
             node,
             index,
             values=because(UnresolvedReason.FROM_CALLEE),
@@ -913,7 +929,9 @@ def _unmodelled_writes(
         for extent in operand_extents(operand, index).extents
     )
     sources = (
-        _from_extents(extents, node) if extents else _synthetic(statement.verb, node)
+        _from_extents(extents, node)
+        if extents
+        else _synthetic(Origin(OriginKind.UNMODELLED, statement.verb), node)
     )
     return (
         Write(

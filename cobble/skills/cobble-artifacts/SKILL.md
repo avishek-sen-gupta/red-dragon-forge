@@ -17,7 +17,7 @@ Run every tool from `cobble/` with `uv run --no-sync`. `$RUN` below is the outpu
 | artifact | holds | answers |
 |---|---|---|
 | `extents.jsonl` | every declared field: program, byte extents, record, declaration path, PIC, usage, `REDEFINES`, `OCCURS` | where a field lives in storage; which fields share bytes |
-| `fixpoint/` (`graph.jsonl`, `defs.jsonl`, `sinks.jsonl`, `aliases.jsonl`, `members/<P>/`) | per program, every byte move (`FLOWS_TO`) with its site, landing and `rebuilt` flag; reaching definitions; where values leave (`FILE:`, `MAP:`, `%CALL:`) | where a value came from and where it goes, inside one program |
+| `fixpoint/` (`graph.jsonl`, `defs.jsonl`, `sinks.jsonl`, `aliases.jsonl`, `members/<P>/`) | per program, every byte move (`FLOWS_TO`) with its site, landing and `rebuilt` flag; reaching definitions; where values leave; each edge's `attrs.origin` and each sink row's `sink` is `{"kind", "name"}` (kinds such as `LITERAL`, `FILE`, `MAP`, `CALL`, `DYNAMIC_CALL`, `CICS_STATE`) | where a value came from and where it goes, inside one program |
 | `combine/links.jsonl` | every `CALL`/`LINK`/`XCTL`: caller and callee extents of the shared area | which bytes cross which program boundary, in each direction |
 | `combine/targets.jsonl` | dynamic call/file targets with their candidate values | what a `CALL WS-PGM` or `FILE(WS-FILE)` can resolve to |
 | `knowledge-graph.jsonl` (`.html`) | programs, copybooks, JCL jobs and steps, DDs, datasets, CSD transactions and files, in-stream control cards (`IDCAMS DEFINE`) | which job runs which program, which DD is which dataset, which transaction starts which program |

@@ -6,6 +6,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
+from cobble.dataflow.fields.origin import Origin
+from cobble.dataflow.fields.origin_kind import OriginKind
 from cobble.dataflow.fixpoint.provenance import provenance
 
 PROGRAM = "FILEREC"
@@ -41,13 +43,17 @@ def test_a_read_fills_the_record_area_of_its_file_and_its_into_field(
     out = fixpoint_out(PROGRAM, SOURCE)
 
     written = sorted(
-        (dep.site.rsplit("/", 1)[1], dep.target.name, dep.origin or dep.source.name)
+        (
+            dep.site.rsplit("/", 1)[1],
+            dep.target.name,
+            dep.source.name if dep.origin.is_storage else dep.origin,
+        )
         for dep in provenance(out)
         if dep.target.known
     )
     assert written == [
-        ("1", "FD-CARD-REC", "FILE:CARD-INPUT"),
+        ("1", "FD-CARD-REC", Origin(OriginKind.FILE, "CARD-INPUT")),
         ("2", "WS-NUM", "FD-CARD-NUM"),
-        ("3", "FD-CARD-REC", "FILE:CARD-INPUT"),
-        ("3", "WS-COPY", "FILE:CARD-INPUT"),
+        ("3", "FD-CARD-REC", Origin(OriginKind.FILE, "CARD-INPUT")),
+        ("3", "WS-COPY", Origin(OriginKind.FILE, "CARD-INPUT")),
     ]

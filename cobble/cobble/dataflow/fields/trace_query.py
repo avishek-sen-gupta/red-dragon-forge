@@ -263,7 +263,7 @@ def _written(row: DepRow, wanted: ByteRange) -> ByteRange:
 
 def _forward_children(index: _Index, branch: _Branch) -> tuple[_Branch, ...]:
     dep, wanted, calls = branch
-    if dep.sink or not dep.target.known:
+    if not dep.sink.is_none or not dep.target.known:
         return ()
     return tuple(
         (row, _written(row, wanted), inside)
@@ -293,10 +293,18 @@ def _initial(
     )
 
 
+def _arrived(dep: DepRow) -> str:
+    return str(dep.target) if dep.sink.is_none else dep.sink.text()
+
+
+def _came_from(dep: DepRow) -> str:
+    return str(dep.source) if dep.origin.is_storage else dep.origin.text()
+
+
 def _line(direction: str, dep: DepRow, depth: int) -> str:
     forward = direction == FORWARD
     arrow = "->" if forward else "<-"
-    text = (dep.sink or str(dep.target)) if forward else (dep.origin or str(dep.source))
+    text = _arrived(dep) if forward else _came_from(dep)
     return f"{'  ' * depth}{arrow} {text}  at {dep.site}"
 
 

@@ -9,6 +9,8 @@ from itertools import groupby, product
 from cobble.dataflow.combine.link_row import LinkRow
 from cobble.dataflow.fields.dep_row import DepRow
 from cobble.dataflow.fields.extent_text import ByteRange, byte_range
+from cobble.dataflow.fields.origin import Origin
+from cobble.dataflow.fields.sink import Sink
 from cobble.experimental.partition.barrier import Barrier
 from cobble.experimental.partition.byte_alignment import ByteAlignment
 from cobble.experimental.partition.field_graph import FieldGraph
@@ -45,12 +47,23 @@ def field_node(leaf: FieldLeaf) -> GraphNode:
     )
 
 
-def _terminal(kind: NodeKind, program: str, name: str) -> GraphNode:
+def _origin_node(program: str, origin: Origin) -> GraphNode:
     return GraphNode(
-        id=f"{program}|{kind}|{name}",
-        kind=kind,
-        label=f"{program} {name}",
+        id=f"{program}|{NodeKind.ORIGIN}|{origin.text()}",
+        kind=NodeKind.ORIGIN,
+        label=f"{program} {origin.text()}",
         program=program,
+        origin=origin,
+    )
+
+
+def _sink_node(program: str, sink: Sink) -> GraphNode:
+    return GraphNode(
+        id=f"{program}|{NodeKind.SINK}|{sink.text()}",
+        kind=NodeKind.SINK,
+        label=f"{program} {sink.text()}",
+        program=program,
+        sink=sink,
     )
 
 
@@ -138,16 +151,12 @@ def _fanned(
     )
 
 
-def _origin_name(dep: DepRow) -> str:
-    return f"{dep.origin} {dep.literal}" if dep.literal else dep.origin
-
-
 def _moved(index: LeafIndex, traced: _Traced, barrier: Barrier, dep: DepRow) -> _Moved:
-    if dep.sink:
-        sink = _terminal(NodeKind.SINK, dep.source.program, dep.sink)
+    if not dep.sink.is_none:
+        sink = _sink_node(dep.source.program, dep.sink)
         return _fanned(sink, _read(traced, dep).fields, dep.site, inward=False)
     if not dep.source.known:
-        origin = _terminal(NodeKind.ORIGIN, dep.target.program, _origin_name(dep))
+        origin = _origin_node(dep.target.program, dep.origin)
         return _fanned(origin, index.fields_in(dep.target), dep.site, inward=True)
     nodes, flows = _copied(
         barrier, (_span(index, dep.target), _read(traced, dep)), dep.site, dep.landing
@@ -211,7 +220,7 @@ def field_graph(
         *(
             _moved(index, traced, barrier, dep)
             for dep in counted(deps, Tally(GRAPH, "dep rows mapped"), len(deps))
-            if dep.sink or dep.target.known
+            if not dep.sink.is_none or dep.target.known
         ),
         *(
             step
