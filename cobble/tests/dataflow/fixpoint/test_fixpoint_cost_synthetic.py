@@ -83,6 +83,17 @@ BASELINES = (
             peak_rss_mb=153,
             seconds=4.0,
         ),
+        call_matched=FixpointCost(
+            commit="each PERFORM returns to its own call site, budget 200",
+            nodes=1016,
+            dequeues=20_490,
+            settled=True,
+            source_extents=133_281,
+            largest_state=311,
+            value_extents=42_607,
+            peak_rss_mb=312,
+            seconds=13.5,
+        ),
     ),
     FixpointBaseline(
         program="SYNPERFB",
@@ -151,6 +162,17 @@ BASELINES = (
             value_extents=197_001,
             peak_rss_mb=160,
             seconds=5.4,
+        ),
+        call_matched=FixpointCost(
+            commit="each PERFORM returns to its own call site, budget 200",
+            nodes=1014,
+            dequeues=189_497,
+            settled=True,
+            source_extents=155_511,
+            largest_state=332,
+            value_extents=61_948,
+            peak_rss_mb=1635,
+            seconds=144.0,
         ),
     ),
     FixpointBaseline(
@@ -221,21 +243,57 @@ BASELINES = (
             peak_rss_mb=544,
             seconds=94.5,
         ),
+        call_matched=FixpointCost(
+            commit="each PERFORM returns to its own call site, budget 200",
+            nodes=4778,
+            dequeues=13_779,
+            settled=True,
+            source_extents=4_216_113,
+            largest_state=1608,
+            value_extents=1_717_958,
+            peak_rss_mb=504,
+            seconds=17.0,
+        ),
     ),
 )
 
 
 HANDED_OVER = "SYNPERFD"
+GO_TO_PROGRAMS = ("SYNGOTOA", "SYNGOTOB")
 HANDED_OVER_COST = FixpointCost(
-    commit="97fd4b6 with round-robin and additive reasons",
+    commit="each PERFORM returns to its own call site, budget 200",
     nodes=1056,
-    dequeues=8_551,
+    dequeues=21_517,
     settled=True,
-    source_extents=261_726,
-    largest_state=349,
-    value_extents=143_397,
-    peak_rss_mb=154,
-    seconds=4.1,
+    source_extents=140_593,
+    largest_state=312,
+    value_extents=44_079,
+    peak_rss_mb=322,
+    seconds=14.3,
+)
+GO_TO_LOOPS = (
+    FixpointCost(
+        commit="SYNGOTOA: six levels of PERFORMs whose GO TO jumps back above them",
+        nodes=88,
+        dequeues=3_665,
+        settled=True,
+        source_extents=510,
+        largest_state=6,
+        value_extents=609,
+        peak_rss_mb=129,
+        seconds=0.3,
+    ),
+    FixpointCost(
+        commit="SYNGOTOB: one paragraph PERFORMing six, each GO TO back to it",
+        nodes=42,
+        dequeues=193,
+        settled=True,
+        source_extents=232,
+        largest_state=6,
+        value_extents=287,
+        peak_rss_mb=126,
+        seconds=0.0,
+    ),
 )
 
 
@@ -259,16 +317,16 @@ def parsed(tmp_path_factory: pytest.TempPathFactory) -> Path:
             (),
             ("cpy",),
         )
-        for one in (*(one.program for one in BASELINES), HANDED_OVER)
+        for one in (*(one.program for one in BASELINES), HANDED_OVER, *GO_TO_PROGRAMS)
     )
     assert [result.error for result in results] == [
-        "" for _ in (*BASELINES, HANDED_OVER)
+        "" for _ in (*BASELINES, HANDED_OVER, *GO_TO_PROGRAMS)
     ]
     return cache
 
 
 @pytest.mark.parametrize("baseline", BASELINES, ids=lambda one: one.program)
-def test_the_fixpoint_settles_at_the_recorded_round_robin_cost(
+def test_the_fixpoint_settles_at_the_recorded_call_matched_cost(
     parsed: Path, baseline: FixpointBaseline
 ) -> None:
     flow, _ = analysed(
@@ -276,9 +334,9 @@ def test_the_fixpoint_settles_at_the_recorded_round_robin_cost(
     )
 
     assert (flow.nodes, flow.dequeues, flow.settled) == (
-        baseline.round_robin.nodes,
-        baseline.round_robin.dequeues,
-        baseline.round_robin.settled,
+        baseline.call_matched.nodes,
+        baseline.call_matched.dequeues,
+        baseline.call_matched.settled,
     )
 
 
@@ -291,4 +349,25 @@ def test_a_program_handing_areas_over_settles_at_its_recorded_cost(
         HANDED_OVER_COST.nodes,
         HANDED_OVER_COST.dequeues,
         HANDED_OVER_COST.settled,
+    )
+
+
+@pytest.mark.parametrize(
+    ("program", "cost"),
+    zip(GO_TO_PROGRAMS, GO_TO_LOOPS, strict=True),
+    ids=GO_TO_PROGRAMS,
+)
+def test_a_go_to_back_above_open_performs_settles_at_its_recorded_cost(
+    parsed: Path, program: str, cost: FixpointCost
+) -> None:
+    """A GO TO that jumps back to code PERFORMing the ranges it sits in reaches each
+    range under many sets of open PERFORMs. A range's walk is reused whenever the open
+    PERFORMs it can itself run into match, so the cost stays at these counts rather
+    than growing with every such set."""
+    flow, _ = analysed(cached_first_program(parsed, PROGRAMS / f"{program}.cbl"))
+
+    assert (flow.nodes, flow.dequeues, flow.settled) == (
+        cost.nodes,
+        cost.dequeues,
+        cost.settled,
     )

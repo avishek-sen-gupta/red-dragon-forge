@@ -64,6 +64,9 @@ def test_the_report_names_where_the_steps_went(
 def test_every_step_names_the_node_whose_successors_it_changed(
     fixpoint_out: Callable[[str, str], Path],
 ) -> None:
+    """A step changes only what follows its node: the node's successors, and, at a
+    PERFORM, the statement it returns to, which the walk of the performed range hands
+    its result to."""
     source = (Path(__file__).parent / "data" / "perf" / "SYNPERFA.cbl").read_text(
         encoding="utf-8"
     )
@@ -83,7 +86,9 @@ def test_every_step_names_the_node_whose_successors_it_changed(
                 if step.before.get(node) is not state
             },
         )
-        if not changed <= {edge.target for edge in cfg.successors(step.node)}
+        if not changed
+        <= {edge.target for edge in cfg.successors(step.node)}
+        | ({cfg.node(step.node).resume} if cfg.node(step.node).resume else set())
     ]
 
     assert strays == []

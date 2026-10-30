@@ -98,7 +98,7 @@ cobble-dataflow-fixpoint --asg-dir ASG_DIR --out-dir OUT_DIR --extents EXTENTS
 | `--out-dir` | output directory |
 | `--extents` | the table `cobble-extents` wrote. Required |
 | `--member`, `--all` | exactly one is required. A named member the cache lacks is exit 2 |
-| `--iteration-factor` | worklist budget: dequeues allowed per CFG node (default 150) |
+| `--iteration-factor` | worklist budget: dequeues allowed per CFG node (default 200), counting the walks of the ranges a member PERFORMs |
 | `--sweeps` | run reverse-postorder passes instead, at most N. Exclusive with `--iteration-factor` |
 | `--min-coverage` | floor for the fraction of writes resolved to storage (default 0.60) |
 | `--force` | discard every finished member directory and analyse again |
@@ -128,6 +128,13 @@ The graph is intra-program. A `CALL` or `LINK` contributes a `CALL` or `DYNAMIC_
 `aliases.jsonl` states which bytes the site shares with its callee.
 
 ### Budgets
+
+The worklist walks a `PERFORM`ed range once per call that enters it, from that call's state, and
+hands what reaches the range's end back to that call alone, so a paragraph performed from two
+places never carries one caller's writes to the other. A range's walk sees only the entries for
+the bytes its statements (and the ranges it performs) can read or write; the rest pass round it
+untouched. A walk is reused for a later call that brings the same entries and the same open
+`PERFORM`s that the range could itself run into, the only ones whose refusal can change it.
 
 The worklist stops a member at `dequeue cap N reached`. Such a member is published unsettled:
 its flows are a subset of the program's, it is named in a warning, it counts as `unsettled`
@@ -444,7 +451,7 @@ shown is printed once more with `(see above)` and not expanded. Origins (`FILE:`
 fixpoint's, merged over paths; a run capped with `--sweeps` that did not settle has fewer reaching
 definitions, so its tree can be smaller.
 
-The fixpoint returns from a paragraph PERFORMed from several places to every one of its callers,
-so one caller's write can appear to reach another caller's read along a path no execution takes.
-A tree can show such a branch; it never misses a real one. On CardDemo these are 4.9% of the
-reaching definitions (432 of 8,882) and none of the provenance rows or call targets.
+The worklist walk returns from a paragraph PERFORMed from several places only to the call that
+entered it, so the tree never shows one caller's write reaching another caller's read. A run
+with `--sweeps` still returns to every caller, so its tree can show such a branch; it never
+misses a real one.

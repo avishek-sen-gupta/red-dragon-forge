@@ -3,10 +3,17 @@
 The ujr spike measured loop fixpoints as cheap -- 11,826 loops settled in one
 iteration, 1,599 in two, the 30-iteration cap never reached. The cost was
 recursive PERFORM inlining re-analysing a paragraph once per call path, which
-took 710.58s on the corpus's worst member. Keying on the node rather than on the
-call path removes inlining entirely: a PERFORM is an edge, so a paragraph reached
-from two sites is one node set joined, not two copies. That bounds the work at
-O(nodes x state changes) and needs no depth cap.
+took 710.58s on the corpus's worst member.
+
+A PERFORM is not followed as an edge, though. Its range is walked from the
+calling statement's state and only what reaches the range's end goes back, to
+that statement's own resume: following the RETURN edges from a shared end would
+hand one caller's writes to every other caller. What keeps this from becoming the
+inlining above is reuse. A range's walk sees only the entries for bytes the range
+can read or write (``perform_ranges``) and is keyed on those and on the open
+PERFORMs the range could itself run into, so calls that bring the same entries
+share one walk whatever path brought them there. The states a range's walks
+settle on are joined into the program's per-node states for extraction.
 
 Joining at the node is also what keeps a branch honest. Replaying a paragraph's
 statements in declaration order would let an ELSE arm's write kill the THEN arm's
@@ -59,6 +66,7 @@ import logging
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
+from functools import reduce
 from itertools import accumulate, pairwise, repeat, takewhile
 from types import MappingProxyType
 
@@ -93,6 +101,14 @@ from cobble.dataflow.fields.unmodelled_write import UnmodelledWrite
 from cobble.dataflow.fields.values import EMPTY as VALUES_EMPTY
 from cobble.dataflow.fields.values import ValueSet
 from cobble.dataflow.fixpoint.fallthrough import fallthroughs_pruned
+from cobble.dataflow.fixpoint.perform_ranges import (
+    NO_RANGES,
+    PerformRanges,
+    Split,
+    perform_ranges,
+    restored,
+    split,
+)
 from cobble.dataflow.fixpoint.live import EVERYTHING, Live
 from cobble.dataflow.fixpoint.options import DEFAULT_OPTIONS, AnalysisOptions
 from cobble.dataflow.fixpoint.stepped import Stepped
@@ -101,7 +117,7 @@ from cobble.dataflow.jumps.discover import jumps_of
 from cobble.dataflow.jumps.jump import Jump
 from cobble.dataflow.layout import UnsizeableFieldError, program_records
 from cobble.dataflow.srccfg.build import label_id, paragraph_order
-from cobble.dataflow.srccfg.cfg import Cfg
+from cobble.dataflow.srccfg.cfg import Cfg, EdgeKind, Node
 from cobble.dataflow.srccfg.conditions import EightyEight, condition_index
 from cobble.dataflow.srccfg.literals import is_literal
 from cobble.dataflow.srccfg.order import DepthFirstOrder, depth_first_order
@@ -111,6 +127,7 @@ from cobol_asg.asg_types import CobolASG
 from cobol_asg.cobol_statements import ReadStatement
 from cobol_asg.ref_mod import RefModOperand
 from cobol_memory.field_extent import FieldExtent
+from cobol_memory.region_id import RegionId
 
 logger = logging.getLogger(__name__)
 
@@ -238,6 +255,90 @@ class _Progress:
 
 
 @dataclass(frozen=True)
+class _Scope:
+    """The PERFORM range a walk runs inside: the end it returns from, the range
+    entries already active above it, which a PERFORM may not re-enter, and what the
+    program's ranges can touch and reach."""
+
+    closing: str = ""
+    active: frozenset[str] = frozenset()
+    ranges: PerformRanges = NO_RANGES
+
+
+TOP = _Scope()
+
+
+@dataclass(frozen=True)
+class _RangeCall:
+    """One PERFORM range entered from one exact state, with the ranges active above
+    it -- everything a walk of the range depends on, so equal calls walk alike."""
+
+    entry: str
+    closing: str
+    active: frozenset[str]
+    sources: frozenset[tuple[FieldExtent, frozenset[Source]]]
+    values: frozenset[tuple[FieldExtent, ValueSet]]
+    unwritten: frozenset[tuple[RegionId, tuple[int, ...]]]
+
+
+def _range_call(entry: str, scope: _Scope, state: State) -> _RangeCall:
+    return _RangeCall(
+        entry=entry,
+        closing=scope.closing,
+        active=scope.active,
+        sources=frozenset(state.sources.items()),
+        values=frozenset(state.values.items()),
+        unwritten=frozenset(state.unwritten.items()),
+    )
+
+
+@dataclass(frozen=True)
+class _Returned:
+    """What one walk of a range gave: the state leaving the range's end, keyed by
+    that end and absent when the walk never got there, and the state the walk
+    settled on each node inside the range. Nothing here names a call site, so it
+    serves every call that enters the range from the same state."""
+
+    leaving: Mapping[str, State]
+    inner: Mapping[str, State]
+
+
+@dataclass(frozen=True)
+class _Site:
+    """One PERFORM statement entering its range under one set of active ranges."""
+
+    call: str
+    entry: str
+    closing: str
+    active: frozenset[str]
+
+
+@dataclass(frozen=True)
+class _Settled:
+    """The last walk of a range from one site: the state it entered with, and the
+    states it settled on the range's nodes and on the ranges it called."""
+
+    entered: State = EMPTY
+    states: Mapping[str, State] = NO_STATES
+    inner: Mapping[str, State] = NO_STATES
+
+
+NOT_WALKED = _Settled()
+
+
+@dataclass(frozen=True)
+class _Known:
+    """Range walks done so far: each result by the exact call it answers, and each
+    site's latest walk, which a later walk from a larger state resumes."""
+
+    results: Mapping[_RangeCall, _Returned] = MappingProxyType({})
+    walks: Mapping[_Site, _Settled] = MappingProxyType({})
+
+
+NO_CALLS = _Known()
+
+
+@dataclass(frozen=True)
 class _Worklist:
     """One step of the worklist: entry states settled so far, and what to revisit.
 
@@ -251,6 +352,20 @@ class _Worklist:
     dequeues: int = 0
     progress: _Progress = _Progress()
     cursor: int = 0
+    inner: Mapping[str, State] = NO_STATES
+    calls: _Known = NO_CALLS
+
+
+@dataclass(frozen=True)
+class _Outflow:
+    """What leaving one node sends on: entry states for its successors, every
+    state the PERFORM ranges it called settled on their own nodes, and the range
+    walks known so far."""
+
+    flows: Mapping[str, State]
+    inner: Mapping[str, State] = NO_STATES
+    dequeues: int = 0
+    calls: _Known = NO_CALLS
 
 
 @dataclass(frozen=True)
@@ -451,18 +566,178 @@ def _arriving(states: Mapping[str, State], target: str, after: State) -> State:
 
 
 def _grown(
-    cfg: Cfg, node_id: str, after: State, states: Mapping[str, State], live: Live
+    flows: Mapping[str, State], states: Mapping[str, State]
 ) -> Mapping[str, State]:
-    """Successors whose entry state the state leaving ``node_id`` enlarges."""
+    """Successors whose entry state the flows leaving a node enlarge."""
     joined = {
-        edge.target: _arriving(states, edge.target, _for(after, live, edge.target))
-        for edge in cfg.successors(node_id)
+        target: _arriving(states, target, state) for target, state in flows.items()
     }
     return {
         target: state
         for target, state in joined.items()
         if state != states.get(target, EMPTY) or target not in states
     }
+
+
+def _outflow(
+    cfg: Cfg,
+    statements: Mapping[str, Statement],
+    index: CellIndex,
+    live: Live,
+    cap: int,
+    scope: _Scope,
+    node_id: str,
+    after: State,
+    known: _Known,
+) -> _Outflow:
+    """Where the state leaving ``node_id`` goes, with every PERFORM matched to its
+    own call site.
+
+    The end of the range being walked sends nothing on: the caller reads it as the
+    range's exit. A RETURN edge is never followed, because it leads to every call
+    site of the range at once. A PERFORM is not followed either: the range is
+    walked from this call's state, and only what reaches its end goes to this
+    call's resume.
+    """
+    if node_id == scope.closing:
+        return _Outflow(flows=NO_STATES, calls=known)
+    edges = cfg.successors(node_id)
+    plain = _Outflow(
+        flows={
+            edge.target: _for(after, live, edge.target)
+            for edge in edges
+            if edge.kind not in (EdgeKind.PERFORM, EdgeKind.RETURN)
+        },
+        calls=known,
+    )
+    node = cfg.node(node_id)
+    return reduce(
+        lambda out, entry: _with_call(
+            out,
+            _called(cfg, statements, index, live, cap, scope, node, entry, after, out),
+        ),
+        tuple(
+            edge.target
+            for edge in edges
+            if edge.kind is EdgeKind.PERFORM and edge.target not in scope.active
+        ),
+        plain,
+    )
+
+
+def _called(
+    cfg: Cfg,
+    statements: Mapping[str, Statement],
+    index: CellIndex,
+    live: Live,
+    cap: int,
+    scope: _Scope,
+    call: Node,
+    entry: str,
+    after: State,
+    sofar: _Outflow,
+) -> _Outflow:
+    """The range this call enters, walked from this call's state -- or, when an
+    equal call was already walked, what that walk gave.
+
+    A walk from a state that contains the one this site last entered with picks
+    up where that walk stopped: its settled states are the fixpoint for a smaller
+    entry, so they lie below this walk's and the worklist only has to carry the
+    growth. A site whose new state does not contain the old one -- the same
+    statement reached in a walk of its range entered from another caller -- walks
+    afresh, so one caller's state never seeds another's.
+    """
+    inside = _Scope(
+        closing=call.range_end, active=scope.active | {entry}, ranges=scope.ranges
+    )
+    parts = split(after, scope.ranges.footprint(entry, call.range_end))
+    entered = parts.inside
+    relevant = inside.active & scope.ranges.reaches(entry, call.range_end)
+    key = _range_call(entry, _Scope(closing=inside.closing, active=relevant), entered)
+    if key in sofar.calls.results:
+        hit = sofar.calls.results[key]
+        return _Outflow(
+            flows=_resumed(live, call, hit, parts),
+            inner=_restored_all(hit.inner, parts),
+            calls=sofar.calls,
+        )
+    site = _Site(
+        call=call.id, entry=entry, closing=inside.closing, active=inside.active
+    )
+    earlier = sofar.calls.walks.get(site, NOT_WALKED)
+    resumed = earlier if join(earlier.entered, entered) == entered else NOT_WALKED
+    run = _settled(
+        cfg, statements, index, live, entry, cap, entered, inside, sofar.calls, resumed
+    )
+    returned = _Returned(
+        leaving=_leaving(statements, index, call.range_end, run.states),
+        inner=_merged(run.inner, run.states),
+    )
+    return _Outflow(
+        flows=_resumed(live, call, returned, parts),
+        inner=_restored_all(returned.inner, parts),
+        dequeues=run.dequeues,
+        calls=_Known(
+            results=MappingProxyType({**run.calls.results, key: returned}),
+            walks=MappingProxyType(
+                {
+                    **run.calls.walks,
+                    site: _Settled(entered=entered, states=run.states, inner=run.inner),
+                }
+            ),
+        ),
+    )
+
+
+def _leaving(
+    statements: Mapping[str, Statement],
+    index: CellIndex,
+    closing: str,
+    states: Mapping[str, State],
+) -> Mapping[str, State]:
+    if closing not in states:
+        return NO_STATES
+    return {closing: _after(statements, closing, states[closing], index)}
+
+
+def _resumed(
+    live: Live, call: Node, returned: _Returned, parts: Split
+) -> Mapping[str, State]:
+    if call.range_end not in returned.leaving or not call.resume:
+        return NO_STATES
+    leaving = restored(returned.leaving[call.range_end], parts.outside)
+    return {call.resume: _for(leaving, live, call.resume)}
+
+
+def _restored_all(inner: Mapping[str, State], parts: Split) -> Mapping[str, State]:
+    return MappingProxyType(
+        {node: restored(state, parts.outside) for node, state in inner.items()}
+    )
+
+
+def _with_call(left: _Outflow, right: _Outflow) -> _Outflow:
+    return _Outflow(
+        flows=_merged(left.flows, right.flows),
+        inner=_merged(left.inner, right.inner),
+        dequeues=left.dequeues + right.dequeues,
+        calls=right.calls,
+    )
+
+
+def _merged(
+    left: Mapping[str, State], right: Mapping[str, State]
+) -> Mapping[str, State]:
+    if not right:
+        return left
+    return MappingProxyType(
+        {
+            **left,
+            **{
+                node: join(left[node], state) if node in left else state
+                for node, state in right.items()
+            },
+        }
+    )
 
 
 def _for(state: State, live: Live, node: str) -> State:
@@ -520,17 +795,21 @@ def _step(
     order: DepthFirstOrder,
     rank: Mapping[str, int],
     run: _Worklist,
+    scope: _Scope = TOP,
 ) -> _Worklist:
     earliest = _next(run.queue, run.cursor)
     node_id = order.ordered[earliest]
     after = _after(statements, node_id, run.states[node_id], index)
-    grown = _grown(cfg, node_id, after, run.states, live)
+    out = _outflow(cfg, statements, index, live, cap, scope, node_id, after, run.calls)
+    grown = _grown(out.flows, run.states)
     stepped = _Worklist(
         states=MappingProxyType({**run.states, **grown}),
         queue=(run.queue - {earliest}) | {rank[target] for target in grown},
-        dequeues=run.dequeues + 1,
+        dequeues=run.dequeues + 1 + out.dequeues,
         progress=run.progress,
         cursor=earliest + 1,
+        inner=_merged(run.inner, out.inner),
+        calls=out.calls,
     )
     if stepped.dequeues % HEARTBEAT:
         return stepped
@@ -567,6 +846,9 @@ def _settled(
     entry: str,
     cap: int,
     entry_state: State,
+    scope: _Scope = TOP,
+    calls: _Known = NO_CALLS,
+    resumed: _Settled = NOT_WALKED,
 ) -> _Worklist:
     """Iterate to a fixpoint, or to the cap if a defect keeps the state growing.
 
@@ -579,13 +861,17 @@ def _settled(
     order = depth_first_order(cfg, entry)
     rank = MappingProxyType({node_id: n for n, node_id in enumerate(order.ordered)})
     start = _Worklist(
-        states=MappingProxyType({entry: entry_state}),
+        states=_merged(resumed.states, {entry: entry_state}),
         queue=frozenset({rank[entry]}),
         progress=_Progress(started=time.monotonic()),
+        inner=resumed.inner,
+        calls=calls,
     )
     passes = accumulate(
         repeat(None),
-        lambda run, _: _step(cfg, statements, index, live, cap, order, rank, run),
+        lambda run, _: _step(
+            cfg, statements, index, live, cap, order, rank, run, scope
+        ),
         initial=start,
     )
     return next(run for run in passes if _done(run, cap))
@@ -700,9 +986,14 @@ def _worked(
     entry_state: State,
 ) -> _Walk:
     cap = factor * max(len(cfg.nodes), 1)
-    run = _settled(cfg, statements, index, live, entry, cap, entry_state)
+    top = _Scope(ranges=perform_ranges(cfg, statements, index))
+    run = _settled(cfg, statements, index, live, entry, cap, entry_state, top)
     _warn_if_capped(run, cap, cfg.program, len(cfg.nodes))
-    return _Walk(states=run.states, dequeues=run.dequeues, settled=not run.queue)
+    return _Walk(
+        states=_merged(run.inner, run.states),
+        dequeues=run.dequeues,
+        settled=not run.queue,
+    )
 
 
 def _walked(
@@ -969,6 +1260,7 @@ def stepwise(asg, options: AnalysisOptions, cap: int) -> tuple[Cfg, Iterator[Ste
         return cfg, iter(())
     order = depth_first_order(cfg, entry)
     rank = MappingProxyType({node_id: n for n, node_id in enumerate(order.ordered)})
+    top = _Scope(ranges=perform_ranges(cfg, statements, built.index))
     start = _Worklist(
         states=MappingProxyType(
             {
@@ -986,7 +1278,7 @@ def stepwise(asg, options: AnalysisOptions, cap: int) -> tuple[Cfg, Iterator[Ste
     def advanced(run: _Worklist, _: None) -> _Worklist:
         if _done(run, cap):
             return run
-        return _step(cfg, statements, built.index, live, cap, order, rank, run)
+        return _step(cfg, statements, built.index, live, cap, order, rank, run, top)
 
     runs = accumulate(repeat(None), advanced, initial=start)
     return cfg, (
