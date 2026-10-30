@@ -1,7 +1,7 @@
 # Datalog facts (experimental)
 
-A cobble run written as [Soufflé](https://souffle-lang.github.io/) facts. A question is a `.dl` file
-a machine writes; no cobble command runs Soufflé.
+A cobble run written as [Soufflé](https://souffle-lang.github.io/) facts, and a library of rules a
+question may include. A question is a `.dl` file a machine writes; no cobble command runs Soufflé.
 
 ```text
 cobble-experimental-datalog-facts --run RUN_DIR --out FACTS_DIR
@@ -70,11 +70,32 @@ status 2, naming it, and writes nothing. `make carddemo-all` writes `$OUT/datalo
 | `dep_edge` | `src, dst, p, seq:number, verb` | `depgraph/edges.jsonl` |
 | `cluster` | `c, member` (`c0`, `c1`, … in file order) | `aggregates/unified.jsonl` |
 
+## Rule library
+
+`cobble/cobble/experimental/datalog/rules/`. Each file includes what it builds on and is guarded against
+double inclusion. A rule is added only once it reproduces, on CardDemo, an answer written from the
+source alone, and a deliberate break of it fails its test; the tests run on real CardDemo fact rows
+(`cobble/tests/experimental/datalog/carddemo_facts/`).
+
+| file | derives | the question states |
+|---|---|---|
+| `extents.dl` | `xp(e, region, s, t)`: an extent id `NAME@region[s:e]` split | nothing |
+| `names.dl` | `named(p, operand, name)`: the operand field's `VALUE`, trailing spaces stripped, or the operand itself | nothing |
+| `files.dl` | `file_ds(p, name, dsn)`: a batch SELECT name through its DD to the DSN a step running the program binds; a CICS file through the CSD | nothing |
+| `sinks.dl` | `sink_dataset(p, n, region, s, e, f, dsn)`: a file write's bytes and the dataset it lands in | nothing |
+| `trace.dl` | the backward byte trace to typed origins (`cand`, `need`, `step`, `origin_hit`); aligned copies keep exact bytes, a flow between fields of different sizes takes the whole source | `trace_target(p, n, region, a, b)` |
+| `combine.dl` | `multi(p, d)`: a traced node with two or more sources; `pure(p, d)`: on a plain copy chain from the target | builds on `trace.dl` |
+| `navigation.dl` | `reaches(t, p)`: programs reachable by XCTL and XCTL candidates | `nav_start(t, p)`, `nav_stop(p)` |
+| `branches.dl` | `branch(p, n, outcome, callee)`: the XCTL each outcome of a test leads to | `branch_test(p, n)` |
+
+`trace.dl` follows `fp_def`, which is path-insensitive: a definition every real path overwrites can
+still be reported (red-dragon-forge-pywb).
+
 ## Running a question
 
 ```text
-souffle --include-dir FACTS_DIR -F FACTS_DIR -D OUT_DIR question.dl
+souffle --include-dir FACTS_DIR --include-dir RULES_DIR -F FACTS_DIR -D OUT_DIR question.dl
 ```
 
-`question.dl` holds `#include "schema.dl"`, its rules, and `.output` lines for the relations it wants
-back.
+`question.dl` holds `#include` lines for the rule files it needs (or `#include "schema.dl"` alone), the
+facts that state its target, its own rules, and `.output` lines for the relations it wants back.

@@ -1,0 +1,23 @@
+// The backward byte trace from a stated trace_target(p, n, region, a, b): the definers at n that write those bytes, then every flow and reaching definition behind them, to typed origins. Aligned copies keep exact bytes; a flow between fields of different sizes takes the whole source.
+#ifndef RULES_TRACE_DL
+#define RULES_TRACE_DL
+#include "extents.dl"
+
+.decl trace_target(p:symbol, n:symbol, region:symbol, a:number, b:number)
+.decl own(p:symbol, src:symbol)
+own(p, src) :- fp_flow(src, _, _, _, _, _, _), program(p, _), substr(src, 0, strlen(p)+1) = cat(p, ".").
+.decl cand(p:symbol, n:symbol, d:symbol, r:symbol, a:number, b:number)
+cand(p, n, d, r, a, b) :- trace_target(p, n, r, a, b), fp_sink_definer(p, n, _, _, d), fp_flow(src, _, d, _, _, _, de), own(p, src),
+  xp(de, r, ds, dt), max(a, ds) < min(b, dt).
+.decl need(p:symbol, d:symbol, r:symbol, a:number, b:number)
+need(p, d, r, a, b) :- cand(p, _, d, r, a, b).
+.decl step(p:symbol, d:symbol, src:symbol, okind:symbol, oname:symbol, sr:symbol, a:number, b:number)
+step(p, d, src, k, on, sr, ss + lo - ds, ss + hi - ds) :- need(p, d, r, a, b), fp_flow(src, _, d, k, on, se, de), own(p, src),
+  xp(de, r, ds, dt), lo = max(a, ds), hi = min(b, dt), lo < hi, xp(se, sr, ss, st), st - ss = dt - ds.
+step(p, d, src, k, on, sr, ss, st) :- need(p, d, r, a, b), fp_flow(src, _, d, k, on, se, de), own(p, src),
+  xp(de, r, ds, dt), max(a, ds) < min(b, dt), xp(se, sr, ss, st), st - ss != dt - ds.
+need(p, d2, sr, a, b) :- step(p, d, _, "NONE", _, sr, a, b), fp_def(p, d, ue, d2), xp(ue, sr, us, ut), max(a, us) < min(b, ut).
+.decl origin_hit(p:symbol, d:symbol, okind:symbol, oname:symbol)
+origin_hit(p, d, k, on) :- need(p, d, r, a, b), fp_flow(src, _, d, k, on, "", de), own(p, src), k != "NONE",
+  xp(de, r, ds, dt), max(a, ds) < min(b, dt).
+#endif

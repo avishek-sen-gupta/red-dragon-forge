@@ -1,0 +1,17 @@
+// An extent id NAME@region[s:e], as fp_flow, fp_sink and fp_def spell it, split into its region and bytes.
+#ifndef RULES_EXTENTS_DL
+#define RULES_EXTENTS_DL
+#include "schema.dl"
+
+.decl ext(e:symbol)
+ext(e) :- fp_flow(_, _, _, _, _, e, _), e != "".
+ext(e) :- fp_flow(_, _, _, _, _, _, e), e != "".
+ext(e) :- fp_sink(_, _, _, _, e).
+ext(e) :- fp_def(_, _, e, _).
+.decl ext_char(e:symbol, i:number, c:symbol)
+ext_char(e, 0, substr(e, 0, 1)) :- ext(e).
+ext_char(e, i+1, substr(e, i+1, 1)) :- ext_char(e, i, _), i+1 < strlen(e).
+.decl xp(e:symbol, region:symbol, s:number, t:number)
+xp(e, substr(e, at+1, lb-at-1), to_number(substr(e, lb+1, co-lb-1)), to_number(substr(e, co+1, strlen(e)-co-2))) :-
+  ext_char(e, at, "@"), ext_char(e, lb, "["), ext_char(e, co, ":"), at < lb, lb < co.
+#endif

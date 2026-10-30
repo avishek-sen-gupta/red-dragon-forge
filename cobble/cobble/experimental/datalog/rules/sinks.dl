@@ -1,0 +1,10 @@
+// File writes and the dataset each lands in: at node n, program p writes bytes [s:e] of region to the file it names f, which is dataset dsn.
+#ifndef RULES_SINKS_DL
+#define RULES_SINKS_DL
+#include "extents.dl"
+#include "names.dl"
+#include "files.dl"
+
+.decl sink_dataset(p:symbol, n:symbol, region:symbol, s:number, e:number, f:symbol, dsn:symbol)
+sink_dataset(p, n, r, s, e, f, dsn) :- fp_sink(p, n, "FILE", op, x), named(p, op, f), file_ds(p, f, dsn), xp(x, r, s, e).
+#endif

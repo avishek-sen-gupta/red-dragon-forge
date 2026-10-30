@@ -1,0 +1,14 @@
+// Programs reachable by XCTL and XCTL candidates from a stated nav_start(t, p), not continuing out of a stated nav_stop(p).
+#ifndef RULES_NAVIGATION_DL
+#define RULES_NAVIGATION_DL
+#include "schema.dl"
+
+.decl nav_start(t:symbol, p:symbol)
+.decl nav_stop(p:symbol)
+.decl nav(a:symbol, b:symbol)
+nav(a, b) :- kg_edge(a, "PROGRAM", "XCTL", b, "PROGRAM"), !nav_stop(a).
+nav(a, b) :- kg_edge(a, "PROGRAM", "XCTL_CANDIDATE", b, "PROGRAM"), !nav_stop(a).
+.decl reaches(t:symbol, p:symbol)
+reaches(t, p) :- nav_start(t, p).
+reaches(t, b) :- reaches(t, a), nav(a, b).
+#endif

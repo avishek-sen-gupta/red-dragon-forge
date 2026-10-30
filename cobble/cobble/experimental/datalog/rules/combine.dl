@@ -1,0 +1,14 @@
+// Which traced nodes combine two or more sources (multi), and which lie on a plain copy chain from the target (pure).
+#ifndef RULES_COMBINE_DL
+#define RULES_COMBINE_DL
+#include "trace.dl"
+
+.decl src_at(p:symbol, d:symbol, s:symbol)
+src_at(p, d, s) :- step(p, d, s, _, _, _, _, _).
+src_at(p, d, cat(k, cat(":", on))) :- origin_hit(p, d, k, on).
+.decl multi(p:symbol, d:symbol)
+multi(p, d) :- src_at(p, d, s1), src_at(p, d, s2), s1 != s2.
+.decl pure(p:symbol, d:symbol)
+pure(p, d) :- cand(p, _, d, _, _, _).
+pure(p, d2) :- pure(p, d), !multi(p, d), step(p, d, _, "NONE", _, sr, a, b), fp_def(p, d, ue, d2), xp(ue, sr, us, ut), max(a, us) < min(b, ut).
+#endif

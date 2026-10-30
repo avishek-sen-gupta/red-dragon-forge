@@ -1,0 +1,10 @@
+// The dataset a program's file name resolves to: a batch SELECT name through its DD to the DSN a step running the program binds it to; a CICS file through the CSD.
+#ifndef RULES_FILES_DL
+#define RULES_FILES_DL
+#include "schema.dl"
+
+.decl file_ds(p:symbol, name:symbol, dsn:symbol)
+file_ds(p, nm, dsn) :- kg_edge_attr(p, "PROGRAM", _, dd, "COBOL_FILE", "select_name", nm),
+  kg_edge(st, "STEP", "JCL_STEP_RUNS", p, "PROGRAM"), kg_edge_attr(st, "STEP", _, dsn, "DATASET", "ddname", dd).
+file_ds(p, nm, dsn) :- program(p, _), kg_edge(nm, "CICS_FILE", "DEFINES_DATASET", dsn, "DATASET").
+#endif

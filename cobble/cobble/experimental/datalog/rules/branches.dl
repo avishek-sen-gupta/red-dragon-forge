@@ -1,0 +1,12 @@
+// For a stated branch_test(p, n), the XCTL each outcome of that test leads to within the program.
+#ifndef RULES_BRANCHES_DL
+#define RULES_BRANCHES_DL
+#include "schema.dl"
+
+.decl branch_test(p:symbol, n:symbol)
+.decl after(p:symbol, t:symbol, k:symbol, n:symbol)
+after(p, t, k, s) :- branch_test(p, t), cfg_edge(p, t, s, k), (k = "TRUE" ; k = "FALSE").
+after(p, t, k, b) :- after(p, t, k, a), cfg_edge(p, a, b, _).
+.decl branch(p:symbol, t:symbol, outcome:symbol, callee:symbol)
+branch(p, t, k, c) :- after(p, t, k, n), cfg_call(p, n, "CICS_XCTL", c, _, _, _, _).
+#endif

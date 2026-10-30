@@ -1,0 +1,18 @@
+// The name a CICS or batch operand stands for: the operand field's VALUE with trailing spaces stripped, or the operand itself when it has none.
+#ifndef RULES_NAMES_DL
+#define RULES_NAMES_DL
+#include "schema.dl"
+
+.decl raw_value(v:symbol)
+raw_value(v) :- field_value(_, v).
+raw_value(substr(v, 0, strlen(v)-1)) :- raw_value(v), strlen(v) > 1, substr(v, strlen(v)-1, 1) = " ".
+.decl trimmed(v:symbol, t:symbol)
+trimmed(v, v) :- raw_value(v), strlen(v) > 0, substr(v, strlen(v)-1, 1) != " ".
+trimmed(v, t) :- raw_value(v), strlen(v) > 1, substr(v, strlen(v)-1, 1) = " ", trimmed(substr(v, 0, strlen(v)-1), t).
+.decl operand(p:symbol, o:symbol)
+operand(p, o) :- fp_sink(p, _, _, o, _), o != "".
+operand(p, o) :- fp_flow(src, _, _, k, o, _, _), k != "NONE", o != "", origin(_, p, k, o), substr(src, 0, strlen(p)+1) = cat(p, ".").
+.decl named(p:symbol, operand:symbol, name:symbol)
+named(p, o, t) :- operand(p, o), field_value(cat(p, cat(".", o)), v), trimmed(v, t).
+named(p, o, o) :- operand(p, o), !field_value(cat(p, cat(".", o)), _).
+#endif

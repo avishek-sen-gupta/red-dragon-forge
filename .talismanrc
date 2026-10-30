@@ -509,4 +509,14 @@ fileignoreconfig:
   checksum: 0e9039b67ec83039f2b76f4d23fe04de5d86a85b3cfe1436a7510b982bbd1c72
 - filename: docs/reference/cobble/datalog.md
   checksum: b39138382eb2faf46e90576879fd55d11f3d3cc09b236c11b6b08fc5c3ff0bdc
+- filename: cobble/tests/experimental/datalog/carddemo_facts/field_value.facts
+  checksum: 74fcfa58d66ef2c2ed5d477a6f9d11db5bd0566a0bae3958f33bde43fa1e1df3
+- filename: cobble/tests/experimental/datalog/carddemo_facts/cfg_pred.facts
+  checksum: b9589eb8168009d4a7cd6feb5641ec5c816a5d1a2eecb8022db5b358ab7b1e30
+- filename: cobble/tests/experimental/datalog/carddemo_facts/kg_edge_attr.facts
+  checksum: e11c116b428391a6703559578797c7d2b8b67b3a44603b53ed863600af574dcd
+- filename: cobble/tests/experimental/datalog/carddemo_facts/fp_def.facts
+  checksum: 6b5564216a31bd745251bd907820b0f5526ee4fa54604f8fd8ebd78ffe5fdcb7
+- filename: cobble/tests/experimental/datalog/carddemo_facts/fp_flow.facts
+  checksum: 9429cc624266a6a2fc5b496b571dbeed3c77d0ad9ff25dec952ae6130e474033
 version: "1.0"
