@@ -75,7 +75,8 @@ SCHEMA = (
     ".decl jump(p:symbol, n:symbol, kind:symbol, returns:symbol)",
     ".decl jump_target_reason(p:symbol, n:symbol, why:symbol)",
     ".decl jump_target_value(p:symbol, n:symbol, v:symbol)",
-    ".decl kg_edge(src:symbol, kind:symbol, dst:symbol)",
+    ".decl kg_edge(src:symbol, src_kind:symbol, kind:symbol, dst:symbol, dst_kind:symbol)",
+    ".decl kg_edge_attr(src:symbol, src_kind:symbol, kind:symbol, dst:symbol, dst_kind:symbol, key:symbol, value:symbol)",
     ".decl kg_node(id:symbol, kind:symbol)",
     ".decl link(caller:symbol, n:symbol, transfer:symbol, callee:symbol, cext:symbol, eext:symbol, returns:symbol, why:symbol)",
     ".decl origin(id:symbol, p:symbol, kind:symbol, name:symbol)",
@@ -309,3 +310,79 @@ def test_a_line_holding_a_unicode_line_separator_reads_whole(tmp_path: Path) -> 
     path = tmp_path / "rows.jsonl"
     path.write_text('{"text": "A\u0085B\u2028C"}\n\n{"text": "D"}\n', encoding="utf-8")
     assert lines(path) == ('{"text": "A\u0085B\u2028C"}', '{"text": "D"}')
+
+
+KNOWLEDGE_GRAPH = "".join(
+    f"{line}\n"
+    for line in (
+        '{"type":"node","id":"ACCTFILE","kind":"JOB","file_path":"j.jcl","file_path_reason":null,"attrs":{}}',
+        '{"type":"node","id":"ACCTFILE","kind":"COBOL_FILE","file_path":null,"file_path_reason":"not_file_based","attrs":{}}',
+        '{"type":"edge","source":"ACCTFILE","source_kind":"JOB","target":"ACCTFILE.STEP05","target_kind":"STEP","kind":"JCL_STEP_RUNS","attrs":{}}',
+        '{"type":"edge","source":"ACCTFILE.STEP05","source_kind":"STEP","target":"AWS.ACCT","target_kind":"DATASET","kind":"UPDATES","attrs":{"ddname":"ACCTFILE","disp":"OLD"}}',
+        '{"type":"edge","source":"PROGA","source_kind":"PROGRAM","target":"ACCTFILE","target_kind":"COBOL_FILE","kind":"UPDATES","attrs":{"select_name":"ACCOUNT-FILE"}}',
+        '{"type":"edge","source":"PROGA","source_kind":"PROGRAM","target":"MS.MAPA","target_kind":"BMS_MAP","kind":"RECEIVES_MAP","attrs":{"fields":[{"name":"F1","direction":"input"}]}}',
+    )
+)
+
+
+def test_a_knowledge_graph_edge_keeps_its_endpoint_kinds_and_every_attribute(
+    run: Path, tmp_path: Path
+) -> None:
+    """An id can name two nodes (a job and a DD both called ACCTFILE), so an edge
+    names each end by id and kind. Its attributes carry the SELECT name a program
+    opens a DD by, and the DD and DISP a step binds a dataset with; a nested
+    attribute is one row per scalar, keyed by its path."""
+    _written(run / "knowledge-graph.jsonl", KNOWLEDGE_GRAPH)
+    out = tmp_path / "facts"
+
+    assert cli(("--run", str(run), "--out", str(out))) == 0
+
+    assert _facts(out, "kg_node") == [
+        ["ACCTFILE", "COBOL_FILE"],
+        ["ACCTFILE", "JOB"],
+    ]
+    assert _facts(out, "kg_edge") == [
+        ["ACCTFILE", "JOB", "JCL_STEP_RUNS", "ACCTFILE.STEP05", "STEP"],
+        ["ACCTFILE.STEP05", "STEP", "UPDATES", "AWS.ACCT", "DATASET"],
+        ["PROGA", "PROGRAM", "RECEIVES_MAP", "MS.MAPA", "BMS_MAP"],
+        ["PROGA", "PROGRAM", "UPDATES", "ACCTFILE", "COBOL_FILE"],
+    ]
+    assert _facts(out, "kg_edge_attr") == [
+        [
+            "ACCTFILE.STEP05",
+            "STEP",
+            "UPDATES",
+            "AWS.ACCT",
+            "DATASET",
+            "ddname",
+            "ACCTFILE",
+        ],
+        ["ACCTFILE.STEP05", "STEP", "UPDATES", "AWS.ACCT", "DATASET", "disp", "OLD"],
+        [
+            "PROGA",
+            "PROGRAM",
+            "RECEIVES_MAP",
+            "MS.MAPA",
+            "BMS_MAP",
+            "fields.0.direction",
+            "input",
+        ],
+        [
+            "PROGA",
+            "PROGRAM",
+            "RECEIVES_MAP",
+            "MS.MAPA",
+            "BMS_MAP",
+            "fields.0.name",
+            "F1",
+        ],
+        [
+            "PROGA",
+            "PROGRAM",
+            "UPDATES",
+            "ACCTFILE",
+            "COBOL_FILE",
+            "select_name",
+            "ACCOUNT-FILE",
+        ],
+    ]

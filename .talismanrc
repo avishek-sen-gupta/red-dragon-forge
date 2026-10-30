@@ -503,4 +503,10 @@ fileignoreconfig:
   checksum: 90c7e08330e06d54d270e7d2a3c9a09db9f361b3c7693547ed683cd0efcf6cba
 - filename: docs/reference/cobble/knowledge-graph.md
   checksum: 70695c38092345662822dd204ca312d1ee168801106f6d5985ba1cde97353fa5
+- filename: cobble/cobble/experimental/datalog/knowledge_facts.py
+  checksum: 8b583d171a43df6ac7d01434a25d7c68c9d15bf35d964658d6b878d0eae80408
+- filename: cobble/tests/experimental/datalog/test_facts.py
+  checksum: 0e9039b67ec83039f2b76f4d23fe04de5d86a85b3cfe1436a7510b982bbd1c72
+- filename: docs/reference/cobble/datalog.md
+  checksum: b39138382eb2faf46e90576879fd55d11f3d3cc09b236c11b6b08fc5c3ff0bdc
 version: "1.0"
