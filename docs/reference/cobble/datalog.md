@@ -1,8 +1,7 @@
 # Datalog facts (experimental)
 
-A cobble run written as [Soufflé](https://souffle-lang.github.io/) facts, and a library of generic
-rules a question includes. A question is a `.dl` file a machine writes; no cobble command runs
-Soufflé.
+A cobble run written as [Soufflé](https://souffle-lang.github.io/) facts. A question is a `.dl` file
+a machine writes; no cobble command runs Soufflé.
 
 ```text
 cobble-experimental-datalog-facts --run RUN_DIR --out FACTS_DIR
@@ -10,8 +9,8 @@ cobble-experimental-datalog-facts --run RUN_DIR --out FACTS_DIR
 
 Writes `FACTS_DIR/<relation>.facts` for every relation below (tab-separated, Soufflé's default;
 a relation with no rows gets an empty file) and `FACTS_DIR/schema.dl`, which declares each
-relation with `.decl` and `.input` inside an include guard, so a question may include it as
-well as any rule file. Each relation is defined once, in
+relation with `.decl` and `.input` inside an include guard, so a question may include it more
+than once. Each relation is defined once, in
 `cobble/experimental/datalog/`, and that definition writes both its facts file and its schema
 line. Every artifact is read through its typed reader; nothing is guessed or parsed out of text.
 
@@ -70,28 +69,11 @@ status 2, naming it, and writes nothing. `make carddemo-all` writes `$OUT/datalo
 | `dep_edge` | `src, dst, p, seq:number, verb` | `depgraph/edges.jsonl` |
 | `cluster` | `c, member` (`c0`, `c1`, … in file order) | `aggregates/unified.jsonl` |
 
-## Rule library
-
-`cobble/experimental/datalog/rules/`, shipped with the package. Each file includes what it builds
-on and is guarded against double inclusion. A question states its target as facts of the
-relations in the last column.
-
-| file | derives | the question states |
-|---|---|---|
-| `reach.dl` | valid-path reachability: a PERFORM returns to its caller, no fall-through out of a performed range, RETURN edges never followed (`reach`, `branch`) | nothing |
-| `guards.dl` | the test outcomes every valid path to a site takes (`guard`) | `site(p, n)` |
-| `programs.dl` | which programs a transaction can run (`runs`, `hands_to`) | nothing |
-| `bytes.dl` | the byte walk forwards and backwards through the partition graph (`downstream`, `upstream`) | `target_bytes(slot, start, end)` |
-| `writers.dl` | every writer of a slot, split into setters (bytes new from a non-file origin or another dataset) and write-backs; a writer whose edge into the slot has no alignment walks back from its whole field (`writer`, `setter`, `writes_back`) | `target_slot(slot)` |
-| `guard_reads.dl` | the fields a guard's test reads (`guard_reads`) | builds on `guards.dl` |
-| `gaps.dl` | why an answer about a program may be incomplete (`gap`) | builds on `site` |
-
 ## Running a question
 
 ```text
-souffle --include-dir FACTS_DIR --include-dir RULES_DIR -F FACTS_DIR -D OUT_DIR question.dl
+souffle --include-dir FACTS_DIR -F FACTS_DIR -D OUT_DIR question.dl
 ```
 
-`RULES_DIR` is `cobble/cobble/experimental/datalog/rules/`; the rule files' own `#include "schema.dl"`
-resolves through `FACTS_DIR`. `question.dl` holds `#include` lines for the rule files it needs, the facts that state its
-target, and `.output` lines for the relations it wants back.
+`question.dl` holds `#include "schema.dl"`, its rules, and `.output` lines for the relations it wants
+back.

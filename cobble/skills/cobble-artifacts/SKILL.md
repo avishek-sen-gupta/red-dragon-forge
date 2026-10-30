@@ -29,7 +29,7 @@ Run every tool from `cobble/` with `uv run --no-sync`. `$RUN` below is the outpu
 | `render/` | the partition graph's pages: program map and per-program neighbourhoods | pictures of the above |
 | `aggregates/unified.jsonl` | classes of fields connected by exact moves | which fields are copies of one another |
 | `aggregates/matrix.npz`, `meta.json`, `decompose/rounds.json` | field-by-program matrix and its NMF factors | which fields travel together, suggesting the system's entities |
-| `datalog/` (`<relation>.facts`, `schema.dl`) | the run as Soufflé facts, one tab-separated file per relation, declared in `schema.dl`; generic rules in `cobble/cobble/experimental/datalog/rules/` (see `docs/reference/cobble/datalog.md`) | any question above as a Datalog query: `souffle -I $RUN/datalog -I <rules dir> -F $RUN/datalog -D - question.dl` |
+| `datalog/` (`<relation>.facts`, `schema.dl`) | the run as Soufflé facts, one tab-separated file per relation, declared in `schema.dl` (see `docs/reference/cobble/datalog.md`) | any question above as a Datalog query: `souffle -I $RUN/datalog -F $RUN/datalog -D - question.dl` |
 
 ## Query tools
 

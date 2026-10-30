@@ -1,9 +1,0 @@
-// The fields each guard's test reads, by access facts and CFG reads at the test node.
-#ifndef RULES_GUARD_READS_DL
-#define RULES_GUARD_READS_DL
-#include "guards.dl"
-
-.decl guard_reads(p:symbol, d:symbol, field:symbol)
-guard_reads(P,D,F) :- guard(P,_,D,_,_,_), access(P,D,F,_,_,_).
-guard_reads(P,D,F) :- guard(P,_,D,_,_,_), cfg_read(P,D,F).
-#endif
