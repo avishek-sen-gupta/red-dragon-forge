@@ -45,7 +45,7 @@ def _logged(found: Sequence[tuple[str, LabelConflict]]) -> bool:
     return not found
 
 
-def _bindings(env: DdEnvironment) -> FileBindings:
+def bindings_of(env: DdEnvironment) -> FileBindings:
     return FileBindings(
         paths=env.paths(),
         appended=frozenset(name.text for name in env.appended()),
@@ -67,7 +67,7 @@ class AllocatedFileIOProvider(DatasetFileIOProvider):
         env: DdEnvironment,
         relabeller: Relabeller,
     ) -> None:
-        super().__init__(base_dir, files, _bindings(env), relabeller)
+        super().__init__(base_dir, files, bindings_of(env), relabeller)
         self._concatenations: Mapping[str, tuple[MemberAllocation, ...]] = dict(
             _concatenations(files, env)
         )

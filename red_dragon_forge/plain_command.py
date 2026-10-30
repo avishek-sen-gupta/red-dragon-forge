@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Mapping
 from pathlib import Path
 
 from catnip.system_catalog import SystemCatalog
-from interpreter.hlasm_run_inputs.run_input_builtins import (
-    unsupplied_run_input_builtins,
-)
+from interpreter.hlasm_run_inputs.job_parm_builtins import NO_PARM
+from interpreter.hlasm_run_inputs.run_input_builtins import run_input_builtins
+from interpreter.hlasm_run_inputs.system_machine_clock import SystemMachineClock
 from interpreter.vm.builtins import compose_builtins, core_builtins
 from litter.manifest import Manifest
 
@@ -39,7 +40,12 @@ def run_plain_mode(path: Path, environ: Mapping[str, str]) -> int:
         config.plain,
         compose_builtins(
             core_builtins(),
-            unsupplied_run_input_builtins(),
+            run_input_builtins(
+                SystemMachineClock(
+                    wall_ns=time.time_ns, cpu_ns=time.process_time_ns, sleep=time.sleep
+                ),
+                NO_PARM,
+            ),
             floating_point_builtins(),
             coprocessing.builtins,
         ),

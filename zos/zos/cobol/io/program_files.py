@@ -1,4 +1,4 @@
-"""COBOL's file handler for a linked image: each file call goes to the provider of the program that made it."""
+"""The file handler for a linked image: each COBOL file call goes to the provider of the program that made it, each HLASM call to the DD provider."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from collections.abc import Callable, Collection, Mapping, Sequence
 
 from interpreter.cobol.io_provider import CobolIOProvider, IOResult
 from interpreter.data_value import DataRecord
+from interpreter.hlasm_run_inputs.declare_file_builtins import NO_PROGRAM
 from interpreter.vm.vm import Operators
 from zos.cobol.io.program_file import ProgramFile
 
@@ -18,10 +19,14 @@ class ProgramFilesIOProvider(CobolIOProvider):
         programs: Collection[str],
         provider_for: Callable[[Sequence[ProgramFile]], CobolIOProvider],
         files: Sequence[ProgramFile],
+        hlasm: CobolIOProvider,
     ) -> None:
         self._providers: Mapping[str, CobolIOProvider] = {
-            program: provider_for(tuple(f for f in files if f.program == program))
-            for program in programs
+            **{
+                program: provider_for(tuple(f for f in files if f.program == program))
+                for program in programs
+            },
+            NO_PROGRAM: hlasm,
         }
 
     def _accept(self, from_device: str) -> Operators._Uncomputable:

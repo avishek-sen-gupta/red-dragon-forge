@@ -1,9 +1,9 @@
-"""A file call goes to its own program's declarations; a program that declares none for a SELECT takes the dataset as its label says."""
+"""A file call goes to its own program's declarations, an HLASM call to the DD provider; a program that declares none for a SELECT takes the dataset as its label says."""
 
 from functools import partial
 from pathlib import Path
 
-from catnip.dataset import Dataset
+from catnip.dataset import Dataset, Relabeller
 from catnip.labels import Label, RecordFormat, SequentialLabel
 from cobol_asg.cobol_statements import FileControlEntry
 from cobol_asg.file_enums import FileOrganization
@@ -13,9 +13,10 @@ from interpreter.cobol.io_provider import IOResult
 from interpreter.data_value import DataRecord
 from interpreter.record_io.file_frame import FileFrame
 from jackal.allocation import DatasetAllocation, DdEnvironment, Positioning
-from jackal.cobol_files import AllocatedFileIOProvider
+from jackal.cobol_files import AllocatedFileIOProvider, bindings_of
 from jackal.model import DdName, DispAbnormal, DispNormal, ResolvedDisp
 from tests.covers import NotLanguageFeature, covers
+from zos.cobol.io.dd_files import DdFileIOProvider
 from zos.cobol.io.program_file import ProgramFile
 from zos.cobol.io.program_files import ProgramFilesIOProvider
 from zos.cobol.io.record_format import FixedFormat
@@ -29,7 +30,7 @@ def _frame(record_length: int) -> DataRecord:
     ).data()
 
 
-class _Unrelabelled:
+class _Unrelabelled(Relabeller):
     def relabel(self, dataset: Dataset, label: Label) -> None:
         raise AssertionError(f"{dataset.dsn} relabelled to {label}")
 
@@ -61,6 +62,7 @@ def test_an_undeclared_select_takes_the_dataset_its_dd_names_as_labelled(
         ("DECLARER", "BARE"),
         partial(AllocatedFileIOProvider, tmp_path, env=env, relabeller=_Unrelabelled()),
         (declared,),
+        DdFileIOProvider(tmp_path, bindings_of(env), _Unrelabelled()),
     )
 
     assert (
@@ -72,6 +74,10 @@ def test_an_undeclared_select_takes_the_dataset_its_dd_names_as_labelled(
         provider._key_of_reference("INDD", 1, "BARE"),
         provider._close_file("INDD", "DECLARER"),
         provider._close_file("INDD", "BARE"),
+        provider._declare_file(_frame(120), ""),
+        provider._open_file("INDD", "INPUT", ""),
+        provider._read_record("INDD", "", ""),
+        provider._close_file("INDD", ""),
     ) == (
         IOResult(AccessCondition.OK, None),
         IOResult(AccessCondition.OK, None),
@@ -80,5 +86,9 @@ def test_an_undeclared_select_takes_the_dataset_its_dd_names_as_labelled(
         IOResult(AccessCondition.OK, _RECORD),
         IOResult(AccessCondition.OK, None),
         IOResult(AccessCondition.NOT_OPEN, None),
+        IOResult(AccessCondition.OK, None),
+        IOResult(AccessCondition.OK, None),
+        IOResult(AccessCondition.OK, None),
+        IOResult(AccessCondition.OK, _RECORD),
         IOResult(AccessCondition.OK, None),
     )

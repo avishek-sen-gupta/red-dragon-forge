@@ -495,4 +495,8 @@ fileignoreconfig:
   checksum: 268d74baf3d92ca8c901ad3f2b3f78f0d3a528a8db5ef33f990f819cab790971
 - filename: docs/superpowers/plans/2026-10-30-typed-origins-and-sinks.md
   checksum: f4393b0d4dca71522641706a9e299f5bfe8f40eaad616315450b588809c4a483
+- filename: docs/superpowers/specs/2026-10-30-hlasm-dd-io-design.md
+  checksum: c587ed1407669ec3eb32e0741329af2f7099e005d1dd7715a0b4e5cfee5432c0
+- filename: docs/superpowers/plans/2026-10-30-hlasm-dd-io.md
+  checksum: 2c04240f0b352cfb6af88a6864d36fc3adca16ab0ec088f221ffce97b634b798
 version: "1.0"

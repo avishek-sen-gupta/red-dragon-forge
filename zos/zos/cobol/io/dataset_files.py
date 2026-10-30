@@ -117,16 +117,26 @@ class DatasetFileIOProvider(RealFileIOProvider):
                 path_overrides=bindings.paths,
             ),
         )
-        self._appended_files = frozenset(
-            f.entry.file_name for f in files if f.entry.assign_to in bindings.appended
-        )
+        self._appended_files = self._appended(files, bindings)
         self._program_files: Mapping[str, ProgramFile] = {
             f.entry.file_name: f for f in files
         }
         self._relabeller = relabeller
         self._datasets: Table[str, Dataset] = Table()
-        for name, dataset in _datasets(files, bindings):
+        for name, dataset in self._named(files, bindings):
             self._datasets.put(name, dataset)
+
+    def _appended(
+        self, files: Sequence[ProgramFile], bindings: FileBindings
+    ) -> frozenset[str]:
+        return frozenset(
+            f.entry.file_name for f in files if f.entry.assign_to in bindings.appended
+        )
+
+    def _named(
+        self, files: Sequence[ProgramFile], bindings: FileBindings
+    ) -> tuple[tuple[str, Dataset], ...]:
+        return _datasets(files, bindings)
 
     def _opened_as(self, filename: str, mode: str) -> str:
         if mode == OpenMode.OUTPUT.value and filename in self._appended_files:

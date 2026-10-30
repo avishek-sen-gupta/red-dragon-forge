@@ -32,7 +32,7 @@ system = "/tmp/carddemo-system"     # catnip's system directory
 program = "CBACT01C"
 max_steps = 500000                  # optional; the default
 
-[plain.files]                       # ASSIGN name = cataloged dataset
+[plain.files]                       # ASSIGN name or DDNAME = cataloged dataset
 ACCTFILE = "AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS"
 
 [jcl]
@@ -62,7 +62,10 @@ run: `env.toml: cics.timezone: invalid timezone: Mars/Base`.
 `[plain]` describes no dataset: each `[plain.files]` entry names one cataloged in the system
 directory, which supplies its record format and length. A name not in the catalog stops the run
 before the program starts; plain mode never creates a dataset. A dataset cataloged with a pending
-label takes its label from the FD on its first OPEN OUTPUT or EXTEND. An abend wins over the
+label takes its label from the FD on its first OPEN OUTPUT or EXTEND. Each entry is also an
+HLASM DD of that name: a sequential dataset supplies RECFM and LRECL from its label, a
+pending one supplies neither (a DCB with no LRECL abends S013) and is labelled F or V at its first OPEN OUTPUT or EXTEND, from the
+DCB. Any other dataset, or a DDNAME with no entry, fails the OPEN with R15 8. An abend wins over the
 return code. An HLASM entry's return code is R15; an HLASM abend (`ABEND 42` gives `U0042`) is
 reported whichever language the entry is. A RETURN-CODE left unknown by a tolerated CALL reports `RC 0`, with a warning on
 stderr: `forge-run: warning: P's RETURN-CODE is unknown; reported as 0`.
@@ -110,6 +113,8 @@ stops it when the CALL runs.
 `tests/unit/test_env_config.py` covers mode selection and each fault;
 `tests/integration/test_plain_mode.py` covers each `[plain]` outcome and refusal, labelling on
 first OPEN, two programs selecting the same name, and a run loading neither jackal nor cics;
+`tests/integration/test_hlasm_dd_plain.py` covers an HLASM copy between DDs, FB and VB, under a
+COBOL caller with its own file, and an unbound or pending input;
 `tests/integration/test_run_command.py` covers `[plain]` against the equivalent one-step `[jcl]`
 job, a multi-step `[jcl]` job against `jackal run`, the CardDemo sign-on screen served by `[cics]`
 over TN3270, a `[jcl]` run loading no cics, a `[cics]` region loading no jackal, and a `[plain]`

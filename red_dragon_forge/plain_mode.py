@@ -13,6 +13,8 @@ from catnip.labels import Label
 from catnip.system_catalog import NotCataloged, SystemCatalog
 from interpreter.cobol.symbolic_return_code_error import SymbolicReturnCodeError
 from interpreter.func_name import FuncName
+from interpreter.hlasm_run_inputs.dd_builtins import dd_builtins
+from interpreter.hlasm_run_inputs.declare_file_builtins import declare_file_builtins
 from interpreter.project.program_entry import ProgramEntry
 from interpreter.run import (
     BudgetExhausted,
@@ -23,9 +25,12 @@ from interpreter.run import (
     run_linked_resumable,
 )
 from interpreter.vm.builtin import Builtin
+from interpreter.vm.builtins import compose_builtins
 from interpreter.vm.vm_types import VMState
 from litter.package import Package
 from zos.cobol.io.dataset_files import DatasetFileIOProvider
+from zos.cobol.io.dd_definitions import dd_definitions
+from zos.cobol.io.dd_files import DdFileIOProvider
 from zos.cobol.io.file_bindings import FileBindings
 from zos.cobol.io.file_definitions import program_files_of
 from zos.cobol.io.program_files import ProgramFilesIOProvider
@@ -115,6 +120,7 @@ def run_plain(
     permit_unresolved_call_targets: bool,
 ) -> int:
     bindings = _bindings(catalog, plain)
+    relabeller = CatalogRelabeller(catalog)
     with tempfile.TemporaryDirectory(prefix="forge-run-") as scratch:
         provider = ProgramFilesIOProvider(
             tuple(package.image.programs),
@@ -122,15 +128,20 @@ def run_plain(
                 DatasetFileIOProvider,
                 Path(scratch),
                 bindings=bindings,
-                relabeller=CatalogRelabeller(catalog),
+                relabeller=relabeller,
             ),
             program_files_of(package.image),
+            DdFileIOProvider(Path(scratch), bindings, relabeller),
         )
         outcome = run_linked_resumable(
             package.image,
             ProgramEntry(plain.program),
             max_steps=plain.max_steps,
-            builtins=builtins,
+            builtins=compose_builtins(
+                builtins,
+                dd_builtins(dd_definitions(bindings.datasets)),
+                declare_file_builtins(),
+            ),
             initial_vm=initial_vm_state(io_provider=provider),
             permit_unresolved_call_targets=permit_unresolved_call_targets,
         )

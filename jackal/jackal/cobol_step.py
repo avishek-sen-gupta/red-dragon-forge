@@ -27,11 +27,12 @@ from interpreter.run import Completed as RunCompleted
 from interpreter.vm.builtin import Builtin
 from interpreter.vm.vm_types import StackFrame, VMState
 from jackal.allocation import DdEnvironment
-from jackal.cobol_files import AllocatedFileIOProvider
+from jackal.cobol_files import AllocatedFileIOProvider, bindings_of
 from jackal.model import ProgramStep, StepReference
 from jackal.parm import build_parm_region
 from jackal.results import Abended, Completed, ProgramResult
 from jackal.value_parts import resolve
+from zos.cobol.io.dd_files import DdFileIOProvider
 from zos.cobol.io.program_file import ProgramFile
 from zos.cobol.io.program_files import ProgramFilesIOProvider
 from zos.program_outcome import program_abends, program_return_code
@@ -66,6 +67,7 @@ def run_cobol_step(
         tuple(program.linked.programs),
         partial(AllocatedFileIOProvider, workdir, env=env, relabeller=relabeller),
         program.files,
+        DdFileIOProvider(workdir, bindings_of(env), relabeller),
     )
     outcome = run_linked_resumable(
         program.linked,
