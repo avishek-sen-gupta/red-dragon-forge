@@ -52,7 +52,7 @@ The section present picks the mode.
 | Mode | What runs | Output and exit status |
 |---|---|---|
 | `[plain]` | the image entered at `program`, with `max_steps` as its budget; no job, DD or disposition | one line: `RC <n>`, exit 0; or the abend (`U1234`), exit 1; or `budget exhausted after <n> steps`, exit 1 |
-| `[jcl]` | the job, run by jackal against the package | jackal's per-step lines and exit status ([jackal CLI](../jackal/cli.md)); an HLASM step gets the host clock, no DD definitions and its own `PARM=` |
+| `[jcl]` | the job, run by jackal against the package | jackal's per-step lines and exit status ([jackal CLI](../jackal/cli.md)); an HLASM step gets the host clock, its own `PARM=`, and each of its sequential or pending dataset DDs; any other DD (`DD *`, `SYSOUT`, `DUMMY`, a concatenation) fails the OPEN with R15 8 |
 | `[cics]` | a region assembled from the package (`cics.tn3270.region.assemble_region`), served until interrupted | |
 
 `[cics] timezone` is the zone `ASKTIME` reads the region's local time in, and `datform` is the
@@ -115,6 +115,8 @@ stops it when the CALL runs.
 first OPEN, two programs selecting the same name, and a run loading neither jackal nor cics;
 `tests/integration/test_hlasm_dd_plain.py` covers an HLASM copy between DDs, FB and VB, under a
 COBOL caller with its own file, and an unbound or pending input;
+`tests/integration/test_hlasm_dd_jackal.py` covers HLASM steps writing new FB and VB datasets
+and a `DISP=MOD` one, read by a later COBOL step;
 `tests/integration/test_run_command.py` covers `[plain]` against the equivalent one-step `[jcl]`
 job, a multi-step `[jcl]` job against `jackal run`, the CardDemo sign-on screen served by `[cics]`
 over TN3270, a `[jcl]` run loading no cics, a `[cics]` region loading no jackal, and a `[plain]`

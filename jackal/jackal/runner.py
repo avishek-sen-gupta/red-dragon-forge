@@ -10,12 +10,15 @@ from pathlib import Path
 from catnip.system_catalog import SystemCatalog
 from interpreter.cobol.symbolic_return_code_error import SymbolicReturnCodeError
 from interpreter.func_name import FuncName
+from interpreter.hlasm_run_inputs.dd_builtins import dd_builtins
+from interpreter.hlasm_run_inputs.declare_file_builtins import declare_file_builtins
 from interpreter.hlasm_run_inputs.job_parm_builtins import NO_PARM, job_parm_builtins
 from interpreter.project.program_entry import ProgramEntry
 from interpreter.vm.builtin import Builtin
 from interpreter.vm.builtins import compose_builtins
 from jackal.allocation import DdEnvironment, allocate, dispose, release
 from jackal.catalog import DatasetCatalog
+from jackal.cobol_files import bindings_of
 from jackal.cobol_step import CompiledProgram, run_cobol_step
 from jackal.cond import Run, gate
 from jackal.expansion import DirectoryProcLibrary, expand_or_fail
@@ -57,6 +60,7 @@ from jackal.unresolved import UnresolvedReferenceStrategy, referbacks_resolved
 from jackal.utilities import UTILITIES
 from jackal.value_parts import resolve
 from litter.package import Package
+from zos.cobol.io.dd_definitions import dd_definitions
 from zos.cobol.io.file_definitions import program_files_of
 
 Entry = QualifiedStep | UnexpandedCall
@@ -292,6 +296,8 @@ class JobRunner:
             builtins=compose_builtins(
                 self._builtins,
                 job_parm_builtins(resolve(step.parm) if step.parm else NO_PARM),
+                dd_builtins(dd_definitions(bindings_of(env).datasets)),
+                declare_file_builtins(),
             ),
             permit_unresolved_call_targets=self._permit_unresolved_call_targets,
         )

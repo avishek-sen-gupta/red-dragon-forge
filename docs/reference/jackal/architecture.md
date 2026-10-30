@@ -164,7 +164,7 @@ A dataset labelled V or VB is read and written through `catnip.variable_records`
 each record behind its 4-byte record descriptor word as z/OS does, and fails a `REWRITE` that
 changes a record's length with file status 44
 ([decision record](../../records/design/2026-10-12-jackal-variable-records.md)). `PARM=` is passed in as an OS halfword-prefixed parameter region
-(`jackal.parm`); an HLASM program reads its own `PARM=` (empty when absent) through the `__hlasm_job_parm` builtin, composed per step onto the runner's builtins. Each program runs on red-dragon's resumable entry point with its own budget
+(`jackal.parm`); an HLASM program reads its own `PARM=` (empty when absent) through the `__hlasm_job_parm` builtin, composed per step onto the runner's builtins. Each step's sequential or pending dataset DDs are its HLASM DDs, composed per step the same way with the DCB declaration builtin; HLASM's OPEN, GET and PUT reach them through `DdFileIOProvider`, built from the step's allocations. Each program runs on red-dragon's resumable entry point with its own budget
 of interpreter steps, `JobRunner`'s `program_step_budget` (the CLI gives 500,000). A program
 that ends gives `Completed` with the return code read back from the VM (R15 for an HLASM program;
 an HLASM abend gives `Abended` as a COBOL one does). One still running

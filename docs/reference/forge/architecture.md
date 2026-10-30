@@ -47,7 +47,7 @@ CICS, SQL or JCL knowledge of its own.
 | `env_config.py` | `EnvConfig`: the settings every mode shares, `run_mode`, and the `[sql]` check against the manifest. Each command extends it with its section and checks. |
 | `run_preparation.py` | What every mode starts from: its config, the opened package and its `Coprocessing`. |
 | `plain_command.py` | `[plain]` (`PlainEnv`), through `plain_mode.py`. Imports neither jackal nor cics. |
-| `jcl_command.py` | `[jcl]` (`JclEnv`): the job, run by jackal's `JobRunner`. Imports no cics. |
+| `jcl_command.py` | `[jcl]` (`JclEnv`): the job, run by jackal's `JobRunner`, with the host clock per run; jackal composes each step's PARM and DDs. Imports no cics. |
 | `cics_command.py` | `[cics]` (`CicsEnv`): the region served over TN3270; `cics_region` assembles it in process. `region_builtins` composes the region's other builtins: coprocessing's, red-dragon's default HLASM run inputs (host clock with STIMER's wait, empty PARM, no DDs) and the floating-point tables, so a transaction can `CALL` an HLASM program in the package. Imports no jackal. |
 | `coprocessors.py` | The coprocessors a build may name, each with its compile spec and the programs it requires linked. |
 | `coprocessing.py` | `Coprocessing`: what a package's `sql` adds to a run — squall's `SqlRuntime` (its builtins and three unit-of-work hooks) and the abend rollback. `db2_connection.py` builds it; with no `sql` the runtime is empty and its hooks are no-ops. `[plain]` and `[jcl]` compose its builtins into their table; `[cics]` also packs its hooks into cicada's `TransactionHooks`. |

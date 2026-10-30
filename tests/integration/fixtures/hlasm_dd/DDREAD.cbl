@@ -1,0 +1,22 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. DDREAD.
+       ENVIRONMENT DIVISION.
+       INPUT-OUTPUT SECTION.
+       FILE-CONTROL.
+           SELECT IN-FILE ASSIGN TO INDD.
+       DATA DIVISION.
+       FILE SECTION.
+       FD IN-FILE RECORDING MODE F.
+       01 IN-RECORD PIC X(80).
+       WORKING-STORAGE SECTION.
+       01 WS-EOF PIC X VALUE 'N'.
+       PROCEDURE DIVISION.
+           OPEN INPUT IN-FILE.
+           PERFORM UNTIL WS-EOF = 'Y'
+               READ IN-FILE
+                   AT END MOVE 'Y' TO WS-EOF
+                   NOT AT END DISPLAY IN-RECORD
+               END-READ
+           END-PERFORM.
+           CLOSE IN-FILE.
+           GOBACK.
