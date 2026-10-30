@@ -23,3 +23,17 @@ class RejectingBridge(SubprocessRunner):
 
     def run(self, command: Sequence[str], input_data: str) -> str:
         raise CobolParseError(self._message)
+
+
+class EchoBridge(SubprocessRunner):
+    """A bridge that answers with the source it was handed."""
+
+    def run(self, command: Sequence[str], input_data: str) -> str:
+        return input_data
+
+
+class QuotingBridge(SubprocessRunner):
+    """A bridge that rejects the source, quoting it whole."""
+
+    def run(self, command: Sequence[str], input_data: str) -> str:
+        raise CobolParseError(input_data)

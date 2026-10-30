@@ -95,13 +95,16 @@ forbidden_modules =
 # and squall's statement vocabulary. squall.parser is on that surface rather than
 # the forbidden list below: its whole import closure is stdlib, lark and its own
 # sql_model, so it is a grammar-based text-to-model parser, not a runtime, and
-# parsing is what cobble does for a living.
+# parsing is what cobble does for a living. squall.preprocess is on it for the
+# same reason: its closure is stdlib, exec_sql_scan, fixed_format and the parser,
+# and it is the Db2 precompiler's source rewrite (EXEC SQL INCLUDE becomes COPY),
+# which cobble's parse has to apply to see what the compiler sees.
 #
 # Import-linter enforces prohibitions, not permissions, so only the forbidden
 # lists below are machine-checked. The allowed surface -- cobol_asg.*,
 # cobol_memory, cics.{cics_parser,cics_visitor,cics_grammar,csd_parse,statements,
 # bms}, bms_copybook_gen, jackal.{model,dsn,value_parts,tso,jcl.*} and
-# squall.{statements,parser} -- is stated here because it is what a future extraction of a
+# squall.{statements,parser,preprocess,exec_sql_scan,fixed_format} -- is stated here because it is what a future extraction of a
 # lean core would have to contain. Keeping the two in step is a review
 # obligation, not an automated one.
 
@@ -145,7 +148,6 @@ forbidden_modules =
     squall.connector
     squall.coprocessor
     squall.dclgen
-    squall.preprocess
     squall.strategy
     catnip
     litter

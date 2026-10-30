@@ -499,4 +499,8 @@ fileignoreconfig:
   checksum: c587ed1407669ec3eb32e0741329af2f7099e005d1dd7715a0b4e5cfee5432c0
 - filename: docs/superpowers/plans/2026-10-30-hlasm-dd-io.md
   checksum: 2c04240f0b352cfb6af88a6864d36fc3adca16ab0ec088f221ffce97b634b798
+- filename: cobble/tests/parsing/sql_include_member.py
+  checksum: 90c7e08330e06d54d270e7d2a3c9a09db9f361b3c7693547ed683cd0efcf6cba
+- filename: docs/reference/cobble/knowledge-graph.md
+  checksum: 70695c38092345662822dd204ca312d1ee168801106f6d5985ba1cde97353fa5
 version: "1.0"

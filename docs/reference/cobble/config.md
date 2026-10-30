@@ -102,7 +102,7 @@ sym_dir = "path/to/sym"
 
 | Key | Required | Default | Meaning |
 |---|---|---|---|
-| `cobol_dir`, `cobol_globs` | yes | | COBOL members, selected by listing the directory |
+| `cobol_dir`, `cobol_globs` | yes | | COBOL members, selected by listing the directory. A glob may name subdirectories (`app-*/cbl/*.cbl`) |
 | `jcl_dir`, `jcl_globs` | yes | | JCL members |
 | `proclib_dirs` | no | `[]` | cataloged PROC libraries |
 | `csd_files` | no | `[]` | CSD exports. Empty skips the CICS flow stage. Each entry must be a readable file or `cobble-build` refuses to start |

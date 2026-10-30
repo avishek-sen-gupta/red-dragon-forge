@@ -47,6 +47,7 @@ from cobble.parsing.parse_corpus import (
     copybook_dirs,
     record_failure,
 )
+from cobble.parsing.precompiled import precompiled
 from cobble.path_utils import ensure_dir
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.copybook_search import CopybookSearch
@@ -79,7 +80,7 @@ def expand_with(parser: ProLeapCobolParser, job: Job) -> Result:
     """Expand one member with an already-built parser."""
     t0 = time.perf_counter()
     try:
-        expanded = parser.expand(job.source.read_bytes())
+        expanded = parser.expand(precompiled(job.source.read_bytes()))
     except CobolParseError as exc:
         return record_failure(job, exc, time.perf_counter() - t0)
     _write_expansion(job.dest, expanded)

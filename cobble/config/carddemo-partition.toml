@@ -1,16 +1,29 @@
 [corpus]
-cobol_dir = "../vendor/carddemo/app/cbl"
-cobol_globs = ["*.cbl", "*.CBL"]
+cobol_dir = "../vendor/carddemo/app"
+cobol_globs = ["cbl/*.cbl", "cbl/*.CBL", "app-*/cbl/*.cbl", "app-*/cbl/*.CBL"]
 jcl_dir = "../vendor/carddemo/app/jcl"
 jcl_globs = ["*.jcl", "*.JCL"]
 proclib_dirs = ["../vendor/carddemo/app/proc"]
-csd_files = ["../vendor/carddemo/app/csd/CARDDEMO.CSD"]
+csd_files = [
+  "../vendor/carddemo/app/csd/CARDDEMO.CSD",
+  "../vendor/carddemo/app/app-authorization-ims-db2-mq/csd/CRDDEMO2.csd",
+  "../vendor/carddemo/app/app-transaction-type-db2/csd/CRDDEMOD.csd",
+  "../vendor/carddemo/app/app-vsam-mq/csd/CRDDEMOM.csd",
+]
 copybook_dirs = [
   "sym",
   "../vendor/carddemo/app/cpy",
   "../vendor/carddemo/app/cpy-bms",
+  "../vendor/carddemo/app/app-authorization-ims-db2-mq/cpy",
+  "../vendor/carddemo/app/app-authorization-ims-db2-mq/cpy-bms",
+  "../vendor/carddemo/app/app-authorization-ims-db2-mq/dcl",
+  "../vendor/carddemo/app/app-transaction-type-db2/cpy",
+  "../vendor/carddemo/app/app-transaction-type-db2/cpy-bms",
+  "../vendor/carddemo/app/app-transaction-type-db2/dcl",
+  "../squall/squall/copybooks",
   "cics-copybooks",
 ]
+copybook_extensions = ["", "cpy", "CPY", "cob", "cbl", "copy", "COPY", "dcl"]
 # The experimental partition targets parse into their own cache (make partition-traces).
 # Nothing else reads it, so an older cache elsewhere is never reused.
 asg_dir = "out-partition/asg"

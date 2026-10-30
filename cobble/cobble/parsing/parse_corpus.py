@@ -53,6 +53,7 @@ from cobble.corpus_config import CorpusConfig, load_corpus_config
 from cobble.matching_files import matching_files
 from cobble.parsing.asg_cache import cache_path, failure_path, unit_json
 from cobble.parsing.copybook_dir import unscannable
+from cobble.parsing.precompiled import precompiled
 from cobble.path_utils import ensure_dir
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.compilation_unit import CobolCompilationUnit
@@ -111,7 +112,7 @@ def _unit_for(parser: ProLeapCobolParser, job: Job) -> CobolCompilationUnit:
     from cobble.cics.asg_dialect_scope import asg_dialect_parsers_registered
 
     with asg_dialect_parsers_registered():
-        return parser.parse(job.source.read_bytes())
+        return parser.parse(precompiled(job.source.read_bytes()))
 
 
 def _write_unit(dest: Path, unit: CobolCompilationUnit) -> None:

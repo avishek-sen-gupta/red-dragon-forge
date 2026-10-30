@@ -4,7 +4,8 @@ from cobble.corpus_config import CorpusConfig
 from cobble.parsing.expand_corpus import expand_with, pending
 from cobble.parsing.parse_corpus import Job
 from cobol_asg.cobol_parser import ProLeapCobolParser
-from tests.parsing.bridges import CannedBridge, RejectingBridge
+from tests.parsing.bridges import CannedBridge, EchoBridge, RejectingBridge
+from tests.parsing.sql_include_member import PRECOMPILED, WRITTEN
 
 
 def _config(tmp_path: Path) -> CorpusConfig:
@@ -103,3 +104,17 @@ def test_a_member_the_bridge_rejects_is_recorded_where_the_expansion_would_go(
     assert result.ok is False
     assert (out / "A.fail").read_text() == ("CobolParseError: could not find copy book")
     assert not (out / "A.cbl").exists()
+
+
+def test_the_expansion_starts_from_the_member_with_its_sql_includes_expanded_as_copy(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    out = _out_dir(tmp_path)
+    (config.cobol_dir / "A.cbl").write_bytes(WRITTEN)
+
+    expand_with(
+        ProLeapCobolParser(EchoBridge(), "bridge.jar"), _job(config, out, "A.cbl")
+    )
+
+    assert (out / "A.cbl").read_text(encoding="latin-1") == PRECOMPILED

@@ -67,6 +67,12 @@ cobble-parse-corpus --config CONFIG [--jobs JOBS] [--force]
 Requires `PROLEAP_BRIDGE_JAR`. Refuses to start when the variable is unset, when the JAR is not
 a file, or when any `copybook_dirs` entry is not an existing directory.
 
+The bridge is handed each member as the Db2 precompiler leaves it: every `EXEC SQL INCLUDE x
+END-EXEC` becomes `COPY x.` (squall's prepass), so an included member, a DCLGEN record or
+procedure paragraphs, is resolved against `copybook_dirs` like any copybook. `cobble-expand-corpus`
+and `diagnose-cobol` hand the bridge the same text. `EXEC SQL INCLUDE SQLCA` resolves to squall's
+bundled `squall/squall/copybooks/SQLCA.cpy` when that directory is listed.
+
 Writes one `<member>.json` per member to `asg_dir`, named for the member's file name, not its
 `PROGRAM-ID`. It holds the member's compilation unit, `{"programs": [...]}`: every program in
 the source, batch or nested, each carrying the programs it contains. A cache written before

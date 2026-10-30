@@ -34,14 +34,14 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
-from tqdm import tqdm
-
 from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import CorpusConfig, load_corpus_config
 from cobble.diagnosis.report import RULE, emit_json, member_label
+from cobble.matching_files import matching_files
+from cobble.parsing.precompiled import precompiled
 from cobol_asg.ast_store import AsgJsonParser
 from cobol_asg.cobol_parser import make_cobol_parser
-from cobble.matching_files import matching_files
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +156,7 @@ def _check_one(
     """
     out = scratch / f"{index}.ast.json"
     try:
-        parser.parse_to_file(path.read_bytes(), out)
+        parser.parse_to_file(precompiled(path.read_bytes()), out)
     except Exception as exc:  # noqa: BLE001
         return CheckResult(path=path, kind=type(exc).__name__, message=str(exc))
     finally:

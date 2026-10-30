@@ -3,7 +3,8 @@ from pathlib import Path
 import pytest
 
 from cobble.corpus_config import CorpusConfig
-from tests.parsing.bridges import CannedBridge, RejectingBridge
+from tests.parsing.bridges import CannedBridge, QuotingBridge, RejectingBridge
+from tests.parsing.sql_include_member import PRECOMPILED, WRITTEN
 from cobble.parsing.parse_corpus import Job, bridge_jar, parse_with, pending
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.subprocess_runner import SubprocessRunner
@@ -187,3 +188,18 @@ def test_a_reparse_replaces_the_other_outcome(tmp_path: Path) -> None:
         "A.json",
         "B.fail",
     ]
+
+
+def test_the_bridge_is_handed_the_member_with_its_sql_includes_expanded_as_copy(
+    tmp_path: Path,
+) -> None:
+    """The Db2 precompiler expands EXEC SQL INCLUDE before the compiler sees the
+    source, and a procedure-division member can hold whole paragraphs, so the
+    bridge must see the COPY. Every other byte, an 8-bit one included, is the
+    member's own."""
+    config = _config(tmp_path)
+    (config.cobol_dir / "A.cbl").write_bytes(WRITTEN)
+
+    parse_with(_parser(QuotingBridge()), _job(config, "A.cbl"))
+
+    assert (config.asg_dir / "A.fail").read_text() == f"CobolParseError: {PRECOMPILED}"

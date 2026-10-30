@@ -27,7 +27,10 @@ from cobble.diagnosis.cobol import (
     signature,
     tally,
 )
+from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.subprocess_runner import CobolParseError
+from tests.parsing.bridges import QuotingBridge
+from tests.parsing.sql_include_member import PRECOMPILED, WRITTEN
 
 # What the bridge actually wrote to stderr for the program that killed a prod run,
 # with the corpus's own text left in so the stripping is tested against the real
@@ -343,3 +346,16 @@ def test_two_programs_of_the_same_name_get_their_own_scratch_file(
     parser = RejectingParser(b"junk")
     check_programs((one, two), parser)
     assert len(frozenset(parser.wrote)) == 2
+
+
+def test_the_check_parses_the_member_with_its_sql_includes_expanded_as_copy(
+    tmp_path: Path,
+) -> None:
+    member = tmp_path / "A.cbl"
+    member.write_bytes(WRITTEN)
+
+    (result,) = check_programs(
+        [member], ProLeapCobolParser(QuotingBridge(), "bridge.jar")
+    )
+
+    assert (result.kind, result.message) == ("CobolParseError", PRECOMPILED)
