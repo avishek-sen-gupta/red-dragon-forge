@@ -276,7 +276,18 @@ def _extended(spans: tuple[_Span, ...], span: _Span) -> tuple[_Span, ...]:
 
 
 def _indexed(state: State) -> _Indexed:
-    return (state, extent_index(state.values), extent_index(state.sources))
+    return (
+        state,
+        _cached_index(frozenset(state.values)),
+        _cached_index(frozenset(state.sources)),
+    )
+
+
+@lru_cache(maxsize=_SHARED)
+def _cached_index(extents: frozenset[FieldExtent]) -> ExtentIndex:
+    """An index depends only on the extents it holds, and a join meets the same extent
+    sets over and over: neighbouring states share most of their entries."""
+    return extent_index(extents)
 
 
 def _indexed_written(indexed: _Indexed, read: FieldExtent) -> bool:

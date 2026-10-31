@@ -354,6 +354,17 @@ class _Worklist:
     cursor: int = 0
     inner: Mapping[str, State] = NO_STATES
     calls: _Known = NO_CALLS
+    pending: Mapping[str, _Pending] = MappingProxyType({})
+
+
+@dataclass(frozen=True)
+class _Pending:
+    """A range walk's per-node states and the calling state's untouched entries to
+    restore them against. A calling statement's later calls bring larger states, so
+    only its latest call's result is kept: it covers every earlier one."""
+
+    inner: Mapping[str, State]
+    outside: State
 
 
 @dataclass(frozen=True)
@@ -363,7 +374,7 @@ class _Outflow:
     walks known so far."""
 
     flows: Mapping[str, State]
-    inner: Mapping[str, State] = NO_STATES
+    pending: Mapping[str, _Pending] = MappingProxyType({})
     dequeues: int = 0
     calls: _Known = NO_CALLS
 
@@ -658,7 +669,7 @@ def _called(
         hit = sofar.calls.results[key]
         return _Outflow(
             flows=_resumed(live, call, hit, parts),
-            inner=_restored_all(hit.inner, parts),
+            pending={call.id: _Pending(inner=hit.inner, outside=parts.outside)},
             calls=sofar.calls,
         )
     site = _Site(
@@ -669,20 +680,23 @@ def _called(
     run = _settled(
         cfg, statements, index, live, entry, cap, entered, inside, sofar.calls, resumed
     )
+    settled_inner = _inner_of(run)
     returned = _Returned(
         leaving=_leaving(statements, index, call.range_end, run.states),
-        inner=_merged(run.inner, run.states),
+        inner=_merged(settled_inner, run.states),
     )
     return _Outflow(
         flows=_resumed(live, call, returned, parts),
-        inner=_restored_all(returned.inner, parts),
+        pending={call.id: _Pending(inner=returned.inner, outside=parts.outside)},
         dequeues=run.dequeues,
         calls=_Known(
             results=MappingProxyType({**run.calls.results, key: returned}),
             walks=MappingProxyType(
                 {
                     **run.calls.walks,
-                    site: _Settled(entered=entered, states=run.states, inner=run.inner),
+                    site: _Settled(
+                        entered=entered, states=run.states, inner=settled_inner
+                    ),
                 }
             ),
         ),
@@ -709,16 +723,25 @@ def _resumed(
     return {call.resume: _for(leaving, live, call.resume)}
 
 
-def _restored_all(inner: Mapping[str, State], parts: Split) -> Mapping[str, State]:
-    return MappingProxyType(
-        {node: restored(state, parts.outside) for node, state in inner.items()}
+def _inner_of(run: _Worklist) -> Mapping[str, State]:
+    """Every state the ranges this walk called settled on, each calling statement's
+    latest result restored against its untouched entries and joined, once."""
+    return reduce(
+        lambda done, one: _merged(
+            done,
+            MappingProxyType(
+                {n: restored(s, one.outside) for n, s in one.inner.items()}
+            ),
+        ),
+        run.pending.values(),
+        run.inner,
     )
 
 
 def _with_call(left: _Outflow, right: _Outflow) -> _Outflow:
     return _Outflow(
         flows=_merged(left.flows, right.flows),
-        inner=_merged(left.inner, right.inner),
+        pending=MappingProxyType({**left.pending, **right.pending}),
         dequeues=left.dequeues + right.dequeues,
         calls=right.calls,
     )
@@ -808,7 +831,8 @@ def _step(
         dequeues=run.dequeues + 1 + out.dequeues,
         progress=run.progress,
         cursor=earliest + 1,
-        inner=_merged(run.inner, out.inner),
+        inner=run.inner,
+        pending=MappingProxyType({**run.pending, **out.pending}),
         calls=out.calls,
     )
     if stepped.dequeues % HEARTBEAT:
@@ -990,7 +1014,7 @@ def _worked(
     run = _settled(cfg, statements, index, live, entry, cap, entry_state, top)
     _warn_if_capped(run, cap, cfg.program, len(cfg.nodes))
     return _Walk(
-        states=_merged(run.inner, run.states),
+        states=_merged(_inner_of(run), run.states),
         dequeues=run.dequeues,
         settled=not run.queue,
     )
