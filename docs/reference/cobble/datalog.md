@@ -88,8 +88,9 @@ source alone, and a deliberate break of it fails its test; the tests run on real
 | `navigation.dl` | `reaches(t, p)`: programs reachable by XCTL and XCTL candidates | `nav_start(t, p)`, `nav_stop(p)` |
 | `branches.dl` | `branch(p, n, outcome, callee)`: the XCTL each outcome of a test leads to | `branch_test(p, n)` |
 
-`trace.dl` follows `fp_def`, which is path-insensitive: a definition every real path overwrites can
-still be reported (red-dragon-forge-pywb).
+`trace.dl` follows `fp_def`, whose walk returns each PERFORM to its own call site but does not
+correlate test outcomes: a definition that reaches a use only through a contradictory combination of
+tests is still reported.
 
 ## Running a question
 

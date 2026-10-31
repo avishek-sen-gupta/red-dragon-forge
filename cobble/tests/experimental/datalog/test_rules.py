@@ -144,13 +144,9 @@ def test_the_trace_finds_the_files_and_screen_a_new_balance_comes_from(
     }
 
 
-@pytest.mark.xfail(
-    reason="fp_def is path-insensitive: the READPREV value COBIL00C.cbl:218 and "
-    ":224 overwrite still reaches the COMPUTE; a realizable-path reaching "
-    "definitions rule is red-dragon-forge-pywb",
-    strict=True,
-)
 def test_a_definition_every_path_overwrites_is_not_a_source(tmp_path: Path) -> None:
+    """COBIL00C's READPREV value (:214) is overwritten at :218 and :224 before the
+    COMPUTE at :234 on every path that returns each PERFORM to its own call site."""
     sources = evaluate(tmp_path, BALANCE_TRACE + ".output sources\n")["sources"]
 
     assert _of(sources, "COBIL00C") == {("COBIL00C", "file", "ACCTDAT")}
