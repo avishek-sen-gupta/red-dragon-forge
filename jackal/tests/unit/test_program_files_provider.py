@@ -20,6 +20,7 @@ from zos.cobol.io.dd_files import DdFileIOProvider
 from zos.cobol.io.program_file import ProgramFile
 from zos.cobol.io.program_files import ProgramFilesIOProvider
 from zos.cobol.io.record_format import FixedFormat
+from zos.cobol.io.system_input import unsupplied
 
 _RECORD = "R" * 120
 
@@ -63,6 +64,7 @@ def test_an_undeclared_select_takes_the_dataset_its_dd_names_as_labelled(
         partial(AllocatedFileIOProvider, tmp_path, env=env, relabeller=_Unrelabelled()),
         (declared,),
         DdFileIOProvider(tmp_path, bindings_of(env), _Unrelabelled()),
+        unsupplied,
     )
 
     assert (

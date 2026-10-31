@@ -70,6 +70,11 @@ return code. An HLASM entry's return code is R15; an HLASM abend (`ABEND 42` giv
 reported whichever language the entry is. A RETURN-CODE left unknown by a tolerated CALL reports `RC 0`, with a warning on
 stderr: `forge-run: warning: P's RETURN-CODE is unknown; reported as 0`.
 
+A `[plain]` run's `ACCEPT`, from any device, reads forge-run's stdin as each one runs: one line
+is one 80-byte card, and the end of stdin is the end of input
+(`echo 00000300 | forge-run env.toml`). Under `[jcl]` and `[cics]` an `ACCEPT` gets an unknown
+value (red-dragon-0va3).
+
 `[tolerant] permit_unresolved_call_targets` is passed to every program run in every mode: the
 `[plain]` program, the jackal step, the CICS task, and a program it LINKs to. Off, the default,
 a `CALL` to a program the image does not hold stops a `[plain]` or `[jcl]` run:

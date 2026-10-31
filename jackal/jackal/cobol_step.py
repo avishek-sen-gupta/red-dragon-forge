@@ -35,6 +35,7 @@ from jackal.value_parts import resolve
 from zos.cobol.io.dd_files import DdFileIOProvider
 from zos.cobol.io.program_file import ProgramFile
 from zos.cobol.io.program_files import ProgramFilesIOProvider
+from zos.cobol.io.system_input import unsupplied
 from zos.program_outcome import program_abends, program_return_code
 
 DEFAULT_PROGRAM_STEP_BUDGET = 500_000
@@ -68,6 +69,7 @@ def run_cobol_step(
         partial(AllocatedFileIOProvider, workdir, env=env, relabeller=relabeller),
         program.files,
         DdFileIOProvider(workdir, bindings_of(env), relabeller),
+        unsupplied,
     )
     outcome = run_linked_resumable(
         program.linked,

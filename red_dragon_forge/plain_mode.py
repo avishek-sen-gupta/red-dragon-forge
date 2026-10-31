@@ -34,6 +34,7 @@ from zos.cobol.io.dd_files import DdFileIOProvider
 from zos.cobol.io.file_bindings import FileBindings
 from zos.cobol.io.file_definitions import program_files_of
 from zos.cobol.io.program_files import ProgramFilesIOProvider
+from zos.cobol.io.system_input import SystemInput
 from zos.program_outcome import program_abends, program_return_code
 
 from red_dragon_forge.config_error import ConfigError
@@ -117,6 +118,7 @@ def run_plain(
     catalog: SystemCatalog,
     plain: PlainRun,
     builtins: Mapping[FuncName, Builtin],
+    system_input: SystemInput,
     permit_unresolved_call_targets: bool,
 ) -> int:
     bindings = _bindings(catalog, plain)
@@ -132,6 +134,7 @@ def run_plain(
             ),
             program_files_of(package.image),
             DdFileIOProvider(Path(scratch), bindings, relabeller),
+            system_input,
         )
         outcome = run_linked_resumable(
             package.image,

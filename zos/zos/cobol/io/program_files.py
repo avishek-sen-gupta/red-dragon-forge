@@ -1,4 +1,4 @@
-"""The file handler for a linked image: each COBOL file call goes to the provider of the program that made it, each HLASM call to the DD provider."""
+"""The file handler for a linked image: each COBOL file call goes to the provider of the program that made it, each HLASM call to the DD provider, each ACCEPT to the run's system input."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from interpreter.data_value import DataRecord
 from interpreter.hlasm_run_inputs.declare_file_builtins import NO_PROGRAM
 from interpreter.vm.vm import Operators
 from zos.cobol.io.program_file import ProgramFile
+from zos.cobol.io.system_input import SystemInput
 
 
 class ProgramFilesIOProvider(CobolIOProvider):
@@ -20,7 +21,9 @@ class ProgramFilesIOProvider(CobolIOProvider):
         provider_for: Callable[[Sequence[ProgramFile]], CobolIOProvider],
         files: Sequence[ProgramFile],
         hlasm: CobolIOProvider,
+        system_input: SystemInput,
     ) -> None:
+        self._system_input = system_input
         self._providers: Mapping[str, CobolIOProvider] = {
             **{
                 program: provider_for(tuple(f for f in files if f.program == program))
@@ -29,8 +32,8 @@ class ProgramFilesIOProvider(CobolIOProvider):
             NO_PROGRAM: hlasm,
         }
 
-    def _accept(self, from_device: str) -> Operators._Uncomputable:
-        return Operators.UNCOMPUTABLE
+    def _accept(self, from_device: str) -> IOResult | Operators._Uncomputable:
+        return self._system_input()
 
     def _declare_file(self, frame: DataRecord, program: str) -> IOResult:
         return self._providers[program]._declare_file(frame, program)

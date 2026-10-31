@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 import time
 from collections.abc import Mapping
 from pathlib import Path
@@ -12,6 +13,7 @@ from interpreter.hlasm_run_inputs.run_input_builtins import run_input_builtins
 from interpreter.hlasm_run_inputs.system_machine_clock import SystemMachineClock
 from interpreter.vm.builtins import compose_builtins, core_builtins
 from litter.manifest import Manifest
+from zos.cobol.io.system_input import line_input
 
 from red_dragon_forge.config_error import ConfigError
 from red_dragon_forge.env_config import EnvConfig
@@ -49,5 +51,6 @@ def run_plain_mode(path: Path, environ: Mapping[str, str]) -> int:
             floating_point_builtins(),
             coprocessing.builtins,
         ),
+        line_input(iter(sys.stdin)),
         config.tolerant.permit_unresolved_call_targets,
     )
