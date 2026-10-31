@@ -34,6 +34,11 @@ class PlainEnv(EnvConfig):
             )
 
 
+def _prompted_line() -> str:
+    sys.stdout.flush()
+    return sys.stdin.readline()
+
+
 def run_plain_mode(path: Path, environ: Mapping[str, str]) -> int:
     config, package, coprocessing = prepared(path, environ, PlainEnv)
     return run_plain(
@@ -51,6 +56,6 @@ def run_plain_mode(path: Path, environ: Mapping[str, str]) -> int:
             floating_point_builtins(),
             coprocessing.builtins,
         ),
-        line_input(iter(sys.stdin)),
+        line_input(iter(_prompted_line, "")),
         config.tolerant.permit_unresolved_call_targets,
     )
