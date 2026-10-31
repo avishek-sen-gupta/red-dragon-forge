@@ -90,6 +90,7 @@ def test_a_length_of_bound_reads_no_field_and_a_named_bound_reads_its_field(
     assert edges == {
         ("MAIN-PARA/0#init", "VARYLEN.LITERAL"),
         ("MAIN-PARA/0#step", "VARYLEN.WS-K"),
+        ("MAIN-PARA/0#step", "VARYLEN.LITERAL:-1"),
         ("MAIN-PARA/1#init", "VARYLEN.WS-START"),
         ("MAIN-PARA/1#step", "VARYLEN.WS-K"),
         ("MAIN-PARA/1#step", "VARYLEN.WS-STEP"),

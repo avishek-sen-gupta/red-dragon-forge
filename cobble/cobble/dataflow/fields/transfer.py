@@ -64,6 +64,7 @@ from cobble.dataflow.srccfg.literals import is_literal
 from cobol_asg.cobol_expression import (
     ExprNode,
     FieldRefNode,
+    LiteralNode,
     RefModNode,
     expr_from_dict,
 )
@@ -563,6 +564,7 @@ def _union_writes(
     When a read operand has no resolvable extents but carries a name that is not
     a literal, a synthetic ``UNRESOLVED_OPERAND`` source is emitted so backward
     provenance queries name the unresolvable input rather than reporting nothing.
+    A literal operand is a ``LITERAL`` source: ``ADD 25 TO X`` takes 25 as well as X.
 
     A ``STRING``/arithmetic/``COMPUTE`` result is never a literal, so the value
     is always ``NOT_A_LITERAL``.
@@ -580,7 +582,12 @@ def _union_writes(
         )
         for name in _named_stubs(reads, index)
     )
-    sources = _from_extents(every, node) | stubs
+    literals = frozenset(
+        Source(origin=Origin(OriginKind.LITERAL, op.name), extent=NOWHERE, node=node)
+        for op in reads
+        if op.name and is_literal(op.name)
+    )
+    sources = _from_extents(every, node) | stubs | literals
     return (
         Write(target, sources, values=because(UnresolvedReason.NOT_A_LITERAL))
         for operand in targets
@@ -625,6 +632,14 @@ def _expression_reads(expression: ExprNode) -> tuple[RefModOperand, ...]:
     )
 
 
+def _expression_literals(expression: ExprNode) -> tuple[RefModOperand, ...]:
+    return tuple(
+        RefModOperand(name=found.value)
+        for found in descend(expression)
+        if isinstance(found, LiteralNode)
+    )
+
+
 def _compute_target(target: ComputeTarget) -> RefModOperand:
     return RefModOperand(name=target.name, subscripts=target.subscripts)
 
@@ -637,7 +652,10 @@ def _compute_writes(
     statement: ComputeStatement, node: str, index: CellIndex, state: State
 ) -> Iterator[Write]:
     return _union_writes(
-        _expression_reads(statement.expression),
+        (
+            *_expression_reads(statement.expression),
+            *_expression_literals(statement.expression),
+        ),
         _compute_targets(statement),
         node,
         index,

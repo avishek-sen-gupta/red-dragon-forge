@@ -257,14 +257,14 @@ def test_initialize_gives_every_member_a_literal(
     assert names_reaching(state, index, "WS-B") == {Origin(OriginKind.LITERAL, "")}
 
 
-def test_add_gives_the_target_the_union_of_its_operands(
+def test_add_gives_the_target_the_union_of_its_operands_literals_included(
     program_of, field, after, names_reaching
 ):
     asg = program_of(
         [
             {
                 "type": "ADD",
-                "operands": [{"name": "WS-A"}],
+                "operands": [{"name": "WS-A"}, {"name": "25"}],
                 "targets": [{"name": "WS-B"}],
             }
         ],
@@ -280,7 +280,11 @@ def test_add_gives_the_target_the_union_of_its_operands(
         ],
     )
     state, index = after(asg)
-    assert names_reaching(state, index, "WS-B") == {"WS-A", "WS-B"}
+    assert names_reaching(state, index, "WS-B") == {
+        "WS-A",
+        "WS-B",
+        Origin(OriginKind.LITERAL, "25"),
+    }
 
 
 def test_add_giving_writes_the_giving_target_not_the_second_operand(
@@ -311,7 +315,7 @@ def test_add_giving_writes_the_giving_target_not_the_second_operand(
     assert names_reaching(state, index, "WS-B") == set()
 
 
-def test_compute_reads_every_field_in_its_expression(
+def test_compute_reads_every_field_and_literal_in_its_expression(
     program_of, field, after, names_reaching
 ):
     asg = program_of(
@@ -322,7 +326,12 @@ def test_compute_reads_every_field_in_its_expression(
                     "kind": "binop",
                     "op": "+",
                     "left": {"kind": "ref", "name": "WS-A"},
-                    "right": {"kind": "ref", "name": "WS-B"},
+                    "right": {
+                        "kind": "binop",
+                        "op": "/",
+                        "left": {"kind": "ref", "name": "WS-B"},
+                        "right": {"kind": "lit", "value": "1200"},
+                    },
                 },
                 "targets": [{"name": "WS-C"}],
             }
@@ -340,7 +349,11 @@ def test_compute_reads_every_field_in_its_expression(
         ],
     )
     state, index = after(asg)
-    assert names_reaching(state, index, "WS-C") == {"WS-A", "WS-B"}
+    assert names_reaching(state, index, "WS-C") == {
+        "WS-A",
+        "WS-B",
+        Origin(OriginKind.LITERAL, "1200"),
+    }
 
 
 def test_string_gives_the_into_target_every_sending_operand(

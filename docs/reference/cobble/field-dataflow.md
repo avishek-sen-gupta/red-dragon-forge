@@ -31,7 +31,7 @@ trace output, and nothing parses it.
 
 | origin kind | name | written by |
 |---|---|---|
-| `LITERAL` | the literal as written (`'Y'`, `SPACES`, `0`); empty for `INITIALIZE` | a `MOVE` of a literal or figurative constant, `INITIALIZE` |
+| `LITERAL` | the literal as written (`'Y'`, `SPACES`, `0`); empty for `INITIALIZE` | a `MOVE` of a literal or figurative constant, `INITIALIZE`, a literal operand of arithmetic, `COMPUTE` or `STRING` |
 | `FILE` | the file (or the field holding its name) | `READ`, CICS file verbs |
 | `MAP` | the map | `RECEIVE MAP` |
 | `CALL` | the member, without quotes | `CALL 'X'`, CICS `LINK`/`XCTL` with a literal `PROGRAM` |

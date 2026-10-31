@@ -10,11 +10,14 @@ CBACT04C|origin|LITERAL:'0000'	CBACT04C	LITERAL	'0000'
 CBACT04C|origin|LITERAL:'01'	CBACT04C	LITERAL	'01'
 CBACT04C|origin|LITERAL:'05'	CBACT04C	LITERAL	'05'
 CBACT04C|origin|LITERAL:'DEFAULT'	CBACT04C	LITERAL	'DEFAULT'
+CBACT04C|origin|LITERAL:'Int. for a/c '	CBACT04C	LITERAL	'Int. for a/c '
 CBACT04C|origin|LITERAL:'N'	CBACT04C	LITERAL	'N'
 CBACT04C|origin|LITERAL:'System'	CBACT04C	LITERAL	'System'
 CBACT04C|origin|LITERAL:'Y'	CBACT04C	LITERAL	'Y'
 CBACT04C|origin|LITERAL:0	CBACT04C	LITERAL	0
+CBACT04C|origin|LITERAL:1	CBACT04C	LITERAL	1
 CBACT04C|origin|LITERAL:12	CBACT04C	LITERAL	12
+CBACT04C|origin|LITERAL:1200	CBACT04C	LITERAL	1200
 CBACT04C|origin|LITERAL:16	CBACT04C	LITERAL	16
 CBACT04C|origin|LITERAL:8	CBACT04C	LITERAL	8
 CBACT04C|origin|LITERAL:999	CBACT04C	LITERAL	999
@@ -25,6 +28,7 @@ CBIMPORT|origin|LITERAL	CBIMPORT	LITERAL
 CBIMPORT|origin|LITERAL:'-'	CBIMPORT	LITERAL	'-'
 CBIMPORT|origin|LITERAL:':'	CBIMPORT	LITERAL	':'
 CBIMPORT|origin|LITERAL:'Unknown record type encountered'	CBIMPORT	LITERAL	'Unknown record type encountered'
+CBIMPORT|origin|LITERAL:1	CBIMPORT	LITERAL	1
 CBTRN02C|origin|CALL:CEE3ABD	CBTRN02C	CALL	CEE3ABD
 CBTRN02C|origin|FILE:ACCOUNT-FILE	CBTRN02C	FILE	ACCOUNT-FILE
 CBTRN02C|origin|FILE:DALYTRAN-FILE	CBTRN02C	FILE	DALYTRAN-FILE
@@ -42,6 +46,7 @@ CBTRN02C|origin|LITERAL:'OVERLIMIT TRANSACTION'	CBTRN02C	LITERAL	'OVERLIMIT TRAN
 CBTRN02C|origin|LITERAL:'TRANSACTION RECEIVED AFTER ACCT EXPIRATION'	CBTRN02C	LITERAL	'TRANSACTION RECEIVED AFTER ACCT EXPIRATION'
 CBTRN02C|origin|LITERAL:'Y'	CBTRN02C	LITERAL	'Y'
 CBTRN02C|origin|LITERAL:0	CBTRN02C	LITERAL	0
+CBTRN02C|origin|LITERAL:1	CBTRN02C	LITERAL	1
 CBTRN02C|origin|LITERAL:100	CBTRN02C	LITERAL	100
 CBTRN02C|origin|LITERAL:101	CBTRN02C	LITERAL	101
 CBTRN02C|origin|LITERAL:102	CBTRN02C	LITERAL	102
@@ -61,9 +66,54 @@ COACTUPC|origin|FILE:LIT-CARDXREFNAME-ACCT-PATH	COACTUPC	FILE	LIT-CARDXREFNAME-A
 COACTUPC|origin|FILE:LIT-CUSTFILENAME	COACTUPC	FILE	LIT-CUSTFILENAME
 COACTUPC|origin|FUNCTION:CURRENT-DATE	COACTUPC	FUNCTION	CURRENT-DATE
 COACTUPC|origin|LITERAL	COACTUPC	LITERAL	
+COACTUPC|origin|LITERAL:' : Century is not valid.'	COACTUPC	LITERAL	' : Century is not valid.'
+COACTUPC|origin|LITERAL:' : Day must be supplied.'	COACTUPC	LITERAL	' : Day must be supplied.'
+COACTUPC|origin|LITERAL:' : Month must be supplied.'	COACTUPC	LITERAL	' : Month must be supplied.'
+COACTUPC|origin|LITERAL:' : Year must be supplied.'	COACTUPC	LITERAL	' : Year must be supplied.'
+COACTUPC|origin|LITERAL:' Acct Master file.Resp:'	COACTUPC	LITERAL	' Acct Master file.Resp:'
+COACTUPC|origin|LITERAL:' Cross ref file.  Resp:'	COACTUPC	LITERAL	' Cross ref file.  Resp:'
+COACTUPC|origin|LITERAL:' Message code: '	COACTUPC	LITERAL	' Message code: '
+COACTUPC|origin|LITERAL:' Non-Zero Number'	COACTUPC	LITERAL	' Non-Zero Number'
+COACTUPC|origin|LITERAL:' REAS:'	COACTUPC	LITERAL	' REAS:'
+COACTUPC|origin|LITERAL:' Reas:'	COACTUPC	LITERAL	' Reas:'
+COACTUPC|origin|LITERAL:' can have alphabets only.'	COACTUPC	LITERAL	' can have alphabets only.'
+COACTUPC|origin|LITERAL:' in customer master.Resp: '	COACTUPC	LITERAL	' in customer master.Resp: '
+COACTUPC|origin|LITERAL:' is not valid'	COACTUPC	LITERAL	' is not valid'
+COACTUPC|origin|LITERAL:' must be 4 digit number.'	COACTUPC	LITERAL	' must be 4 digit number.'
+COACTUPC|origin|LITERAL:' must be Y or N.'	COACTUPC	LITERAL	' must be Y or N.'
+COACTUPC|origin|LITERAL:' must be all numeric.'	COACTUPC	LITERAL	' must be all numeric.'
+COACTUPC|origin|LITERAL:' must be supplied.'	COACTUPC	LITERAL	' must be supplied.'
+COACTUPC|origin|LITERAL:' must not be zero.'	COACTUPC	LITERAL	' must not be zero.'
+COACTUPC|origin|LITERAL:' not found in'	COACTUPC	LITERAL	' not found in'
+COACTUPC|origin|LITERAL:' not found'	COACTUPC	LITERAL	' not found'
+COACTUPC|origin|LITERAL:' validation error Sev code: '	COACTUPC	LITERAL	' validation error Sev code: '
+COACTUPC|origin|LITERAL:'('	COACTUPC	LITERAL	'('
+COACTUPC|origin|LITERAL:')'	COACTUPC	LITERAL	')'
 COACTUPC|origin|LITERAL:'*'	COACTUPC	LITERAL	'*'
+COACTUPC|origin|LITERAL:'-'	COACTUPC	LITERAL	'-'
 COACTUPC|origin|LITERAL:'0001'	COACTUPC	LITERAL	'0001'
+COACTUPC|origin|LITERAL:': Area code cannot be zero'	COACTUPC	LITERAL	': Area code cannot be zero'
+COACTUPC|origin|LITERAL:': Area code must be A 3 digit number.'	COACTUPC	LITERAL	': Area code must be A 3 digit number.'
+COACTUPC|origin|LITERAL:': Area code must be supplied.'	COACTUPC	LITERAL	': Area code must be supplied.'
+COACTUPC|origin|LITERAL:': Line number code cannot be zero'	COACTUPC	LITERAL	': Line number code cannot be zero'
+COACTUPC|origin|LITERAL:': Line number code must be A 4 digit number.'	COACTUPC	LITERAL	': Line number code must be A 4 digit number.'
+COACTUPC|origin|LITERAL:': Line number code must be supplied.'	COACTUPC	LITERAL	': Line number code must be supplied.'
+COACTUPC|origin|LITERAL:': Month must be a number between 1 and 12.'	COACTUPC	LITERAL	': Month must be a number between 1 and 12.'
+COACTUPC|origin|LITERAL:': Not valid North America general purpose area code'	COACTUPC	LITERAL	': Not valid North America general purpose area code'
+COACTUPC|origin|LITERAL:': Prefix code cannot be zero'	COACTUPC	LITERAL	': Prefix code cannot be zero'
+COACTUPC|origin|LITERAL:': Prefix code must be A 3 digit number.'	COACTUPC	LITERAL	': Prefix code must be A 3 digit number.'
+COACTUPC|origin|LITERAL:': Prefix code must be supplied.'	COACTUPC	LITERAL	': Prefix code must be supplied.'
+COACTUPC|origin|LITERAL:': is not a valid state code'	COACTUPC	LITERAL	': is not a valid state code'
+COACTUPC|origin|LITERAL:': should be between 300 and 850'	COACTUPC	LITERAL	': should be between 300 and 850'
+COACTUPC|origin|LITERAL:': should not be 000, 666, or between 900 and 999'	COACTUPC	LITERAL	': should not be 000, 666, or between 900 and 999'
+COACTUPC|origin|LITERAL:':Cannot have 30 days in this month.'	COACTUPC	LITERAL	':Cannot have 30 days in this month.'
+COACTUPC|origin|LITERAL:':Cannot have 31 days in this month.'	COACTUPC	LITERAL	':Cannot have 31 days in this month.'
+COACTUPC|origin|LITERAL:':Not a leap year.Cannot have 29 days in this month.'	COACTUPC	LITERAL	':Not a leap year.Cannot have 29 days in this month.'
+COACTUPC|origin|LITERAL:':cannot be in the future '	COACTUPC	LITERAL	':cannot be in the future '
+COACTUPC|origin|LITERAL:':day must be a number between 1 and 31.'	COACTUPC	LITERAL	':day must be a number between 1 and 31.'
+COACTUPC|origin|LITERAL:'Account Number if supplied must be a 11 digit'	COACTUPC	LITERAL	'Account Number if supplied must be a 11 digit'
 COACTUPC|origin|LITERAL:'Account Status'	COACTUPC	LITERAL	'Account Status'
+COACTUPC|origin|LITERAL:'Account:'	COACTUPC	LITERAL	'Account:'
 COACTUPC|origin|LITERAL:'Address Line 1'	COACTUPC	LITERAL	'Address Line 1'
 COACTUPC|origin|LITERAL:'Cash Credit Limit'	COACTUPC	LITERAL	'Cash Credit Limit'
 COACTUPC|origin|LITERAL:'City'	COACTUPC	LITERAL	'City'
@@ -72,11 +122,13 @@ COACTUPC|origin|LITERAL:'Credit Limit'	COACTUPC	LITERAL	'Credit Limit'
 COACTUPC|origin|LITERAL:'Current Balance'	COACTUPC	LITERAL	'Current Balance'
 COACTUPC|origin|LITERAL:'Current Cycle Credit Limit'	COACTUPC	LITERAL	'Current Cycle Credit Limit'
 COACTUPC|origin|LITERAL:'Current Cycle Debit Limit'	COACTUPC	LITERAL	'Current Cycle Debit Limit'
+COACTUPC|origin|LITERAL:'CustId:'	COACTUPC	LITERAL	'CustId:'
 COACTUPC|origin|LITERAL:'Date of Birth'	COACTUPC	LITERAL	'Date of Birth'
 COACTUPC|origin|LITERAL:'EFT Account Id'	COACTUPC	LITERAL	'EFT Account Id'
 COACTUPC|origin|LITERAL:'Expiry Date'	COACTUPC	LITERAL	'Expiry Date'
 COACTUPC|origin|LITERAL:'FICO Score'	COACTUPC	LITERAL	'FICO Score'
 COACTUPC|origin|LITERAL:'First Name'	COACTUPC	LITERAL	'First Name'
+COACTUPC|origin|LITERAL:'Invalid zip code for state'	COACTUPC	LITERAL	'Invalid zip code for state'
 COACTUPC|origin|LITERAL:'Last Name'	COACTUPC	LITERAL	'Last Name'
 COACTUPC|origin|LITERAL:'Middle Name'	COACTUPC	LITERAL	'Middle Name'
 COACTUPC|origin|LITERAL:'Open Date'	COACTUPC	LITERAL	'Open Date'
@@ -115,6 +167,8 @@ COBIL00C|origin|FILE:WS-CXACAIX-FILE	COBIL00C	FILE	WS-CXACAIX-FILE
 COBIL00C|origin|FILE:WS-TRANSACT-FILE	COBIL00C	FILE	WS-TRANSACT-FILE
 COBIL00C|origin|FUNCTION:CURRENT-DATE	COBIL00C	FUNCTION	CURRENT-DATE
 COBIL00C|origin|LITERAL	COBIL00C	LITERAL	
+COBIL00C|origin|LITERAL:' Your Transaction ID is '	COBIL00C	LITERAL	' Your Transaction ID is '
+COBIL00C|origin|LITERAL:'.'	COBIL00C	LITERAL	'.'
 COBIL00C|origin|LITERAL:'02'	COBIL00C	LITERAL	'02'
 COBIL00C|origin|LITERAL:'Account ID NOT found...'	COBIL00C	LITERAL	'Account ID NOT found...'
 COBIL00C|origin|LITERAL:'Acct ID can NOT be empty...'	COBIL00C	LITERAL	'Acct ID can NOT be empty...'
@@ -126,6 +180,7 @@ COBIL00C|origin|LITERAL:'Confirm to make a bill payment...'	COBIL00C	LITERAL	'Co
 COBIL00C|origin|LITERAL:'Invalid value. Valid values are (Y/N)...'	COBIL00C	LITERAL	'Invalid value. Valid values are (Y/N)...'
 COBIL00C|origin|LITERAL:'N/A'	COBIL00C	LITERAL	'N/A'
 COBIL00C|origin|LITERAL:'POS TERM'	COBIL00C	LITERAL	'POS TERM'
+COBIL00C|origin|LITERAL:'Payment successful. '	COBIL00C	LITERAL	'Payment successful. '
 COBIL00C|origin|LITERAL:'Tran ID already exist...'	COBIL00C	LITERAL	'Tran ID already exist...'
 COBIL00C|origin|LITERAL:'Transaction ID NOT found...'	COBIL00C	LITERAL	'Transaction ID NOT found...'
 COBIL00C|origin|LITERAL:'Unable to Add Bill pay Transaction...'	COBIL00C	LITERAL	'Unable to Add Bill pay Transaction...'
@@ -136,6 +191,7 @@ COBIL00C|origin|LITERAL:'Unable to lookup XREF AIX file...'	COBIL00C	LITERAL	'Un
 COBIL00C|origin|LITERAL:'Y'	COBIL00C	LITERAL	'Y'
 COBIL00C|origin|LITERAL:'You have nothing to pay...'	COBIL00C	LITERAL	'You have nothing to pay...'
 COBIL00C|origin|LITERAL:-1	COBIL00C	LITERAL	-1
+COBIL00C|origin|LITERAL:1	COBIL00C	LITERAL	1
 COBIL00C|origin|LITERAL:2	COBIL00C	LITERAL	2
 COBIL00C|origin|LITERAL:999999999	COBIL00C	LITERAL	999999999
 COBIL00C|origin|LITERAL:HIGH-VALUES	COBIL00C	LITERAL	HIGH-VALUES

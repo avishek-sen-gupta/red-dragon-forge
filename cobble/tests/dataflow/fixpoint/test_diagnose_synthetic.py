@@ -48,7 +48,7 @@ def test_the_report_names_where_the_steps_went(
     assert "writer-set sizes over all entries (size: entries):" in lines
     assert lines[
         lines.index("writer-set sizes over all entries (size: entries):") + 1
-    ] == ("  1: 8, 2: 11")
+    ] == ("  1: 8, 2: 5, 3: 6")
     assert lines[-3:] == [
         "         5      7      2          9      2",
         "        10      9      2         18      3",
