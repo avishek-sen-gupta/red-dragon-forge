@@ -13,13 +13,12 @@ ITERATION_FACTOR = 200
 
 @dataclass(frozen=True)
 class AnalysisOptions:
-    """``sweeps`` zero means the worklist walk; any other value bounds a sweep walk.
+    """How the one worklist walk is bounded: ``sweeps`` passes over reverse
+    postorder when non-zero, otherwise ``factor`` dequeues per CFG node.
 
     Zero rather than None because there is no such thing as a budget of no
-    sweeps: the two walks are different traversals, and the number is what picks
-    between them. ``factor`` binds only the worklist walk, ``sweeps`` only the
-    sweep walk, and the CLI refuses both at once rather than silently dropping
-    one.
+    passes. The two budgets replace each other, and the CLI refuses both at once
+    rather than silently dropping one.
     """
 
     sweeps: int = 0

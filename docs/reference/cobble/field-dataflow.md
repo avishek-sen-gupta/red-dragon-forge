@@ -99,7 +99,7 @@ cobble-dataflow-fixpoint --asg-dir ASG_DIR --out-dir OUT_DIR --extents EXTENTS
 | `--extents` | the table `cobble-extents` wrote. Required |
 | `--member`, `--all` | exactly one is required. A named member the cache lacks is exit 2 |
 | `--iteration-factor` | worklist budget: dequeues allowed per CFG node (default 200), counting the walks of the ranges a member PERFORMs |
-| `--sweeps` | run reverse-postorder passes instead, at most N. Exclusive with `--iteration-factor` |
+| `--sweeps` | bound the walk by at most N passes over reverse postorder instead of by dequeues. Exclusive with `--iteration-factor` |
 | `--min-coverage` | floor for the fraction of writes resolved to storage (default 0.60) |
 | `--force` | discard every finished member directory and analyse again |
 | `--max-workers` | worker processes (default 4) |
@@ -141,12 +141,12 @@ its flows are a subset of the program's, it is named in a warning, it counts as 
 in the summary, and its call targets carry `incomplete-walk`. The heartbeat estimates the
 remaining work from the queue's drain rate; `past the N cap` means raise the factor.
 
-`--sweeps N` stops early on a pass that changes nothing, and then the member is settled.
-A member still growing after N sweeps is unsettled, as above. Two is the useful floor: one sweep
-misses what a loop body wrote for every reader after the loop. Settling takes one sweep more than
-finding, since only a sweep that changes nothing settles a member: a loop's write is found on the
-second sweep and the member is settled on the third. A paragraph `PERFORM`ed from two places is a
-back edge too.
+`--sweeps N` bounds the same worklist walk by passes instead of dequeues: a pass ends each time
+the walk's cursor wraps round reverse postorder, and the budget binds every `PERFORM` range walk as
+well as the program's own. A member whose walks all empty their queues within N passes is settled,
+with exactly the unbounded walk's answer; one stopped with work left anywhere is unsettled, as
+above. Two is the useful floor: one pass misses what a loop body wrote for every reader after the
+loop.
 
 ### Output
 
@@ -451,7 +451,6 @@ shown is printed once more with `(see above)` and not expanded. Origins (`FILE:`
 fixpoint's, merged over paths; a run capped with `--sweeps` that did not settle has fewer reaching
 definitions, so its tree can be smaller.
 
-The worklist walk returns from a paragraph PERFORMed from several places only to the call that
-entered it, so the tree never shows one caller's write reaching another caller's read. A run
-with `--sweeps` still returns to every caller, so its tree can show such a branch; it never
-misses a real one.
+The walk returns from a paragraph PERFORMed from several places only to the call that entered
+it, with or without `--sweeps`, so the tree never shows one caller's write reaching another
+caller's read.

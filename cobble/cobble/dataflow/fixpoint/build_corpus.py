@@ -65,10 +65,12 @@ Exactly one of --member and --all is required. The usual question is about the
 fields of one program, so a whole-cache pass is asked for rather than defaulted
 into: a run nobody meant to start is minutes of fixpoint per member.
 
---sweeps trades completeness for cost, and says which it got. A member that
-settles inside its budget is exactly as complete as the worklist's answer; one
-that does not is a subset of its flows, reported as unsettled in the summary and
-warned about by name. Neither is a skip: nothing is invented either way.
+--sweeps trades completeness for cost, and says which it got. It bounds the same
+worklist walk by passes over reverse postorder instead of by dequeues, in every
+PERFORM range walk too. A member that settles inside its budget gets exactly the
+unbounded walk's answer; one that does not is a subset of its flows, reported as
+unsettled in the summary and warned about by name. Neither is a skip: nothing is
+invented either way.
 
 Exit status contract:
   0 - every member analysed, coverage at or above the floor
@@ -1099,7 +1101,7 @@ def _add_walk_budget(parser: argparse.ArgumentParser) -> None:
         type=_budget,
         default=0,
         metavar="N",
-        help="reverse-postorder passes instead of the worklist; 2 is the useful floor",
+        help="bound the walk by N reverse-postorder passes instead of dequeues; 2 is the useful floor",
     )
 
 

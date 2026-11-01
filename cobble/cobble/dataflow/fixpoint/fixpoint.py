@@ -43,15 +43,15 @@ hundreds of thousands of dequeues. A walk stopped there is published unsettled,
 not dropped: by monotonicity its state is a subset of the fixpoint, so every flow
 read off it is real.
 
-The sweep walk is the cheap alternative. It visits in reverse postorder, where
-every predecessor a node is reached through -- back edges aside -- is already
-processed, so one sweep carries a forward chain of any length. A budget of
-sweeps is an under-approximation with a name: a state still growing when the
-budget runs out yields a subset of the true flows, never an invented one, and
-``settled`` says which happened. Two sweeps is the interesting floor, because one
-sweep loses everything a loop body wrote to every reader after the loop -- the
-exit hangs off the loop's test node, whose own state arrives through the back
-edge.
+A pass budget (``--sweeps``) is the cheap alternative to the dequeue cap, on the
+same walk. The worklist's cursor goes round reverse postorder, and each time it
+wraps a pass ends; a node not on the queue would change nothing if visited, so the
+state after N passes is what N full sweeps would give. The budget binds every
+PERFORM range walk too. It is an under-approximation with a name: a walk stopped
+with work left yields a subset of the true flows, never an invented one, and
+``settled`` says which happened. Two passes is the interesting floor, because one
+loses everything a loop body wrote to every reader after the loop -- the exit
+hangs off the loop's test node, whose own state arrives through the back edge.
 
 The coverage counters are rebuilt from the source, not from the answer. The 3ao
 post-mortem found an acceptance suite passing while its walk reached 18% of
@@ -63,6 +63,7 @@ whose extents resolved.
 from __future__ import annotations
 
 import logging
+import sys
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
@@ -263,6 +264,7 @@ class _Scope:
     closing: str = ""
     active: frozenset[str] = frozenset()
     ranges: PerformRanges = NO_RANGES
+    passes: int = 0
 
 
 TOP = _Scope()
@@ -301,6 +303,7 @@ class _Returned:
 
     leaving: Mapping[str, State]
     inner: Mapping[str, State]
+    short: bool = False
 
 
 @dataclass(frozen=True)
@@ -343,8 +346,10 @@ class _Worklist:
     """One step of the worklist: entry states settled so far, and what to revisit.
 
     ``queue`` holds reverse-postorder positions, not node ids: each step takes the
-    earliest, so a node is revisited only after the nodes that feed it have had
-    their turn -- the same fixpoint as any order, reached in far fewer dequeues.
+    first one at or after ``cursor``, wrapping round, so a node is revisited only
+    after the nodes that feed it have had their turn -- the same fixpoint as any
+    order, reached in far fewer dequeues. ``wraps`` counts the passes completed,
+    and ``short`` says a range walk run from this one stopped with work left.
     """
 
     states: Mapping[str, State]
@@ -355,6 +360,8 @@ class _Worklist:
     inner: Mapping[str, State] = NO_STATES
     calls: _Known = NO_CALLS
     pending: Mapping[str, _Pending] = MappingProxyType({})
+    wraps: int = 0
+    short: bool = False
 
 
 @dataclass(frozen=True)
@@ -377,16 +384,14 @@ class _Outflow:
     pending: Mapping[str, _Pending] = MappingProxyType({})
     dequeues: int = 0
     calls: _Known = NO_CALLS
+    short: bool = False
 
 
 @dataclass(frozen=True)
 class _Walk:
-    """What a traversal produced, whichever traversal ran.
-
-    The two walks answer to different budgets -- dequeues against a cap, sweeps
-    against a count -- so what they have in common is the settled states, how
-    much work it took, and whether the answer is complete.
-    """
+    """What the walk produced: the settled states, how much work it took, and
+    whether the answer is complete. ``sweeps`` and ``back_edges`` are filled only
+    for a walk bounded by passes."""
 
     states: Mapping[str, State] = NO_STATES
     dequeues: int = 0
@@ -659,7 +664,10 @@ def _called(
     afresh, so one caller's state never seeds another's.
     """
     inside = _Scope(
-        closing=call.range_end, active=scope.active | {entry}, ranges=scope.ranges
+        closing=call.range_end,
+        active=scope.active | {entry},
+        ranges=scope.ranges,
+        passes=scope.passes,
     )
     parts = split(after, scope.ranges.footprint(entry, call.range_end))
     entered = parts.inside
@@ -671,6 +679,7 @@ def _called(
             flows=_resumed(live, call, hit, parts),
             pending={call.id: _Pending(inner=hit.inner, outside=parts.outside)},
             calls=sofar.calls,
+            short=hit.short,
         )
     site = _Site(
         call=call.id, entry=entry, closing=inside.closing, active=inside.active
@@ -684,11 +693,13 @@ def _called(
     returned = _Returned(
         leaving=_leaving(statements, index, call.range_end, run.states),
         inner=_merged(settled_inner, run.states),
+        short=bool(run.queue) or run.short,
     )
     return _Outflow(
         flows=_resumed(live, call, returned, parts),
         pending={call.id: _Pending(inner=returned.inner, outside=parts.outside)},
         dequeues=run.dequeues,
+        short=returned.short,
         calls=_Known(
             results=MappingProxyType({**run.calls.results, key: returned}),
             walks=MappingProxyType(
@@ -744,6 +755,7 @@ def _with_call(left: _Outflow, right: _Outflow) -> _Outflow:
         pending=MappingProxyType({**left.pending, **right.pending}),
         dequeues=left.dequeues + right.dequeues,
         calls=right.calls,
+        short=left.short or right.short,
     )
 
 
@@ -821,6 +833,9 @@ def _step(
     scope: _Scope = TOP,
 ) -> _Worklist:
     earliest = _next(run.queue, run.cursor)
+    wrapped = earliest < run.cursor
+    if wrapped and not scope.closing and scope.passes:
+        _pass_done(cfg, run.wraps + 1, scope.passes, run.states, settled=False)
     node_id = order.ordered[earliest]
     after = _after(statements, node_id, run.states[node_id], index)
     out = _outflow(cfg, statements, index, live, cap, scope, node_id, after, run.calls)
@@ -834,6 +849,8 @@ def _step(
         inner=run.inner,
         pending=MappingProxyType({**run.pending, **out.pending}),
         calls=out.calls,
+        wraps=run.wraps + int(wrapped),
+        short=run.short or out.short,
     )
     if stepped.dequeues % HEARTBEAT:
         return stepped
@@ -858,8 +875,16 @@ def _next(queue: frozenset[int], cursor: int) -> int:
     return min(ahead) if ahead else min(queue)
 
 
-def _done(run: _Worklist, cap: int) -> bool:
-    return not run.queue or run.dequeues >= cap
+def _done(run: _Worklist, cap: int, passes: int = 0) -> bool:
+    """Settled, out of dequeues, or about to start a pass the budget does not allow.
+
+    A pass is one round of the cursor over reverse postorder; the next step starts a
+    new one when nothing queued lies at or after the cursor.
+    """
+    if not run.queue or run.dequeues >= cap:
+        return True
+    starting = all(position < run.cursor for position in run.queue)
+    return bool(passes) and starting and run.wraps + 1 >= passes
 
 
 def _settled(
@@ -891,37 +916,21 @@ def _settled(
         inner=resumed.inner,
         calls=calls,
     )
-    passes = accumulate(
+    steps = accumulate(
         repeat(None),
         lambda run, _: _step(
             cfg, statements, index, live, cap, order, rank, run, scope
         ),
         initial=start,
     )
-    return next(run for run in passes if _done(run, cap))
+    return next(run for run in steps if _done(run, cap, scope.passes))
 
 
-def _sweep_progress(cfg: Cfg, sweep: int, visited: int, total: int) -> None:
-    """A sweep knows its denominator, which the worklist never does.
-
-    Reverse postorder fixes the node count before the pass starts, so progress is
-    a fraction of a known whole rather than a queue length with nothing to compare
-    it against -- no estimate needed, and none of the drain-rate arithmetic the
-    worklist's heartbeat has to do to say anything at all.
-    """
-    logger.info(
-        "fields:   %s sweep %d, %d/%d nodes visited (%.0f%%)",
-        cfg.program,
-        sweep,
-        visited,
-        total,
-        100.0 * visited / total,
-    )
-
-
-def _sweep_done(
+def _pass_done(
     cfg: Cfg, sweep: int, budget: int, states: Mapping[str, State], settled: bool
 ) -> None:
+    """A bounded walk says when each pass over reverse postorder ends, since a pass
+    over a few thousand nodes can take tens of seconds."""
     logger.info(
         "fields:   %s sweep %d of %d done, %d nodes reached, %s",
         cfg.program,
@@ -932,91 +941,36 @@ def _sweep_done(
     )
 
 
-def _propagated(
-    cfg: Cfg,
-    statements: Mapping[str, Statement],
-    index: CellIndex,
-    live: Live,
-    order: DepthFirstOrder,
-    states: Mapping[str, State],
-    sweep: int,
-) -> Mapping[str, State]:
-    """One reverse-postorder sweep, pushing each node's exit state to successors.
-
-    Back edges need no special case. Their source sits later in the order, so on
-    the first sweep it has nothing to contribute yet and on every later sweep it
-    contributes what the previous sweep left there -- which is how a second sweep
-    recovers the flow out of a loop that a single sweep cannot see.
-    """
-    grown = dict(states)
-    for visited, node_id in enumerate(order.ordered, start=1):
-        after = _after(statements, node_id, grown[node_id], index)
-        for edge in cfg.successors(node_id):
-            grown[edge.target] = _arriving(
-                grown, edge.target, _for(after, live, edge.target)
-            )
-        if not visited % HEARTBEAT:
-            _sweep_progress(cfg, sweep, visited, len(order.ordered))
-    return MappingProxyType(grown)
-
-
-def _swept(
-    cfg: Cfg,
-    statements: Mapping[str, Statement],
-    index: CellIndex,
-    live: Live,
-    entry: str,
-    budget: int,
-    entry_state: State,
-) -> _Walk:
-    """Sweep until nothing grows or the budget is spent, whichever comes first.
-
-    A sweep that changes nothing means the fixpoint was reached, and the answer
-    is as exact as the worklist's would have been for a fraction of the work. A
-    spent budget means an under-approximation: join and the transfer are
-    monotone, so a smaller entry state yields fewer sources and never a wrong
-    one, and every def-use pair reported is real.
-
-    With no back edge there is nothing to confirm: reverse postorder gives every
-    node its whole entry state on the first sweep, so one sweep is the fixpoint
-    and a second would only prove it at the cost of another pass. With back
-    edges it takes the sweep that changes nothing, which is why a budget of one
-    can never report a settled loop even when it found every flow in it.
-    """
-    order = depth_first_order(cfg, entry)
-    states: Mapping[str, State] = MappingProxyType({entry: entry_state})
-    sweep, settled = 0, False
-    while sweep < budget and not settled:
-        grown = _propagated(cfg, statements, index, live, order, states, sweep + 1)
-        sweep, settled = sweep + 1, grown == states or not order.back_edges
-        states = grown
-        _sweep_done(cfg, sweep, budget, states, settled)
-    return _Walk(
-        states=states,
-        dequeues=sweep * len(order.ordered),
-        sweeps=sweep,
-        back_edges=len(order.back_edges),
-        settled=settled,
-    )
-
-
 def _worked(
     cfg: Cfg,
     statements: Mapping[str, Statement],
     index: CellIndex,
     live: Live,
     entry: str,
-    factor: int,
+    options: AnalysisOptions,
     entry_state: State,
 ) -> _Walk:
-    cap = factor * max(len(cfg.nodes), 1)
-    top = _Scope(ranges=perform_ranges(cfg, statements, index))
+    """The worklist, bounded by dequeues or, with ``options.sweeps``, by passes.
+
+    A pass budget replaces the dequeue cap rather than adding to it, and binds every
+    range walk as well as this one. The walk is settled only if neither it nor any
+    range walk it ran stopped with work left.
+    """
+    passes = options.sweeps
+    cap = sys.maxsize if passes else options.factor * max(len(cfg.nodes), 1)
+    top = _Scope(ranges=perform_ranges(cfg, statements, index), passes=passes)
     run = _settled(cfg, statements, index, live, entry, cap, entry_state, top)
-    _warn_if_capped(run, cap, cfg.program, len(cfg.nodes))
+    settled = not run.queue and not run.short
+    if passes:
+        _pass_done(cfg, run.wraps + 1, passes, run.states, settled)
+    else:
+        _warn_if_capped(run, cap, cfg.program, len(cfg.nodes))
     return _Walk(
         states=_merged(_inner_of(run), run.states),
         dequeues=run.dequeues,
-        settled=not run.queue,
+        sweeps=run.wraps + 1 if passes else 0,
+        back_edges=len(depth_first_order(cfg, entry).back_edges) if passes else 0,
+        settled=settled,
     )
 
 
@@ -1037,9 +991,7 @@ def _walked(
     """
     if entry not in cfg.node_ids:
         return _Walk()
-    if options.sweeps:
-        return _swept(cfg, statements, index, live, entry, options.sweeps, entry_state)
-    return _worked(cfg, statements, index, live, entry, options.factor, entry_state)
+    return _worked(cfg, statements, index, live, entry, options, entry_state)
 
 
 def _definers(state: State, extent: FieldExtent) -> frozenset[str]:
@@ -1159,8 +1111,8 @@ def analyse(
     ``options.factor`` is dequeues allowed per CFG node before the worklist walk
     gives up. No constant is right for every program: the bound is nodes times
     the lattice height at each node, and the height is the distinct sources held
-    at each extent. ``options.sweeps`` runs the cheaper walk instead, whose
-    budget is passes over the program rather than visits to a node.
+    at each extent. ``options.sweeps`` bounds the same walk by passes over
+    reverse postorder instead, in every PERFORM range walk as well as the top.
 
     ``entry_state`` is what reaches the program before any statement runs -- the
     initial image of WORKING-STORAGE's VALUE clauses, when the caller has one.

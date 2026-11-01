@@ -1,4 +1,10 @@
 fileignoreconfig:
+- filename: docs/reference/cobble/field-dataflow.md
+  checksum: 3125d22f5321c4a3cd0c82dff77be55676dff84f5f6aaa158ec9b20d9721831a
+- filename: cobble/cobble/dataflow/fixpoint/build_corpus.py
+  checksum: b5e58f1c2ea803cd7980a329e3e4a7b4675efcc93f0c7aab0f186d152d8e5a30
+- filename: cobble/cobble/dataflow/fixpoint/options.py
+  checksum: 2d81ff085d2488df45e5258b83acb6f4499176428bd74e1bdf2c87dbf5f38eda
 - filename: tests/integration/test_cics_sql_composition.py
   checksum: 1f3b61c8ab8118fedd5d8d0c0d500f8a054223741ea0a7cd55cd3b067a77b059
 - filename: squall/squall/sql_runtime.py
@@ -522,5 +528,5 @@ fileignoreconfig:
 - filename: cobble/cobble/dataflow/fixpoint/perform_ranges.py
   checksum: bebf2951dbe2909534167e14009d6871e4d8597b8b899dfbaf90df339f8034a2
 - filename: cobble/cobble/dataflow/fixpoint/fixpoint.py
-  checksum: 3564d76b70044b8518cbd37d003222ce6efe7e89e70e67a0484a3e2336fe6a0a
+  checksum: f9cee75876e2f41a4116d41a4c5f5998b6bf4937df03a176b16dd52e95c70cb4
 version: "1.0"
