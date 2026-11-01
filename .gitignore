@@ -23,3 +23,4 @@ tests/integration/output/
 .DS_Store
 
 .idea/
+.claude/
