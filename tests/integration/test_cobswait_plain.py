@@ -17,7 +17,7 @@ _RUN = (
 )
 
 
-def _build_toml(tmp_path: Path, carddemo_home: Path) -> Path:
+def built_cobswait_package(tmp_path: Path, carddemo_home: Path) -> Path:
     path = tmp_path / "build.toml"
     path.write_text(
         "[cobol]\n"
@@ -32,7 +32,8 @@ def _build_toml(tmp_path: Path, carddemo_home: Path) -> Path:
         'link = ["COBSWAIT", "MVSWAIT"]\n'
         'out_dir = "out"\n'
     )
-    return path
+    assert forge_build([str(path)], os.environ) == 0
+    return tmp_path / "out" / "cobswait.zip"
 
 
 def _env_toml(tmp_path: Path, package: Path) -> Path:
@@ -44,11 +45,11 @@ def _env_toml(tmp_path: Path, package: Path) -> Path:
     return path
 
 
-def _timed(env: Path, interval: str) -> tuple[tuple[int, list[str], str], float]:
+def timed_run(env: Path, stdin: str) -> tuple[tuple[int, list[str], str], float]:
     started = time.monotonic()
     ran = subprocess.run(
         [sys.executable, "-c", _RUN, str(env)],
-        input=interval,
+        input=stdin,
         capture_output=True,
         text=True,
         check=False,
@@ -62,12 +63,11 @@ def _timed(env: Path, interval: str) -> tuple[tuple[int, list[str], str], float]
 def test_cobswait_waits_for_the_interval_read_from_stdin(
     tmp_path: Path, carddemo_home: Path
 ) -> None:
-    assert forge_build([str(_build_toml(tmp_path, carddemo_home))], os.environ) == 0
-    env = _env_toml(tmp_path, tmp_path / "out" / "cobswait.zip")
+    env = _env_toml(tmp_path, built_cobswait_package(tmp_path, carddemo_home))
 
     (no_wait, no_wait_secs), (wait, wait_secs) = (
-        _timed(env, "00000000\n"),
-        _timed(env, "00000300\n"),
+        timed_run(env, "00000000\n"),
+        timed_run(env, "00000300\n"),
     )
 
     assert (no_wait, wait, wait_secs - no_wait_secs >= 2.5) == (

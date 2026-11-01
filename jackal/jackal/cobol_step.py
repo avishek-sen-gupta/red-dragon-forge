@@ -28,18 +28,19 @@ from interpreter.vm.builtin import Builtin
 from interpreter.vm.vm_types import StackFrame, VMState
 from jackal.allocation import DdEnvironment
 from jackal.cobol_files import AllocatedFileIOProvider, bindings_of
-from jackal.model import ProgramStep, StepReference
+from jackal.model import DdName, InStreamDSN, ProgramStep, StepReference
 from jackal.parm import build_parm_region
 from jackal.results import Abended, Completed, ProgramResult
 from jackal.value_parts import resolve
 from zos.cobol.io.dd_files import DdFileIOProvider
 from zos.cobol.io.program_file import ProgramFile
 from zos.cobol.io.program_files import ProgramFilesIOProvider
-from zos.cobol.io.system_input import unsupplied
+from zos.cobol.io.system_input import SystemInput, line_input, unsupplied
 from zos.program_outcome import program_abends, program_return_code
 
 DEFAULT_PROGRAM_STEP_BUDGET = 500_000
 CPU_TIME_EXCEEDED = SystemAbend(0x322)
+_SYSIN = DdName("SYSIN")
 
 
 @dataclass(frozen=True)
@@ -69,7 +70,7 @@ def run_cobol_step(
         partial(AllocatedFileIOProvider, workdir, env=env, relabeller=relabeller),
         program.files,
         DdFileIOProvider(workdir, bindings_of(env), relabeller),
-        unsupplied,
+        _system_input(step),
     )
     outcome = run_linked_resumable(
         program.linked,
@@ -80,6 +81,15 @@ def run_cobol_step(
         permit_unresolved_call_targets=permit_unresolved_call_targets,
     )
     return program_result(program, outcome)
+
+
+def _system_input(step: ProgramStep[StepReference]) -> SystemInput:
+    in_stream = tuple(
+        dd.in_stream
+        for dd in step.dds
+        if dd.ddname == _SYSIN and isinstance(dd.dsn, InStreamDSN)
+    )
+    return line_input(iter(in_stream[0])) if in_stream else unsupplied
 
 
 def program_result(program: CompiledProgram, outcome: RunOutcome) -> ProgramResult:

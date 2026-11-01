@@ -73,8 +73,9 @@ stderr: `forge-run: warning: P's RETURN-CODE is unknown; reported as 0`.
 A `[plain]` run's `ACCEPT`, from any device, reads forge-run's stdin as each one runs: one line
 is one 80-byte card, and the end of stdin is the end of input
 (`echo 00000300 | forge-run env.toml`). stdout is flushed before each read, so a program driving
-the run over pipes sees each prompt before the `ACCEPT` waits for its answer. Under `[jcl]` and `[cics]` an `ACCEPT` gets an unknown
-value (red-dragon-0va3).
+the run over pipes sees each prompt before the `ACCEPT` waits for its answer. Under `[jcl]` a step's in-stream `SYSIN DD *` feeds its `ACCEPT` the same way, a card per
+line; a step whose SYSIN names a dataset (red-dragon-k4gh) or has none (red-dragon-0va3), and
+any `[cics]` task, gets an unknown value.
 
 `[tolerant] permit_unresolved_call_targets` is passed to every program run in every mode: the
 `[plain]` program, the jackal step, the CICS task, and a program it LINKs to. Off, the default,
