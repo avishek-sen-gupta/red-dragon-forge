@@ -33,6 +33,8 @@ from cobble.dataflow.srccfg.rows.node_row import CfgNodeRow
 from cobble.dataflow.srccfg.rows.program_row import CfgProgramRow
 from cobble.dataflow.srccfg.argument_mode import ArgumentMode
 from cobble.dataflow.srccfg.rows.reach_outcome import ReachOutcome
+from cobble.dataflow.srccfg.read import Read
+from cobble.dataflow.srccfg.read_kind import ReadKind
 from cobble.dataflow.srccfg.using_argument import UsingArgument
 from cobol_asg.ref_mod import RefModLiteral, RefModOperand
 
@@ -42,7 +44,7 @@ NODE = Node(
     paragraph="MAIN",
     atom=Atom(text="WS-NAME = 'ÄÖÜ £'", left="WS-NAME", op="==", right="'ÄÖÜ £'"),
     writes=("WS-RET",),
-    reads=("WS-PGM", "WS-ARG"),
+    reads=(Read("WS-PGM", ReadKind.COPIED), Read("WS-ARG", ReadKind.CONSULTED)),
     transfer="CALL",
     target="WS-PGM",
     target_resolved=False,

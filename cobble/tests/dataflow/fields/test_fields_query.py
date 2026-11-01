@@ -316,6 +316,7 @@ def _defined(node: str, extent: str, *definers: str) -> dict:
         "node": node,
         "extent": extent,
         "definers": list(definers),
+        "kind": "copied",
     }
 
 
@@ -424,6 +425,7 @@ def test_the_definers_of_a_flow_come_off_the_defs_table(store):
                 "node": GROUP_MOVE,
                 "extent": _range("REC", 0, 8),
                 "definers": ["MAIN/A", "MAIN/B"],
+                "kind": "copied",
             },
         )
     )

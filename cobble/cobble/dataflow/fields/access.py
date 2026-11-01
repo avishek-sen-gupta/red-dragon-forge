@@ -22,7 +22,8 @@ from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_regis
 from cobble.dataflow.fields.extent import CellIndex, cell_index, operand_extents
 from cobble.dataflow.layout import UnsizeableFieldError, program_records
 from cobble.dataflow.srccfg.bundle import load_bundle
-from cobble.dataflow.srccfg.cfg import Cfg, Node, NodeKind
+from cobble.dataflow.srccfg.cfg import Cfg, Node
+from cobble.dataflow.srccfg.read import names_of
 from cobble.parsing.asg_cache import first_program_at
 from cobol_asg.ref_mod import RefModOperand
 from cobol_memory.field_extent import FieldExtent
@@ -56,13 +57,9 @@ def _real_names(names: Sequence[str]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(n for n in names if not _is_synthetic(n)))
 
 
-def _names_from_node(node: Node) -> tuple[str, ...]:
+def read_names(node: Node) -> tuple[str, ...]:
     """Field names read at this node, deduped, synthetics removed."""
-    reads = _real_names(node.reads)
-    if node.kind is NodeKind.TEST:
-        extra = _real_names((node.atom.left, node.atom.right))
-        return tuple(dict.fromkeys((*reads, *extra)))
-    return reads
+    return _real_names(names_of(node.reads))
 
 
 def _try_index(program: str, asg_dir: Path) -> tuple[CellIndex, ...]:
@@ -89,7 +86,7 @@ def _rows_for_node(program: str, node: Node, idx: CellIndex) -> tuple[AccessRow,
             paragraph=node.paragraph,
             extent=extent,
         )
-        for name in _names_from_node(node)
+        for name in read_names(node)
         for extent in operand_extents(RefModOperand(name=name), idx).extents
     )
 

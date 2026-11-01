@@ -123,6 +123,8 @@ from cobble.dataflow.srccfg.conditions import EightyEight, condition_index
 from cobble.dataflow.srccfg.literals import is_literal
 from cobble.dataflow.srccfg.order import DepthFirstOrder, depth_first_order
 from cobble.dataflow.srccfg.program import program_cfg
+from cobble.dataflow.srccfg.read import copied_names, names_of
+from cobble.dataflow.srccfg.read_kind import ReadKind
 from cobble.dataflow.srccfg.statements import statement_index
 from cobol_asg.asg_types import CobolASG
 from cobol_asg.cobol_statements import ReadStatement
@@ -183,6 +185,7 @@ class ReachingDef:
     extent: FieldExtent
     definers: tuple[str, ...]
     held: ValueSet = VALUES_EMPTY
+    kind: ReadKind = ReadKind.COPIED
 
 
 @dataclass(frozen=True)
@@ -478,7 +481,7 @@ def _unmodelled_or(
     return UnmodelledWrite(
         verb=node.transfer or type(statement).__name__,
         targets=targets,
-        sources=_storage(node.reads, eighty_eights),
+        sources=_storage(copied_names(node.reads), eighty_eights),
     )
 
 
@@ -1050,7 +1053,28 @@ def _at(
     )
 
 
+def _read_at(node: Node, state: State, index: CellIndex) -> _Extracted:
+    """The definitions reaching what a node consults -- a test's operands, a key,
+    a RIDFLD, a subscript -- none of which a move's source row covers."""
+    return _Extracted(
+        defs=tuple(
+            ReachingDef(
+                node=node.id,
+                extent=extent,
+                definers=tuple(sorted(_definers(state, extent))),
+                held=values_at(state, extent),
+                kind=ReadKind.CONSULTED,
+            )
+            for name in names_of(
+                read for read in node.reads if read.kind is ReadKind.CONSULTED
+            )
+            for extent in operand_extents(RefModOperand(name=name), index).extents
+        )
+    )
+
+
 def _extracted(
+    cfg: Cfg,
     found: tuple[tuple[str, Statement], ...],
     states: Mapping[str, State],
     index: CellIndex,
@@ -1067,10 +1091,19 @@ def _extracted(
     Sorting the whole stream instead would fix that too, at the cost of the source
     order a reader compares against the listing.
     """
+    statements = dict(found)
     parts = tuple(
-        _at(statement, node_id, states[node_id], index, kept)
-        for node_id, statement in found
-        if node_id in states
+        part
+        for node in cfg.nodes
+        if node.id in states
+        for part in (
+            *(
+                (_at(statements[node.id], node.id, states[node.id], index, kept),)
+                if node.id in statements
+                else ()
+            ),
+            _read_at(node, states[node.id], index),
+        )
     )
     return _Extracted(
         edges=tuple(
@@ -1129,7 +1162,7 @@ def analyse(
         cfg, statements, index, live, entry, options, _for(entry_state, live, entry)
     )
     kept = _kept_after(cfg, live)
-    extracted = _extracted(found, walk.states, index, kept)
+    extracted = _extracted(cfg, found, walk.states, index, kept)
     written = _written(found, index)
     return ProgramFlow(
         program=cfg.program,

@@ -43,7 +43,8 @@ status 2, naming it, and writes nothing. `make carddemo-all` writes `$OUT/datalo
 | `cfg_node` | `p, n, kind, para, line:number, transfer` | CFG node rows |
 | `cfg_edge` | `p, a, b, kind` | CFG edge rows |
 | `cfg_pred` | `p, n, l, op, r, text, resolved` | `TEST` nodes' atoms |
-| `cfg_write` / `cfg_read` | `p, n, f` | node `writes` / `reads` |
+| `cfg_write` | `p, n, f` | node `writes` |
+| `cfg_read` | `p, n, f, kind` | node `reads`; `kind` is `copied` (the bytes are what the statement moves) or `consulted` (a subscript, key, RIDFLD or test operand: the value decides what is taken or where control goes, and no byte of it moves) |
 | `cfg_target` | `p, n, t, resolved` | nodes with a jump or call target |
 | `cfg_file` | `p, n, f` | nodes naming a file |
 | `cfg_perform` | `p, s, resume, rend` | `PERFORM` nodes |
@@ -52,8 +53,8 @@ status 2, naming it, and writes nothing. `make carddemo-all` writes `$OUT/datalo
 | `access` | `p, n, f, region, s:number, e:number` | `accesses/*.jsonl`, the row's `node` |
 | `fp_counts` | `p, settled, writes, covered, unhandled, unmodelled, dynamic, files` (numbers after `settled`) | `fixpoint/members/*/counts.json` |
 | `fp_dead_end` / `fp_unresolved` | `p, why` | the same, `dead_ends` / `unresolved_reasons` |
-| `fp_use` | `p, n, ext` | `fixpoint/defs.jsonl` |
-| `fp_def` / `fp_def_value` / `fp_def_reason` | `p, n, ext, definer` / `v` / `why` | the same |
+| `fp_use` | `p, n, ext, kind` | `fixpoint/defs.jsonl`; `kind` is `copied` for a move's source, `consulted` for a test operand, key, RIDFLD or subscript |
+| `fp_def` / `fp_def_value` / `fp_def_reason` | `p, n, ext, kind, definer` / `v` / `why` | the same |
 | `fp_sink` | `p, n, skind, sname, ext` | `fixpoint/sinks.jsonl`: at node `n`, `p` writes the bytes `ext` to a sink of kind `skind` (`FILE`, `MAP`, `TD_QUEUE`). `sname` is the operand as written: a batch SELECT name, or a CICS field such as `LIT-ACCTFILENAME` whose `field_value` is the file |
 | `fp_sink_definer` | `p, n, skind, sname, definer` | the same |
 | `fp_flow` | `src, dst, n, okind, oname, sext, dext` | `fixpoint/graph.jsonl` edges: at node `n`, bytes `sext` of `src` reach bytes `dext` of `dst`. `okind`/`oname` name the origin when `src` is one (`FILE`, `MAP`, `LITERAL`, `CALL`, …, e.g. `PROG.FILE:CUSTFILE`), `NONE` when `src` is a field |

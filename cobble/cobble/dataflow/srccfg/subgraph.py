@@ -28,6 +28,7 @@ from functools import reduce
 from itertools import accumulate, dropwhile, repeat
 
 from cobble.dataflow.srccfg.cfg import Cfg, Edge, EdgeKind, Node, NodeKind
+from cobble.dataflow.srccfg.read import copied_names, names_of
 
 Pair = tuple[str, str]
 _LabelFn = Callable[[Node], str]
@@ -72,7 +73,7 @@ def _fallback_label(node: Node) -> str:
 def _assign_label(node: Node) -> str:
     if node.transfer != "MOVE":
         return _fallback_label(node)
-    return f"MOVE {', '.join(node.reads)} TO {', '.join(node.writes)}"
+    return f"MOVE {', '.join(copied_names(node.reads))} TO {', '.join(node.writes)}"
 
 
 def _perform_label(node: Node) -> str:
@@ -80,7 +81,7 @@ def _perform_label(node: Node) -> str:
 
 
 def _goto_depending_label(node: Node) -> str:
-    return f"GO TO ... DEPENDING ON {', '.join(node.reads)}"
+    return f"GO TO ... DEPENDING ON {', '.join(names_of(node.reads))}"
 
 
 def _goto_label(node: Node) -> str:

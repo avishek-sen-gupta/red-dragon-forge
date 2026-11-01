@@ -9,6 +9,7 @@ from collections.abc import Iterator, Sequence
 from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
+from cobble.dataflow.srccfg.read_kind import ReadKind
 from cobble.experimental.aggregates.def_line import DefLine
 from cobble.experimental.aggregates.matrix import (
     incidence_matrix,
@@ -89,10 +90,14 @@ def _defs(path: Path) -> Iterator[DefLine]:
     total = _count(path)
     logger.info("aggregate matrix: reading %d def rows from %s", total, path)
     return (
-        DefLine.model_validate_json(line)
-        for line in counted(
-            _rows(path), tenths(MATRIX, "def rows mapped", total), total
+        line
+        for line in (
+            DefLine.model_validate_json(text)
+            for text in counted(
+                _rows(path), tenths(MATRIX, "def rows mapped", total), total
+            )
         )
+        if line.kind is ReadKind.COPIED
     )
 
 

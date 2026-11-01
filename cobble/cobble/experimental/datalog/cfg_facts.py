@@ -41,7 +41,7 @@ CFG_PRED = Relation(
     ),
 )
 CFG_WRITE = Relation("cfg_write", (symbol("p"), symbol("n"), symbol("f")))
-CFG_READ = Relation("cfg_read", (symbol("p"), symbol("n"), symbol("f")))
+CFG_READ = Relation("cfg_read", (symbol("p"), symbol("n"), symbol("f"), symbol("kind")))
 CFG_TARGET = Relation(
     "cfg_target", (symbol("p"), symbol("n"), symbol("t"), symbol("resolved"))
 )
@@ -133,7 +133,11 @@ def _node_facts(nodes: tuple[CfgNodeRow, ...]) -> tuple[Facts, ...]:
         ),
         Facts(
             CFG_READ,
-            tuple((row.program, row.id, name) for row in nodes for name in row.reads),
+            tuple(
+                (row.program, row.id, read.name, read.kind.value)
+                for row in nodes
+                for read in row.reads
+            ),
         ),
         Facts(
             CFG_TARGET,

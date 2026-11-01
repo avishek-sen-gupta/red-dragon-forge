@@ -7,7 +7,7 @@
 ext(e) :- fp_flow(_, _, _, _, _, e, _), e != "".
 ext(e) :- fp_flow(_, _, _, _, _, _, e), e != "".
 ext(e) :- fp_sink(_, _, _, _, e).
-ext(e) :- fp_def(_, _, e, _).
+ext(e) :- fp_def(_, _, e, _, _).
 .decl ext_char(e:symbol, i:number, c:symbol)
 ext_char(e, 0, substr(e, 0, 1)) :- ext(e).
 ext_char(e, i+1, substr(e, i+1, 1)) :- ext_char(e, i, _), i+1 < strlen(e).

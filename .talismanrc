@@ -1,6 +1,6 @@
 fileignoreconfig:
 - filename: docs/reference/cobble/field-dataflow.md
-  checksum: 3125d22f5321c4a3cd0c82dff77be55676dff84f5f6aaa158ec9b20d9721831a
+  checksum: 3ee89b877961bb5421b53b933278b00f9a8b80dfd918a91be6a3e885e06c91f2
 - filename: cobble/cobble/dataflow/fixpoint/build_corpus.py
   checksum: b5e58f1c2ea803cd7980a329e3e4a7b4675efcc93f0c7aab0f186d152d8e5a30
 - filename: cobble/cobble/dataflow/fixpoint/options.py
@@ -422,7 +422,7 @@ fileignoreconfig:
 - filename: .github/workflows/ci.yml
   checksum: 66880360aeb542a0f3029632b0956c1c99e512113ecec11b6d40af01861e46b6
 - filename: cobble/cobble/dataflow/depgraph/flows.py
-  checksum: c4281f7c9c55f0f323effc01be8ed5761fda2799a1da47535d144fcc462b4d1a
+  checksum: 187d3a2432252dd02d628be77ce0de1a3821cada4020adf7cf30e38231535c62
 - filename: cobble/cobble/dataflow/fields/transfer.py
   checksum: 9d0c73b6ba95623484b32cfc04c92a51f84d2500c13a521c62269b5bf91a4a6a
 - filename: catnip/catnip/dataset.py
@@ -514,7 +514,7 @@ fileignoreconfig:
 - filename: cobble/tests/experimental/datalog/test_facts.py
   checksum: 0e9039b67ec83039f2b76f4d23fe04de5d86a85b3cfe1436a7510b982bbd1c72
 - filename: docs/reference/cobble/datalog.md
-  checksum: b39138382eb2faf46e90576879fd55d11f3d3cc09b236c11b6b08fc5c3ff0bdc
+  checksum: f058673c17d9e11c13e3d1e0810d7f695723fff4d85fe3ddca9fdc30f3dbb4ce
 - filename: cobble/tests/experimental/datalog/carddemo_facts/field_value.facts
   checksum: 74fcfa58d66ef2c2ed5d477a6f9d11db5bd0566a0bae3958f33bde43fa1e1df3
 - filename: cobble/tests/experimental/datalog/carddemo_facts/cfg_pred.facts
@@ -522,11 +522,19 @@ fileignoreconfig:
 - filename: cobble/tests/experimental/datalog/carddemo_facts/kg_edge_attr.facts
   checksum: e11c116b428391a6703559578797c7d2b8b67b3a44603b53ed863600af574dcd
 - filename: cobble/tests/experimental/datalog/carddemo_facts/fp_def.facts
-  checksum: 6b5564216a31bd745251bd907820b0f5526ee4fa54604f8fd8ebd78ffe5fdcb7
+  checksum: 147c9aba5a358dea0376239ba7df990eb08d3fca3ca4d775a2bfe91f1c210485
 - filename: cobble/tests/experimental/datalog/carddemo_facts/fp_flow.facts
   checksum: 9429cc624266a6a2fc5b496b571dbeed3c77d0ad9ff25dec952ae6130e474033
 - filename: cobble/cobble/dataflow/fixpoint/perform_ranges.py
   checksum: bebf2951dbe2909534167e14009d6871e4d8597b8b899dfbaf90df339f8034a2
 - filename: cobble/cobble/dataflow/fixpoint/fixpoint.py
   checksum: f9cee75876e2f41a4116d41a4c5f5998b6bf4937df03a176b16dd52e95c70cb4
+- filename: cobble/cobble/dataflow/srccfg/read_kind.py
+  checksum: 7fb7ec488ed7e536a14ccfc35fbd59ce4ff9ab5a360497c2442b2f249690a423
+- filename: cobble/tests/dataflow/srccfg/test_read_kinds.py
+  checksum: 76adfdf0ec68f5db61b9407c1745d469ad01275df91be7add83b7872dfad61d3
+- filename: docs/superpowers/specs/cobble/2026-11-02-reads-origins-and-reachability-design.md
+  checksum: db484e1f16010070d713e73c76a3e3ff43516c3e53546d113371c70fac91405e
+- filename: docs/reference/cobble/srccfg.md
+  checksum: adc2fbfede4cd410d152e59ab72ac976b4f985fc02196fd3c8a7b6e0065af735
 version: "1.0"

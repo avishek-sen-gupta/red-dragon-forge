@@ -49,7 +49,7 @@ subscripts and each edge's ends and alignments, logging progress every tenth of 
 
 ## Matrix
 
-Each `defs.jsonl` row names the fields its range covers, through the extents, and the paragraphs of
+Each `copied` `defs.jsonl` row names the fields its range covers, through the extents, and the paragraphs of
 its node and of every definer. A field whose own `PROGRAM:RECORD.PATH` name any `--exclude` pattern
 matches is left out there, before unify's classes apply, so a class loses only its matching members.
 Each remaining field is replaced by its class, and a table element's occurrences that unify left

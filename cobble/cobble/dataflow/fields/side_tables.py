@@ -58,6 +58,7 @@ from cobble.dataflow.fixpoint.target_kind import TargetKind
 from cobble.dataflow.fixpoint.targets import ResolvedTarget
 from cobble.dataflow.jumps.rows import fact_dict
 from cobble.dataflow.layout import Cell
+from cobble.dataflow.srccfg.read_kind import ReadKind
 from cobble.sink_state import FirstSighting
 
 
@@ -124,6 +125,7 @@ class ReachingDefs:
     extent: str
     definers: tuple[str, ...]
     held: ValueSet = VALUES_EMPTY
+    kind: ReadKind = ReadKind.COPIED
 
 
 @dataclass(frozen=True)
@@ -229,8 +231,8 @@ def extent_row(field: FieldExtents) -> _Row:
     )
 
 
-def defs_identity(program: str, node: str, extent: str) -> str:
-    return f"{program}\x00{node}\x00{extent}"
+def defs_identity(program: str, node: str, extent: str, kind: ReadKind) -> str:
+    return f"{program}\x00{node}\x00{extent}\x00{kind.value}"
 
 
 def sink_identity(sink: ProgramSink) -> str:
@@ -253,7 +255,7 @@ def defs_row(defs: ReachingDefs) -> _Row:
     the first program's row and dropped every other's.
     """
     return (
-        defs_identity(defs.program, defs.node, defs.extent),
+        defs_identity(defs.program, defs.node, defs.extent, defs.kind),
         json.dumps(
             {
                 "program": defs.program,
@@ -265,6 +267,7 @@ def defs_row(defs: ReachingDefs) -> _Row:
                     for value in defs.held.values
                 ),
                 "reasons": sorted(reason.value for reason in defs.held.reasons),
+                "kind": defs.kind.value,
             }
         ),
     )

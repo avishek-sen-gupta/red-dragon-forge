@@ -153,7 +153,7 @@ loop.
 | File | One row per | Holds |
 |---|---|---|
 | `graph.jsonl` | `FIELD` endpoint, and `(node, source extent, target extent)` | node rows carry only the id, an origin's being `<program>.<origin text>` (`PROGA.LITERAL:'Y'`, one node per literal value); edge rows are `FLOWS_TO` with the `node` that moved the bytes, `origin` (the object above, kind `NONE` for storage), `landing`: the offset in the target where the source's first byte landed, when the statement moved the bytes unchanged, or `[]` when it rewrote them (see below), and `rebuilt`: true when the statement built the target's value in place (`ADD`, `SUBTRACT`, `MULTIPLY`, `DIVIDE`, `COMPUTE`, `STRING`) |
-| `defs.jsonl` | `(program, node, source extent)` read that feeds a write | `definers` (statements whose writes reach the read; empty for a `VALUE` or nothing), `values` (quoted literals only), `reasons` |
+| `defs.jsonl` | `(program, node, extent, kind)`: a `copied` row for each source extent a move reads, a `consulted` row for each extent a node consults (a test's operand, a key, a `RIDFLD`, a subscript) | `definers` (statements whose writes reach the read; empty for a `VALUE` or nothing), `values` (quoted literals only), `reasons`, `kind`. The combine, `cobble-dataflow-fixpoint-query` and the aggregate matrix read `copied` rows only. A `consulted` row of a group covers the whole group, so its `reasons` need not hold for every byte |
 | `aliases.jsonl` | call site and caller window | `caller_extent` and `callee_extent` of the shared window, or the reason none is shared and the callee it stopped on |
 | `targets.jsonl` | dynamic `CALL`/`XCTL`/`LINK` site, and dynamic CICS file site | `caller`, `node`, `kind` (`program` or `file`), `transfer`, `expression`, `candidates`, `reasons`, `dropped` (values that cannot name a program, or a CICS file); a file row also carries `operand`, its operand's fact (`extent`, `values`, `writers`, `reasons`), which the combine walks back from |
 | `jumps.jsonl` | jump, exit, `RETRIEVE` and entry | what it hands over: target, transaction id, areas |
@@ -376,7 +376,7 @@ aliases (`PARA-001`, `FIELD-001`).
 cobble-fields-access --cfg CFG --asg-dir DIR --out OUT
 ```
 
-Every site in a CFG file that reads a field, with the bytes it reads: one `access` row per site
+Every site in a CFG file that reads or consults a field (both kinds of a node's `reads`, so subscripts, keys and `RIDFLD`s too), with the bytes it reads: one `access` row per site
 and extent, holding `program`, `site` (`program/node`), `node` (the CFG node id), `paragraph` and
 `extent` (`field`, `region`, `start`, `end`, `clamped`).
 

@@ -68,6 +68,7 @@ from cobble.dataflow.srccfg.cfg import (
 )
 from cobble.dataflow.srccfg.conditions import VALUE_OPS
 from cobble.dataflow.srccfg.desugar import DISPATCH_TRANSFER_CICS
+from cobble.dataflow.srccfg.read import names_of
 from cobble.dataflow.srccfg.synthetic import (
     HANDLER_PREFIX,
     IGNORED,
@@ -891,7 +892,9 @@ def readers_of(cfg: Cfg, field: str) -> tuple[str, ...]:
 
 def _read_bases(node: Node) -> frozenset[str]:
     examined = condition_operands(node.atom) if node.kind is NodeKind.TEST else ()
-    return frozenset(base_field(name) for name in (*node.reads, *examined) if name)
+    return frozenset(
+        base_field(name) for name in (*names_of(node.reads), *examined) if name
+    )
 
 
 def live_handlers(cfg: Cfg) -> Mapping[str, tuple[str, ...]]:
@@ -930,7 +933,7 @@ def _targets(cfg: Cfg, definitions: Defs) -> tuple[str, ...]:
                 value
                 for definition in definitions
                 if definition.field.startswith(HANDLER_PREFIX)
-                for value in cfg.node(definition.node).reads
+                for value in names_of(cfg.node(definition.node).reads)
                 if value not in (IGNORED, SYSTEM_DEFAULT)
             }
         )

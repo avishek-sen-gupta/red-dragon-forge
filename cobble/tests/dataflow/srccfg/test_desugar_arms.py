@@ -8,6 +8,7 @@ exists to answer.
 
 from __future__ import annotations
 
+from cobble.dataflow.srccfg.read import names_of
 from cobble.dataflow.depgraph.flows import program_context
 
 from cobble.dataflow.srccfg.cfg import Cfg, EdgeKind, NodeKind
@@ -307,7 +308,7 @@ def test_a_search_reads_the_table_and_its_index(program_of) -> None:
         ],
     )
 
-    assert "WS-TABLE" in cfg.node("MAIN/0").reads
+    assert "WS-TABLE" in names_of(cfg.node("MAIN/0").reads)
     assert "WS-IDX" in cfg.node("MAIN/0").writes
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from cobble.dataflow.srccfg.read_kind import ReadKind
 from cobble.experimental.aggregates.def_line import DefLine
 from cobble.experimental.aggregates.matrix import (
     incidence_matrix,
@@ -39,7 +40,13 @@ INDEX = leaf_index(
 
 
 def _def(node: str, extent: str, definers: tuple[str, ...] = ()) -> DefLine:
-    return DefLine(program="P", node=node, extent=extent, definers=definers)
+    return DefLine(
+        program="P",
+        node=node,
+        extent=extent,
+        definers=definers,
+        kind=ReadKind.COPIED,
+    )
 
 
 DEFS = (

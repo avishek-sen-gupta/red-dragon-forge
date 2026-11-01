@@ -33,7 +33,7 @@ JSONL. Each row has a `type`:
 | Row | Holds |
 |---|---|
 | `program` | opens a program's CFG. The first is the seed. `entry` is the label node of its first paragraph in source order (`""` for a program with no paragraphs; `%EXTERNAL#label` for an external one). `"external": true` marks a program the cache does not hold |
-| `node` | one node of the preceding program |
+| `node` | one node of the preceding program. `reads` lists what it reads, each `{"name", "kind"}`: `copied` when the bytes are what the statement moves, into a target or out to a file, screen or callee; `consulted` when the value only decides which data is taken or where control goes -- a subscript, a `READ`/`START` key, a CICS `RIDFLD`, a test's operands, a `GO TO ... DEPENDING ON` index, a `PERFORM ... TIMES` count |
 | `edge` | one edge of the preceding program |
 | `call` | after all programs: `caller`, `node`, `transfer`, `program` (callee), `entry` (the callee node the call lands on), `resolved`, `commarea`, `expression`, `reasons`, `certain` |
 

@@ -216,6 +216,7 @@ def _reaching_defs(flow: ProgramFlow) -> tuple[ReachingDefs, ...]:
             extent=extent_text(entry.extent),
             definers=entry.definers,
             held=entry.held,
+            kind=entry.kind,
         )
         for entry in flow.defs
     )

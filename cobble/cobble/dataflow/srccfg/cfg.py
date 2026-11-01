@@ -30,6 +30,7 @@ from functools import cached_property
 from itertools import groupby
 from operator import itemgetter
 
+from cobble.dataflow.srccfg.read import Read
 from cobble.dataflow.srccfg.using_argument import UsingArgument
 from cobol_asg.ref_mod import RefModOperand
 
@@ -109,7 +110,7 @@ class Node:
     paragraph: str
     atom: Atom = UNRESOLVED
     writes: tuple[str, ...] = ()
-    reads: tuple[str, ...] = ()
+    reads: tuple[Read, ...] = ()
     transfer: str = ""
     target: str = ""
     target_resolved: bool = True

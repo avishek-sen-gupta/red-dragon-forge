@@ -8,7 +8,7 @@ from cobble.experimental.datalog.facts import Facts
 from cobble.experimental.datalog.relation import Relation
 from cobble.experimental.datalog.run_files import lines
 
-_USE = (symbol("p"), symbol("n"), symbol("ext"))
+_USE = (symbol("p"), symbol("n"), symbol("ext"), symbol("kind"))
 FP_USE = Relation("fp_use", _USE)
 FP_DEF = Relation("fp_def", (*_USE, symbol("definer")))
 FP_DEF_VALUE = Relation("fp_def_value", (*_USE, symbol("v")))
@@ -21,11 +21,14 @@ def defs_facts(run: Path) -> tuple[Facts, ...]:
         for line in lines(run / "fixpoint" / "defs.jsonl")
     )
     return (
-        Facts(FP_USE, tuple((row.program, row.node, row.extent) for row in rows)),
+        Facts(
+            FP_USE,
+            tuple((row.program, row.node, row.extent, row.kind.value) for row in rows),
+        ),
         Facts(
             FP_DEF,
             tuple(
-                (row.program, row.node, row.extent, definer)
+                (row.program, row.node, row.extent, row.kind.value, definer)
                 for row in rows
                 for definer in row.definers
             ),
@@ -33,7 +36,7 @@ def defs_facts(run: Path) -> tuple[Facts, ...]:
         Facts(
             FP_DEF_VALUE,
             tuple(
-                (row.program, row.node, row.extent, value)
+                (row.program, row.node, row.extent, row.kind.value, value)
                 for row in rows
                 for value in row.values
             ),
@@ -41,7 +44,7 @@ def defs_facts(run: Path) -> tuple[Facts, ...]:
         Facts(
             FP_DEF_REASON,
             tuple(
-                (row.program, row.node, row.extent, why)
+                (row.program, row.node, row.extent, row.kind.value, why)
                 for row in rows
                 for why in row.reasons
             ),

@@ -15,6 +15,7 @@ from cobble.dataflow.fields.state import State
 from cobble.dataflow.fields.transfer import HANDLED, Statement, write_operands
 from cobble.dataflow.fields.unmodelled_write import UnmodelledWrite
 from cobble.dataflow.srccfg.cfg import Cfg, EdgeKind
+from cobble.dataflow.srccfg.read import copied_names
 from cobol_asg.ref_mod import RefModOperand
 from cobol_memory.field_extent import FieldExtent
 
@@ -132,7 +133,7 @@ def _own(
         name
         for node_id in region
         for node in (cfg.node(node_id),)
-        for name in (*node.reads, *node.writes)
+        for name in (*copied_names(node.reads), *node.writes)
         if name
     ) | frozenset(
         operand.name

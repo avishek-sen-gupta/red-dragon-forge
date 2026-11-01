@@ -144,6 +144,54 @@ def _read_names(operand: object) -> tuple[str, ...]:
     return (name,) if name else ()
 
 
+def selector_names(node: object) -> tuple[str, ...]:
+    """Every name that picks which value a statement takes, the ones the selector
+    rule leaves out of its flows: subscripts anywhere in its operands, a READ or
+    START key, a CICS RIDFLD. Child statements are their own nodes and are not
+    descended into."""
+    return tuple(dict.fromkeys(n.upper() for n in _selectors(node, True) if n))
+
+
+def _selectors(node: object, root: bool) -> tuple[str, ...]:
+    if not root and type(node).__name__.endswith("Statement"):
+        return ()
+    if isinstance(node, dict):
+        return tuple(
+            name for key, value in node.items() for name in _selected(key, value)
+        )
+    if isinstance(node, (list, tuple)):
+        return tuple(name for item in node for name in _selectors(item, False))
+    if dataclasses.is_dataclass(node) and not isinstance(node, type):
+        return (
+            *_keys_of(node),
+            *(
+                name
+                for f in dataclasses.fields(node)
+                for name in _selected(f.name, getattr(node, f.name))
+            ),
+        )
+    return ()
+
+
+def _selected(key: str, value: object) -> tuple[str, ...]:
+    if key in _SELECTOR_FIELDS:
+        return (*expression_names(value), *_selectors(value, False))
+    return _selectors(value, False)
+
+
+def _keys_of(node: object) -> tuple[str, ...]:
+    """The operands that are selectors by their place in the statement."""
+    kind = type(node).__name__
+    if kind in ("ReadStatement", "StartStatement"):
+        return operand_names((getattr(node, "key", ""),))
+    if kind == "ExecCicsStatement":
+        return operand_names((getattr(node, "options", {}).get(_RIDFLD),))
+    return ()
+
+
+_RIDFLD = "RIDFLD"
+
+
 # ── the program's own vocabulary ─────────────────────────────────
 
 

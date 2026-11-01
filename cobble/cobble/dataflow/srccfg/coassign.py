@@ -22,6 +22,7 @@ from cobble.dataflow.srccfg.dataflow import (
     writers_of,
 )
 from cobble.dataflow.srccfg.literals import is_literal
+from cobble.dataflow.srccfg.read import copied_names
 
 
 class Tier(IntEnum):
@@ -130,14 +131,21 @@ def _candidate(
 
 
 def _tier(source: Node, other: Node, reaching: Reaching) -> Tier:
-    same_paragraph = other.paragraph == source.paragraph
     if source.id == other.id:
         return Tier.SAME_STATEMENT
-    if same_paragraph and _shared(source, other):
-        return Tier.SAME_SOURCE
-    if not same_paragraph and _same_guard(reaching, source.id, other.id):
+    if other.paragraph == source.paragraph:
+        return _in_paragraph(source, other)
+    return _across_paragraphs(source, other, reaching)
+
+
+def _in_paragraph(source: Node, other: Node) -> Tier:
+    return Tier.SAME_SOURCE if _shared(source, other) else Tier.SAME_PARAGRAPH
+
+
+def _across_paragraphs(source: Node, other: Node, reaching: Reaching) -> Tier:
+    if _same_guard(reaching, source.id, other.id):
         return Tier.SAME_GUARD
-    return Tier.SAME_PARAGRAPH if same_paragraph else Tier.UNRELATED
+    return Tier.UNRELATED
 
 
 def _same_guard(reaching: Reaching, source_id: str, other_id: str) -> bool:
@@ -159,7 +167,7 @@ def _same_guard(reaching: Reaching, source_id: str, other_id: str) -> bool:
 
 
 def _shared(source: Node, other: Node) -> tuple[str, ...]:
-    common = set(source.reads) & set(other.reads)
+    common = set(copied_names(source.reads)) & set(copied_names(other.reads))
     filtered = tuple(sorted(name for name in common if not is_literal(name)))
     return filtered
 

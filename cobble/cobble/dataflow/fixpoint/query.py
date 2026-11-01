@@ -53,6 +53,7 @@ from cobble.dataflow.fields.extent_text import NO_RANGE, ByteRange, byte_range
 from cobble.dataflow.fixpoint import rows
 from cobble.dataflow.fixpoint.build_corpus import ALIASES_FILE, DEFS_FILE, GRAPH_FILE
 from cobble.dataflow.fixpoint.rows import Row
+from cobble.dataflow.srccfg.read_kind import ReadKind
 
 logger = logging.getLogger(__name__)
 
@@ -849,6 +850,7 @@ def store_of(
                     rows.text(row, "extent"),
                 ): rows.strings(row, "definers")
                 for row in defs
+                if rows.text(row, "kind") == ReadKind.COPIED.value
             }
         ),
         aliases=tuple(_alias(row) for row in aliases),

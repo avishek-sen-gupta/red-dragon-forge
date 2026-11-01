@@ -33,6 +33,7 @@ from cobble.dataflow.srccfg.dataflow import (
     writers_of,
 )
 from cobble.dataflow.srccfg.literals import is_literal
+from cobble.dataflow.srccfg.read import copied_names
 from cobble.dataflow.srccfg.synthetic import describe, is_synthetic
 
 MAX_DEPTH = 6
@@ -207,7 +208,7 @@ def _from_node(
     notes = tuple(f"{pad}  {note}" for note in guards.notes)
 
     # Data dependencies: fields the node reads
-    data_deps = [name for name in node.reads if not is_literal(name)]
+    data_deps = [name for name in copied_names(node.reads) if not is_literal(name)]
 
     # Control dependencies (F1/R54): fields in the guards
     control_deps = _guard_operands(cfg, reaching, node_id)

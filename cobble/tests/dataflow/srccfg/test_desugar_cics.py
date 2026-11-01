@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import pytest
 
+from cobble.dataflow.srccfg.read import Read, names_of
+from cobble.dataflow.srccfg.read_kind import ReadKind
 from cobble.dataflow.depgraph.flows import program_context
 from cobble.dataflow.srccfg.build import build_program
 from cobble.dataflow.srccfg.cfg import Cfg, EdgeKind, NodeKind
@@ -66,7 +68,7 @@ def test_handle_condition_writes_the_handler_field_and_reads_the_paragraph(
     )
 
     node = cfg.node("MAIN/0")
-    assert (node.kind, node.writes, node.reads) == (
+    assert (node.kind, node.writes, names_of(node.reads)) == (
         NodeKind.ASSIGN,
         (handler_field("MAPFAIL"),),
         ("9999-MAPFAIL",),
@@ -103,7 +105,7 @@ def test_a_condition_armed_with_no_paragraph_resets_to_the_system_default(
     paragraph name."""
     cfg = _cfg(program_of, [_cics("HANDLE CONDITION", {"ERROR": None})])
 
-    assert cfg.node("MAIN/0").reads == (SYSTEM_DEFAULT,)
+    assert names_of(cfg.node("MAIN/0").reads) == (SYSTEM_DEFAULT,)
 
 
 def test_ignore_condition_writes_the_ignore_marker(program_of) -> None:
@@ -112,7 +114,10 @@ def test_ignore_condition_writes_the_ignore_marker(program_of) -> None:
     cfg = _cfg(program_of, [_cics("IGNORE CONDITION", {"MAPFAIL": None})])
 
     node = cfg.node("MAIN/0")
-    assert (node.writes, node.reads) == ((handler_field("MAPFAIL"),), (IGNORED,))
+    assert (node.writes, names_of(node.reads)) == (
+        (handler_field("MAPFAIL"),),
+        (IGNORED,),
+    )
 
 
 def test_a_command_that_can_raise_gets_a_test_and_a_dispatch_node(program_of) -> None:
@@ -127,7 +132,7 @@ def test_a_command_that_can_raise_gets_a_test_and_a_dispatch_node(program_of) ->
     assert (test_node.atom.left, test_node.atom.right) == (HANDLER_ANY, RAISED)
     dispatch = cfg.node("MAIN/0#dispatch")
     assert (dispatch.transfer, dispatch.target) == (DISPATCH_TRANSFER_CICS, "")
-    assert dispatch.reads == (HANDLER_ANY,)
+    assert dispatch.reads == (Read(HANDLER_ANY, ReadKind.CONSULTED),)
 
 
 def test_the_dispatch_node_has_no_outgoing_edge_of_its_own(program_of) -> None:
@@ -267,7 +272,7 @@ def test_a_cics_commands_own_dataflow_is_still_read(program_of) -> None:
         ],
     )
 
-    assert "WS-MAP-AREA" in cfg.node("MAIN/0").reads
+    assert "WS-MAP-AREA" in names_of(cfg.node("MAIN/0").reads)
 
 
 def test_full_program_assembly_leaves_handler_edges_and_dispatch_target_intact(

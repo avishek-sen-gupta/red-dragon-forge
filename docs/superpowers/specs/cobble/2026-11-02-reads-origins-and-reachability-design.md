@@ -1,0 +1,76 @@
+# Reaching definitions at every read, byte origins, statement reachability, navigation closure
+
+## Why
+
+Three questions asked of CardDemo through Datalog (where the account balance comes from, which
+screen fields guard a transaction write, what each user type can do) were answered with rules
+that re-derived cobble's analyses: a reaching-definitions walk over `cfg_edge` that followed
+RETURN edges, a backward byte trace that assumed byte *i* maps to byte *i*, and PERFORM-aware
+reachability rewritten in rules. The answers matched hand-written keys, but they did not rest
+on cobble's facts. The fitness function for this work: each question is answered by joins over
+what cobble emits, with no rule inventing a fact or restating cobble's semantics.
+
+## What is missing today
+
+| need | state today |
+|---|---|
+| definitions and held values at a test operand or CALL argument | `defs.jsonl` has rows only for the sources of data moves (`fixpoint._at`); a TEST node has none |
+| origins of the bytes a statement reads, through every copy | `cobble query reached-by` walks back through `defs`, but from a field, to depth 3 by default, by range overlap without `landing`, and reports fields, not origins |
+| whether statement X can reach statement W under the walk's PERFORM rules | not computed; `PerformRanges.reachable` is per range, not per statement |
+| programs reachable from a program by XCTL | edges only, in the knowledge graph |
+
+## Decisions
+
+Taken with the user, 2026-11-02:
+
+- General analyses live in cobble, exposed through the CLI. A question's queries only join.
+- The JSONL artefacts are the substrate; the Datalog export follows them.
+- Definitions that interpret a question's words ("changes the balance", "a check", "the user
+  types") are not analyses. They are listed for approval before an answer is given.
+
+The builder's call, recorded as such: A, B and C are on-demand `cobble query` questions, like
+`reached-by`, not precomputed tables, because a row per statement pair is large and a question
+needs only a few targets.
+
+## Units, one commit each
+
+1. **Typed reads, and a read row for what a node consults.** A CFG node's `reads` become one
+   list of `Read(name, kind)`, `kind` one of two values, chosen because today's consumers need
+   exactly one distinction: `COPIED` (the bytes are what the statement moves) or `CONSULTED`
+   (the value decides which data is taken or where control goes: a subscript, a `READ`/`START`
+   key, a CICS `RIDFLD`, a test's operands). Finer distinctions (key against branch condition)
+   are already on the node. Selectors were left out of `reads` before, by the rule that a
+   selector is not provenance; they now enter as `CONSULTED`, and every consumer that treats a
+   read as provenance (an unmodelled write's sources, the data-dependency query, co-assignment,
+   the PERFORM footprint) takes `COPIED` reads only. The fixpoint writes a `defs.jsonl` row for
+   each extent a node consults, `kind: consulted`, beside the move-source rows, now
+   `kind: copied`. No row is added for a copied read the transfer does not model as a move (a
+   COMMAREA, a CALL argument): such a row covered a whole record with reasons true of only part
+   of it, and the combine applied them to the rest. The combine, the query and the aggregate
+   matrix read `copied` rows only. On CardDemo every other fixpoint table is byte-identical, the
+   copied rows equal the old rows, and the stage runs about 3% slower.
+2. **Origins of bytes (A).** `cobble query origins PROGRAM NODE EXTENT`: walk back from the bytes
+   read at a node through their definers and those definers' flow edges, unbounded, each edge
+   taken once. Bytes map through `landing`; an edge with no `landing` (rewritten, or place
+   unknown) makes the target depend on its whole source. Each step keeps the extents' may/must
+   precision. Output: each origin (kind, name) and the bytes of the start it fills, and whether
+   a may-write lies on the way.
+3. **Statement reachability (B).** `cobble query reaching PROGRAM NODE`: every statement that can
+   reach NODE, under the walk's own rules: PERFORM and RETURN edges not followed, control past a
+   PERFORM only through its `resume`, a range entered through its PERFORM edge, a route back to
+   an open range's PERFORM refused. Built from the CFG and `PerformRanges`, not from a second
+   statement of the rules.
+4. **Navigation closure (C).** Programs reachable from a program over XCTL and XCTL_CANDIDATE.
+   Check first whether combine or the knowledge graph already answers it.
+5. **The three questions,** answered by `jq` joins over cobble's outputs, each interpretation
+   listed for approval first.
+
+## Testing
+
+Each unit has a synthetic-program test in the style of `tests/dataflow/fixpoint/`, asserting
+whole outputs, mutation-checked; then a CardDemo case whose answer is known from the source.
+
+## Not in scope
+
+Path sensitivity. A test whose outcome makes a later write unreachable is a control fact (B);
+whether a value can reach a write only on paths a test allows is not computed.

@@ -16,7 +16,7 @@ step(p, d, src, k, on, sr, ss + lo - ds, ss + hi - ds) :- need(p, d, r, a, b), f
   xp(de, r, ds, dt), lo = max(a, ds), hi = min(b, dt), lo < hi, xp(se, sr, ss, st), st - ss = dt - ds.
 step(p, d, src, k, on, sr, ss, st) :- need(p, d, r, a, b), fp_flow(src, _, d, k, on, se, de), own(p, src),
   xp(de, r, ds, dt), max(a, ds) < min(b, dt), xp(se, sr, ss, st), st - ss != dt - ds.
-need(p, d2, sr, a, b) :- step(p, d, _, "NONE", _, sr, a, b), fp_def(p, d, ue, d2), xp(ue, sr, us, ut), max(a, us) < min(b, ut).
+need(p, d2, sr, a, b) :- step(p, d, _, "NONE", _, sr, a, b), fp_def(p, d, ue, "copied", d2), xp(ue, sr, us, ut), max(a, us) < min(b, ut).
 .decl origin_hit(p:symbol, d:symbol, okind:symbol, oname:symbol)
 origin_hit(p, d, k, on) :- need(p, d, r, a, b), fp_flow(src, _, d, k, on, "", de), own(p, src), k != "NONE",
   xp(de, r, ds, dt), max(a, ds) < min(b, dt).

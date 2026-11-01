@@ -21,6 +21,8 @@ from cobble.dataflow.srccfg.cfg import (
     merge,
     seq,
 )
+from cobble.dataflow.srccfg.read import Read
+from cobble.dataflow.srccfg.read_kind import ReadKind
 
 
 def _assign(node_id: str, writes: tuple[str, ...] = ("WS-A",)) -> Node:
@@ -30,7 +32,7 @@ def _assign(node_id: str, writes: tuple[str, ...] = ("WS-A",)) -> Node:
         paragraph="MAIN",
         atom=UNRESOLVED,
         writes=writes,
-        reads=("WS-B",),
+        reads=(Read("WS-B", ReadKind.COPIED),),
         transfer="MOVE",
         target="",
     )

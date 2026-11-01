@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from cobble.dataflow.srccfg.read_kind import ReadKind
 from pydantic import BaseModel, ConfigDict
 
 
@@ -16,3 +17,4 @@ class ReachingRow(BaseModel):
     definers: tuple[str, ...]
     values: tuple[str, ...]
     reasons: tuple[str, ...]
+    kind: ReadKind

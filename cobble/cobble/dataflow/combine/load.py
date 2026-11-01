@@ -18,6 +18,7 @@ from cobble.dataflow.jumps.fact import Fact
 from cobble.dataflow.jumps.jump import Jump
 from cobble.dataflow.jumps.jump_kind import JumpKind
 from cobble.dataflow.jumps.rows import jump_from_row
+from cobble.dataflow.srccfg.read_kind import ReadKind
 
 _FLOWS_TO = "FLOWS_TO"
 _T = TypeVar("_T")
@@ -51,6 +52,7 @@ def _def_facts(
             (byte_range(rows.text(row, "extent"), program), _def_fact(row)),
         )
         for row in rows.read(member / "defs.jsonl")
+        if rows.text(row, "kind") == ReadKind.COPIED.value
     )
 
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from cobol_asg.asg_types import CobolASG
 
+from cobble.dataflow.srccfg.read import names_of
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.srccfg.build import build_program
 from cobble.dataflow.srccfg.link import (
@@ -153,7 +154,9 @@ def test_a_dynamic_call_depends_on_no_program_node() -> None:
     )
     node = cfg.node("MAIN/0")
 
-    assert not [name for name in (*node.writes, *node.reads) if "PROGRAM:" in name]
+    assert not [
+        name for name in (*node.writes, *names_of(node.reads)) if "PROGRAM:" in name
+    ]
 
 
 def test_a_dynamic_program_name_is_unresolved_and_keeps_the_field_name() -> None:

@@ -21,6 +21,7 @@ from cobble.dataflow.fields.transfer import write_operands
 from cobble.dataflow.srccfg.conditions import condition_index
 from cobble.dataflow.srccfg.literals import is_literal
 from cobble.dataflow.srccfg.program import program_cfg
+from cobble.dataflow.srccfg.read import names_of
 from cobble.dataflow.srccfg.statements import statement_index
 from cobol_asg.asg_types import CobolASG
 from cobol_asg.cobol_expression import FieldRefNode, RefModNode
@@ -105,7 +106,7 @@ def _named_by_cfg(asg: CobolASG, typed: frozenset[str]) -> Iterator[RefModOperan
     return (
         RefModOperand(name=name)
         for node in program_cfg(asg).nodes
-        for name in (*node.writes, *node.reads)
+        for name in (*node.writes, *names_of(node.reads))
         if name
         and not name.startswith(IDENTITY_PREFIXES)
         and name.upper() not in conditions

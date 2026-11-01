@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import pytest
 from cobble.dataflow.srccfg.cfg import Atom, Cfg, Edge, EdgeKind, Node, NodeKind
+from cobble.dataflow.srccfg.read import Read
+from cobble.dataflow.srccfg.read_kind import ReadKind
 from cobble.dataflow.srccfg.subgraph import (
     SubgraphError,
     bridged_focus,
@@ -54,7 +56,7 @@ def test_a_move_is_labelled_with_its_operands() -> None:
         kind=NodeKind.ASSIGN,
         paragraph="A",
         transfer="MOVE",
-        reads=("WS-X",),
+        reads=(Read("WS-X", ReadKind.COPIED),),
         writes=("WS-Y",),
     )
 

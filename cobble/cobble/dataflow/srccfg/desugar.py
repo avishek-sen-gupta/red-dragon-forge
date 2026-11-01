@@ -29,6 +29,7 @@ from cobble.dataflow.depgraph.flows import (
     ProgramContext,
     blocks_of,
     operand_names,
+    selector_names,
     verb_of,
 )
 from cobble.dataflow.srccfg.argument_mode import ArgumentMode
@@ -59,7 +60,10 @@ from cobble.dataflow.srccfg.conditions import (
     read_when_object,
     resolve_atom,
 )
+from cobble.dataflow.srccfg.literals import is_literal
 from cobble.dataflow.srccfg.paragraphs import end_id
+from cobble.dataflow.srccfg.read import Read, reads_of
+from cobble.dataflow.srccfg.read_kind import ReadKind
 from cobble.dataflow.srccfg.synthetic import (
     HANDLER_ANY,
     IGNORED,
@@ -214,7 +218,7 @@ def _plain(statement, ctx: Ctx, path: str) -> Fragment:
         ),
         paragraph=ctx.paragraph,
         writes=writes,
-        reads=reads,
+        reads=_with_selectors(statement, reads),
         transfer=verb_of(statement) or _fallback_verb(kind),
         span=ctx.span,
     )
@@ -416,7 +420,7 @@ def _plain_without_arms(statement, ctx: Ctx, path: str) -> Fragment:
             ),
             paragraph=ctx.paragraph,
             writes=writes,
-            reads=reads,
+            reads=_with_selectors(statement, reads),
             transfer=verb_of(statement) or _fallback_verb(kind),
             span=ctx.span,
         )
@@ -465,8 +469,27 @@ def _test(atom, ctx: Ctx, path: str, slot: str) -> CondFragment:
         paragraph=ctx.paragraph,
         span=ctx.span,
         atom=resolve_atom(atom, ctx.index),
+        reads=_test_reads(atom, resolve_atom(atom, ctx.index)),
     )
     return _exits_of(node)
+
+
+def _test_reads(condition, atom: Atom) -> tuple[Read, ...]:
+    """A test consults its operands and whatever subscripts them."""
+    operands = tuple(
+        name for name in (atom.left, atom.right) if name and not is_literal(name)
+    )
+    return reads_of(
+        _dedupe((*operands, *selector_names(condition))), ReadKind.CONSULTED
+    )
+
+
+def _with_selectors(statement, names: tuple[str, ...]) -> tuple[Read, ...]:
+    """What a statement copies, then what picks the values it copies."""
+    return (
+        *reads_of(names, ReadKind.COPIED),
+        *reads_of(selector_names(statement), ReadKind.CONSULTED),
+    )
 
 
 def _swap(inner: CondFragment) -> CondFragment:
@@ -857,7 +880,9 @@ def _computed_goto(form, targets, ctx: Ctx, path: str) -> Fragment:
         kind=NodeKind.CALL,
         paragraph=ctx.paragraph,
         span=ctx.span,
-        reads=operand_names((getattr(form, "index", ""),)),
+        reads=reads_of(
+            operand_names((getattr(form, "index", ""),)), ReadKind.CONSULTED
+        ),
         transfer=DISPATCH_TRANSFER,
     )
     branches = tuple(
@@ -982,7 +1007,7 @@ def _times_test(spec: PerformTimesSpec, ctx: Ctx, path: str) -> CondFragment:
         paragraph=ctx.paragraph,
         span=ctx.span,
         atom=Atom(text=f"{times} TIMES", left=times, op=TIMES_OP),
-        reads=_dedupe(spec_reads(spec.times)),
+        reads=reads_of(_dedupe(spec_reads(spec.times)), ReadKind.CONSULTED),
     )
     return _exits_of(node)
 
@@ -1130,7 +1155,7 @@ def _step_node(
         paragraph=ctx.paragraph,
         span=ctx.span,
         writes=_dedupe((variable,)),
-        reads=_dedupe(reads),
+        reads=reads_of(_dedupe(reads), ReadKind.COPIED),
         transfer="SET",
     )
 
@@ -1228,7 +1253,10 @@ def _arm(statement, ctx: Ctx, path: str, verb: str) -> Fragment:
             paragraph=ctx.paragraph,
             span=ctx.span,
             writes=tuple(handler_field(name) for name, _ in options),
-            reads=_dedupe(_armed_value(value, verb) for _, value in options),
+            reads=reads_of(
+                _dedupe(_armed_value(value, verb) for _, value in options),
+                ReadKind.COPIED,
+            ),
             transfer=verb,
         )
     )
@@ -1415,7 +1443,7 @@ def _dispatch_fragment(ctx: Ctx, path: str) -> Fragment:
         kind=NodeKind.CALL,
         paragraph=ctx.paragraph,
         span=ctx.span,
-        reads=(HANDLER_ANY,),
+        reads=(Read(HANDLER_ANY, ReadKind.CONSULTED),),
         transfer=DISPATCH_TRANSFER_CICS,
     )
     return Fragment(nodes=(dispatch,), edges=(), entry=dispatch.id, exits=())
@@ -1480,7 +1508,7 @@ def _cobol_call(statement, ctx: Ctx, path: str) -> Fragment:
         paragraph=ctx.paragraph,
         span=ctx.span,
         writes=writes,
-        reads=reads,
+        reads=_with_selectors(statement, reads),
         transfer=CALL_TRANSFER,
         target=_callee_name(callee),
         target_resolved=not callee.resolved_at_runtime,

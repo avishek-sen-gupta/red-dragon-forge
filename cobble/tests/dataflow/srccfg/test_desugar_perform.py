@@ -8,6 +8,8 @@ prunes that, and it belongs to the reaching-conditions pass, not here.
 
 from __future__ import annotations
 
+from cobble.dataflow.srccfg.read import Read, names_of
+from cobble.dataflow.srccfg.read_kind import ReadKind
 from cobble.dataflow.depgraph.flows import program_context
 
 from cobble.dataflow.srccfg.build import (
@@ -287,7 +289,7 @@ def test_perform_times_is_a_loop_whose_test_names_the_count(program_of) -> None:
 
     test_node = next(n for n in fragment.nodes if n.kind == NodeKind.TEST)
     assert (test_node.atom.left, test_node.atom.op) == ("WS-COUNT", "TIMES")
-    assert test_node.reads == ("WS-COUNT",)
+    assert test_node.reads == (Read("WS-COUNT", ReadKind.CONSULTED),)
 
 
 def test_perform_varying_initialises_steps_and_tests(program_of) -> None:
@@ -310,9 +312,9 @@ def test_perform_varying_initialises_steps_and_tests(program_of) -> None:
 
     by_id = {node.id: node for node in fragment.nodes}
     assert by_id["MAIN/0#init"].writes == ("WS-IDX",)
-    assert by_id["MAIN/0#init"].reads == ("1",)
+    assert names_of(by_id["MAIN/0#init"].reads) == ("1",)
     assert by_id["MAIN/0#step"].writes == ("WS-IDX",)
-    assert by_id["MAIN/0#step"].reads == ("WS-IDX", "1")
+    assert names_of(by_id["MAIN/0#step"].reads) == ("WS-IDX", "1")
     assert fragment.entry == "MAIN/0#init"
 
 

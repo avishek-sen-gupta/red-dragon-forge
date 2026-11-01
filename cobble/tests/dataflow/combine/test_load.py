@@ -36,6 +36,7 @@ def test_tables_index_facts_flows_jumps_received_and_sites(tmp_path: Path) -> No
                     "definers": [],
                     "values": [],
                     "reasons": ["inbound-linkage"],
+                    "kind": "copied",
                 }
             )
         ],

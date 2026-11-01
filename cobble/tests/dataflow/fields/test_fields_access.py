@@ -9,7 +9,7 @@ import pytest
 from cobble.dataflow.fields.access import (
     AccessRow,
     _is_synthetic,
-    _names_from_node,
+    read_names,
     accesses,
 )
 from cobble.dataflow.fields.access_extent_line import AccessExtentLine
@@ -18,6 +18,9 @@ from cobble.dataflow.fields.access_query import _overlaps, query
 from cobble.dataflow.fields.access_report import cli
 from cobble.dataflow.srccfg.bundle import Bundle, CfgDocumentError, bundle_jsonl
 from cobble.dataflow.srccfg.cfg import Atom, Cfg, Node, NodeKind
+from cobble.dataflow.srccfg.literals import is_literal
+from cobble.dataflow.srccfg.read import reads_of
+from cobble.dataflow.srccfg.read_kind import ReadKind
 from cobble.dataflow.fields.trace_query import ByteRange
 
 # ---------------------------------------------------------------------------
@@ -50,12 +53,17 @@ def test_plain_name_is_not_synthetic():
 
 
 # ---------------------------------------------------------------------------
-# _names_from_node
+# read_names
 # ---------------------------------------------------------------------------
 
 
 def _assign(*reads: str) -> Node:
-    return Node(id="MAIN/0", kind=NodeKind.ASSIGN, paragraph="MAIN", reads=reads)
+    return Node(
+        id="MAIN/0",
+        kind=NodeKind.ASSIGN,
+        paragraph="MAIN",
+        reads=reads_of(reads, ReadKind.COPIED),
+    )
 
 
 def _condition(left: str, right: str, node_id: str = "MAIN/0") -> Node:
@@ -64,27 +72,31 @@ def _condition(left: str, right: str, node_id: str = "MAIN/0") -> Node:
         kind=NodeKind.TEST,
         paragraph="MAIN",
         atom=Atom(text=f"{left} = {right}", left=left, op="==", right=right),
+        reads=reads_of(
+            (name for name in (left, right) if not is_literal(name)),
+            ReadKind.CONSULTED,
+        ),
     )
 
 
 def test_assign_node_uses_reads():
-    assert _names_from_node(_assign("WS-A", "WS-B")) == ("WS-A", "WS-B")
+    assert read_names(_assign("WS-A", "WS-B")) == ("WS-A", "WS-B")
 
 
 def test_test_node_uses_atom_left_right():
-    assert _names_from_node(_condition("WS-STATUS", "'Y'")) == ("WS-STATUS",)
+    assert read_names(_condition("WS-STATUS", "'Y'")) == ("WS-STATUS",)
 
 
 def test_test_node_both_sides_real():
-    assert set(_names_from_node(_condition("WS-A", "WS-B"))) == {"WS-A", "WS-B"}
+    assert set(read_names(_condition("WS-A", "WS-B"))) == {"WS-A", "WS-B"}
 
 
 def test_names_are_deduped():
-    assert _names_from_node(_assign("WS-A", "WS-A")) == ("WS-A",)
+    assert read_names(_assign("WS-A", "WS-A")) == ("WS-A",)
 
 
 def test_synthetics_filtered_from_reads():
-    assert _names_from_node(_assign("%HANDLER", "WS-REAL", "FILE:X")) == ("WS-REAL",)
+    assert read_names(_assign("%HANDLER", "WS-REAL", "FILE:X")) == ("WS-REAL",)
 
 
 # ---------------------------------------------------------------------------

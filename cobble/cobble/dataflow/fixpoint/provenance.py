@@ -24,6 +24,7 @@ from cobble.dataflow.fixpoint.flow_attrs import FlowAttrs
 from cobble.dataflow.fixpoint.member_counts import MemberCounts
 from cobble.dataflow.fixpoint.reaching_row import ReachingRow
 from cobble.dataflow.fixpoint.sink_row import SinkRow
+from cobble.dataflow.srccfg.read_kind import ReadKind
 from cobble.knowledge_graph.graph_file import read_graph_rows
 from cobble.knowledge_graph.graph_types import EdgeKind, GraphEdge
 from cobol_memory.region_id import RegionId
@@ -54,7 +55,13 @@ def _stale(directory: Path, why: str) -> MissingProvenance:
 
 _Reaching = Mapping[tuple[str, str], ReachingRow]
 _UNREACHED = ReachingRow(
-    program="", node="", extent="", definers=(), values=(), reasons=()
+    program="",
+    node="",
+    extent="",
+    definers=(),
+    values=(),
+    reasons=(),
+    kind=ReadKind.COPIED,
 )
 
 
@@ -62,7 +69,7 @@ def _definers(directory: Path) -> _Reaching:
     found = (
         ReachingRow.model_validate(row) for row in rows.stream(directory / DEFS_FILE)
     )
-    return {(row.node, row.extent): row for row in found}
+    return {(row.node, row.extent): row for row in found if row.kind is ReadKind.COPIED}
 
 
 def _from_entry(source: ByteRange, reaching: ReachingRow) -> bool:

@@ -4,6 +4,8 @@ unreachable or as unguarded."""
 
 from __future__ import annotations
 
+from cobble.dataflow.srccfg.read import Read, names_of
+from cobble.dataflow.srccfg.read_kind import ReadKind
 from cobble.dataflow.depgraph.flows import program_context
 
 from cobble.dataflow.srccfg.cfg import NodeKind
@@ -77,7 +79,10 @@ def test_a_computed_goto_emits_one_node_per_target(program_of) -> None:
     )
 
     dispatch = fragment.nodes[0]
-    assert (dispatch.transfer, dispatch.reads) == (DISPATCH_TRANSFER, ("WS-IDX",))
+    assert (dispatch.transfer, dispatch.reads) == (
+        DISPATCH_TRANSFER,
+        (Read("WS-IDX", ReadKind.CONSULTED),),
+    )
     assert [n.target for n in fragment.nodes[1:]] == ["1000-A", "2000-B"]
     assert [n.id for n in fragment.nodes[1:]] == ["MAIN/0#goto.0", "MAIN/0#goto.1"]
 

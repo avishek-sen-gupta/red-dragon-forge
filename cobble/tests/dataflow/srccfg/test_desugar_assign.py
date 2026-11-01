@@ -6,6 +6,7 @@ statement moves, and this slice only turns its answer into nodes.
 
 from __future__ import annotations
 
+from cobble.dataflow.srccfg.read import names_of
 from cobble.dataflow.depgraph.flows import program_context
 from cobble.dataflow.srccfg.cfg import EdgeKind, NodeKind
 from cobble.dataflow.srccfg.conditions import condition_index
@@ -36,7 +37,7 @@ def test_a_move_becomes_one_assign_node_naming_what_it_reads_and_writes(
     fragment = _only(program_of, _move("WS-FLAG-A", "WS-FLAG-B"))
 
     node = fragment.nodes[0]
-    assert (node.kind, node.writes, node.reads, node.transfer) == (
+    assert (node.kind, node.writes, names_of(node.reads), node.transfer) == (
         NodeKind.ASSIGN,
         ("WS-FLAG-B",),
         ("WS-FLAG-A",),
@@ -81,7 +82,7 @@ def test_a_literal_source_is_kept_as_a_read(program_of) -> None:
     literal has to survive as the node's source rather than be filtered out."""
     fragment = _only(program_of, _move("'F'", "WS-FLAG-B"))
 
-    assert fragment.nodes[0].reads == ("'F'",)
+    assert names_of(fragment.nodes[0].reads) == ("'F'",)
 
 
 def test_a_compute_reads_every_name_in_its_expression(program_of) -> None:
@@ -103,7 +104,7 @@ def test_a_compute_reads_every_name_in_its_expression(program_of) -> None:
 
     node = fragment.nodes[0]
     assert node.writes == ("WS-TOTAL",)
-    assert set(node.reads) == {"WS-A", "WS-B"}
+    assert set(names_of(node.reads)) == {"WS-A", "WS-B"}
     assert node.transfer == "COMPUTE"
 
 
@@ -115,7 +116,7 @@ def test_initialize_writes_with_no_source(program_of) -> None:
     fragment = _only(program_of, {"type": "INITIALIZE", "operands": ["WS-REC"]})
 
     node = fragment.nodes[0]
-    assert (node.kind, node.writes, node.reads, node.transfer) == (
+    assert (node.kind, node.writes, names_of(node.reads), node.transfer) == (
         NodeKind.ASSIGN,
         ("WS-REC",),
         (),
@@ -131,7 +132,7 @@ def test_display_reads_its_operands_even_though_the_sink_is_outside(program_of) 
     fragment = _only(program_of, {"type": "DISPLAY", "operands": [{"name": "WS-A"}]})
 
     node = fragment.nodes[0]
-    assert (node.kind, node.writes, node.reads, node.transfer) == (
+    assert (node.kind, node.writes, names_of(node.reads), node.transfer) == (
         NodeKind.ASSIGN,
         (),
         ("WS-A",),
@@ -147,7 +148,7 @@ def test_accept_writes_its_target_even_though_the_source_is_outside(program_of) 
     fragment = _only(program_of, {"type": "ACCEPT", "target": {"name": "WS-FLAG-A"}})
 
     node = fragment.nodes[0]
-    assert (node.kind, node.writes, node.reads, node.transfer) == (
+    assert (node.kind, node.writes, names_of(node.reads), node.transfer) == (
         NodeKind.ASSIGN,
         ("WS-FLAG-A",),
         (),
@@ -162,7 +163,7 @@ def test_a_gap_fill_kind_with_no_names_is_assign_not_nop(program_of) -> None:
     fragment = _only(program_of, {"type": "INITIALIZE"})
 
     node = fragment.nodes[0]
-    assert (node.kind, node.writes, node.reads, node.transfer) == (
+    assert (node.kind, node.writes, names_of(node.reads), node.transfer) == (
         NodeKind.ASSIGN,
         (),
         (),
@@ -177,7 +178,7 @@ def test_a_verb_with_no_blocks_becomes_a_nop_that_preserves_flow(program_of) -> 
     fragment = _only(program_of, {"type": "CONTINUE"})
 
     node = fragment.nodes[0]
-    assert (node.kind, node.writes, node.reads, node.transfer) == (
+    assert (node.kind, node.writes, names_of(node.reads), node.transfer) == (
         NodeKind.NOP,
         (),
         (),
@@ -285,7 +286,9 @@ def test_a_statement_writes_its_targets_though_nothing_named_feeds_them(
     ).nodes
 
     assert [
-        (node.kind, node.writes, node.reads) for node in cfg_nodes if "#" not in node.id
+        (node.kind, node.writes, names_of(node.reads))
+        for node in cfg_nodes
+        if "#" not in node.id
     ] == [
         (NodeKind.ASSIGN, ("WS-DATE",), ()),
         (NodeKind.ASSIGN, ("WS-REC", "WS-RESP", "WS-RESP2"), ()),
@@ -353,7 +356,9 @@ def test_a_statement_reads_what_it_hands_out_of_the_program(program_of) -> None:
     )
     nodes = lower_statements(asg.paragraphs[0].statements, _ctx(asg), "").nodes
 
-    assert [(node.writes, node.reads) for node in nodes if "#" not in node.id] == [
+    assert [
+        (node.writes, names_of(node.reads)) for node in nodes if "#" not in node.id
+    ] == [
         (("TRANSID:T001",), ("WS-COMM",)),
         ((), ("WS-MSG",)),
         ((), ("WS-DATA",)),
@@ -385,7 +390,9 @@ def test_a_file_statement_names_the_record_its_fd_declares(program_of) -> None:
     )
     nodes = lower_statements(asg.paragraphs[0].statements, _ctx(asg), "").nodes
 
-    assert [(node.writes, node.reads) for node in nodes if "#" not in node.id] == [
+    assert [
+        (node.writes, names_of(node.reads)) for node in nodes if "#" not in node.id
+    ] == [
         (("FD-CARD-REC",), ("FILE:CARD-INPUT",)),
         (("WS-COPY", "FD-CARD-REC"), ("FILE:CARD-INPUT",)),
         (("FILE:CARD-OUTPUT",), ("OUT-REC",)),
@@ -412,7 +419,7 @@ def test_a_set_reads_the_field_it_copies_and_no_literal(program_of) -> None:
     )
     nodes = lower_statements(asg.paragraphs[0].statements, _ctx(asg), "").nodes
 
-    assert [(node.writes, node.reads) for node in nodes] == [
+    assert [(node.writes, names_of(node.reads)) for node in nodes] == [
         (("WS-IX",), ("WS-N",)),
         (("WS-DONE",), ()),
         (("WS-IX",), ()),

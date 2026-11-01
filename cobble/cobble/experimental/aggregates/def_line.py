@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from cobble.dataflow.srccfg.read_kind import ReadKind
 from pydantic import BaseModel, ConfigDict
 
 
@@ -14,3 +15,4 @@ class DefLine(BaseModel):
     node: str
     extent: str
     definers: tuple[str, ...]
+    kind: ReadKind

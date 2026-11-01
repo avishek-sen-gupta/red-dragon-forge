@@ -82,6 +82,7 @@ def defs_row(
                 "definers": list(definers),
                 "values": [],
                 "reasons": list(reasons),
+                "kind": "copied",
             }
         ),
     )

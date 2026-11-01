@@ -9,6 +9,7 @@ from cobble.dataflow.srccfg.cfg import (
     NodeKind,
     SourceSpan,
 )
+from cobble.dataflow.srccfg.read import Read
 from cobble.dataflow.srccfg.rows.cfg_row_type import CfgRowType
 from cobble.dataflow.srccfg.using_argument import UsingArgument
 from cobol_asg.ref_mod import RefModOperand
@@ -42,7 +43,7 @@ class CfgNodeRow(BaseModel):
     paragraph: str
     atom: Atom
     writes: tuple[str, ...]
-    reads: tuple[str, ...]
+    reads: tuple[Read, ...]
     transfer: str
     target: str
     target_resolved: bool

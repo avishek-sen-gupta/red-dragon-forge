@@ -10,5 +10,5 @@ src_at(p, d, cat(k, cat(":", on))) :- origin_hit(p, d, k, on).
 multi(p, d) :- src_at(p, d, s1), src_at(p, d, s2), s1 != s2.
 .decl pure(p:symbol, d:symbol)
 pure(p, d) :- cand(p, _, d, _, _, _).
-pure(p, d2) :- pure(p, d), !multi(p, d), step(p, d, _, "NONE", _, sr, a, b), fp_def(p, d, ue, d2), xp(ue, sr, us, ut), max(a, us) < min(b, ut).
+pure(p, d2) :- pure(p, d), !multi(p, d), step(p, d, _, "NONE", _, sr, a, b), fp_def(p, d, ue, "copied", d2), xp(ue, sr, us, ut), max(a, us) < min(b, ut).
 #endif
