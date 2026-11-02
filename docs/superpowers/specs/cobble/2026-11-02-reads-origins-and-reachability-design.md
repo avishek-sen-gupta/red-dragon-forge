@@ -77,7 +77,11 @@ needs only a few targets.
    it. On CardDemo (a) gave the combine the transaction ids its jump facts never carried, so it
    gained 22 `RETURN TRANSID` links, each a program to its own next task, and 10 targets keep
    their candidates but now report `hop-limit`, since their walks follow those links back
-   through earlier tasks. Files crossing between programs come after.
+   through earlier tasks. The user had (b) and (c) done in one commit. The step keeps a
+   non-storage write as an `origin` stop, at the bytes it wrote, naming the writer and the origin;
+   the combine's answers ignore it. On CardDemo 616 storage edges have no `landing` and one has a
+   non-zero one; the combine's outputs are byte-identical and its run time is unchanged. Files
+   crossing between programs come after.
 
    **Origins of bytes (A), as first written.** `cobble query origins PROGRAM NODE EXTENT`: walk back from the bytes
    read at a node through their definers and those definers' flow edges, unbounded, each edge

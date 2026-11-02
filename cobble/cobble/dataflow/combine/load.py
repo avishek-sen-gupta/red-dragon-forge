@@ -13,12 +13,15 @@ from cobble.dataflow.combine.target_site import TargetSite
 from cobble.dataflow.fields.extent_text import ByteRange, byte_range
 from cobble.dataflow.fields.values import UnresolvedReason
 from cobble.dataflow.fixpoint import rows
+from cobble.dataflow.fixpoint.flow_attrs import FlowAttrs
+from cobble.dataflow.fixpoint.provenance import stale
 from cobble.dataflow.fixpoint.target_kind import TargetKind
 from cobble.dataflow.jumps.fact import Fact
 from cobble.dataflow.jumps.jump import Jump
 from cobble.dataflow.jumps.jump_kind import JumpKind
 from cobble.dataflow.jumps.rows import jump_from_row
 from cobble.dataflow.srccfg.read_kind import ReadKind
+from pydantic import ValidationError
 
 _FLOWS_TO = "FLOWS_TO"
 _T = TypeVar("_T")
@@ -100,17 +103,28 @@ def _site_facts(
 def _flows(member: Path, program: str) -> tuple[tuple[str, Flow], ...]:
     return tuple(
         (
-            rows.text(attrs, "node"),
+            attrs.node,
             Flow(
-                rows.text(attrs, "node"),
-                byte_range(rows.text(attrs, "source_extent"), program),
-                byte_range(rows.text(attrs, "target_extent"), program),
+                attrs.node,
+                byte_range(attrs.source_extent, program),
+                byte_range(attrs.target_extent, program),
+                attrs.origin,
+                attrs.landing,
             ),
         )
         for row in rows.read(member / "graph.jsonl")
         if rows.text(row, "type") == "edge" and rows.text(row, "kind") == _FLOWS_TO
-        for attrs in (rows.nested(row, "attrs"),)
+        for attrs in (_attrs(member, row),)
     )
+
+
+def _attrs(member: Path, row: rows.Row) -> FlowAttrs:
+    try:
+        return FlowAttrs.model_validate(rows.nested(row, "attrs"))
+    except ValidationError as error:
+        raise stale(
+            member, "an edge lacks its typed origin, landing or rebuilt flag"
+        ) from error
 
 
 def _jumps(member: Path) -> tuple[Jump, ...]:

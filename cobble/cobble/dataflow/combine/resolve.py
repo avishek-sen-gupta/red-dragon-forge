@@ -1,4 +1,4 @@
-"""Resolve what some bytes hold at one node, walking back to received, returned and retrieved bytes."""
+"""Resolve what some bytes hold at one node, walking back to received, returned and retrieved bytes and to origins outside storage."""
 
 from collections.abc import Callable
 from dataclasses import replace
@@ -127,48 +127,65 @@ def _through(
 ) -> Step:
     written = _overlap(part, flow.target)
     if not flow.source.known:
-        return _synthetic(tables, writer, written, fact), ()
-    offset = flow.source.start - flow.target.start
-    source = replace(
-        flow.source,
-        start=written.start + offset,
-        end=min(flow.source.end, written.end + offset),
-    )
+        return _synthetic(tables, writer, flow, written, fact), ()
+    source = _landed(flow, written)
     if source.start >= source.end:
         return Resolution(), ()
     return Resolution(), ((writer, source),)
 
 
+def _landed(flow: Flow, written: ByteRange) -> ByteRange:
+    """The source bytes that landed on ``written``: all of them when the statement
+    did not move them unchanged, or moved them into a clamped target, whose bytes
+    nothing places."""
+    if not flow.landing or not flow.target.exact:
+        return flow.source
+    offset = flow.source.start - flow.target.start - flow.landing[0]
+    return replace(
+        flow.source,
+        start=max(flow.source.start, written.start + offset),
+        end=min(flow.source.end, written.end + offset),
+    )
+
+
 def _synthetic(
-    tables: ProgramTables, writer: str, written: ByteRange, fact: Fact
+    tables: ProgramTables, writer: str, flow: Flow, written: ByteRange, fact: Fact
 ) -> Resolution:
-    if writer not in tables.jumps:
-        return _unknown(fact)
-    return _at_jump(tables, tables.jumps[writer], written, fact)
+    crossing = (
+        _at_jump(tables, tables.jumps[writer], written)
+        if writer in tables.jumps
+        else Resolution()
+    )
+    if crossing.stops:
+        return crossing
+    return joined(
+        _unknown(fact),
+        Resolution(
+            stops=frozenset(
+                {Stop(StopKind.ORIGIN, at=written, node=writer, origin=flow.origin)}
+            )
+        ),
+    )
 
 
-def _at_jump(
-    tables: ProgramTables, jump: Jump, written: ByteRange, fact: Fact
-) -> Resolution:
+def _at_jump(tables: ProgramTables, jump: Jump, written: ByteRange) -> Resolution:
     if jump.kind in _CALLS:
-        return _returned(tables, jump, written, fact)
+        return _returned(tables, jump, written)
     if jump.kind is JumpKind.RETRIEVE:
         return Resolution(
             stops=frozenset({Stop(StopKind.RETRIEVED, at=written, node=jump.node)})
         )
-    return _unknown(fact)
+    return Resolution()
 
 
-def _returned(
-    tables: ProgramTables, jump: Jump, written: ByteRange, fact: Fact
-) -> Resolution:
+def _returned(tables: ProgramTables, jump: Jump, written: ByteRange) -> Resolution:
     params = tuple(
         area.param
         for area in jump.areas
         if byte_range(area.extent, tables.program).covers(written)
     )[:1]
     if not params:
-        return _unknown(fact)
+        return Resolution()
     return Resolution(
         stops=frozenset(
             {Stop(StopKind.RETURNED, at=written, node=jump.node, param=params[0])}

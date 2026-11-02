@@ -7,4 +7,5 @@ class StopKind(Enum):
     RECEIVED = "received"
     RETURNED = "returned"
     RETRIEVED = "retrieved"
+    ORIGIN = "origin"
     UNKNOWN = "unknown"

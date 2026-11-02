@@ -317,7 +317,13 @@ The run report goes to stderr. `cobble-build --dynamic-call-targets` and
 
 Each round walks back from every jump's target bytes, through copies within a program and across
 links. What the walk knows about bytes at a statement is that statement's `copied` rows in
-`defs.jsonl`, and at a jump its `consulted` ones as well. A place is a program, a node and a byte range, told apart by its bytes alone, so the same bytes
+`defs.jsonl`, and at a jump its `consulted` ones as well. Within a program the walk follows each `FLOWS_TO`
+edge back by its `landing`: a byte of the target maps to the source byte that landed on it, and
+target bytes no source byte landed on, a numeric move's leading zeros, are not followed. An edge
+with no `landing` (arithmetic, `STRING`, a move between formats) or into a clamped target makes
+each byte it wrote depend on all of its source. A write from outside storage, a literal, a file
+or a map, ends the walk there with its origin's kind and name; a `CALL`'s or `LINK`'s result and
+a `RETRIEVE` cross programs instead. A place is a program, a node and a byte range, told apart by its bytes alone, so the same bytes
 under a group, elementary or `REDEFINES` name are one place. Every place is answered once per
 round, and within a program once per run, however many walks reach it. The progress log names
 the jump being answered and how many places are done.
