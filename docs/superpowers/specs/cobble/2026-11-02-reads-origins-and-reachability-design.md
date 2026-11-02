@@ -67,6 +67,10 @@ needs only a few targets.
    it has to cross programs. The combine already walks back across them -- into callers, into a
    called program's exits, into the next task of a `RETURN TRANSID`, into a `START`er -- but
    only for the values that name a dynamic target, and its step inside a program maps byte *i*
+   **Origins of bytes (A), revised.** A walk inside one program was proposed first and refused:
+   it has to cross programs. The combine already walks back across them -- into callers, into a
+   called program's exits, into the next task of a `RETURN TRANSID`, into a `START`er -- but
+   only for the values that name a dynamic target, and its step inside a program maps byte *i*
    to byte *i* and drops non-storage origins. Three fixes there were planned: (a) the combine's
    facts at jumps, (b) the step maps bytes by `landing`, an edge without one depending on its
    whole source, (c) it keeps origin kinds. (a) was first built as per-piece `defs.jsonl` rows
@@ -76,11 +80,12 @@ needs only a few targets.
    with outputs byte-identical to the per-piece rows'; those rows split a field's writers in 8 of
    329,627 fields, which no output read, and halved a two-second combine, which was not judged
    worth a second copy of the facts. 10 targets keep their candidates but now report
-   `hop-limit`, since their walks follow those links back through earlier tasks. The user had (b)
-   and (c) done in one commit. The step keeps a non-storage write as an `origin` stop, at the
-   bytes it wrote, naming the writer and the origin; the combine's answers ignore it. On CardDemo
-   616 storage edges have no `landing` and one has a non-zero one; the combine's outputs are
-   byte-identical and its run time is unchanged. Files crossing between programs come after.
+   `hop-limit`, since their walks follow those links back through earlier tasks. (b) and (c)
+   were built in one commit and reverted: on CardDemo the combine's outputs were byte-identical
+   and nothing read the origin stops. The origins query was not built; the balance question was
+   answered by joins over the existing tables, with its gaps listed.
+
+   **Origins of bytes (A), as first written.** `cobble query origins PROGRAM NODE EXTENT`: walk back from the bytes
 
    **Origins of bytes (A), as first written.** `cobble query origins PROGRAM NODE EXTENT`: walk back from the bytes
    read at a node through their definers and those definers' flow edges, unbounded, each edge

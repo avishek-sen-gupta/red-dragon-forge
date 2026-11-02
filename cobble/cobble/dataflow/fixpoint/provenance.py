@@ -48,7 +48,7 @@ def _members(fixpoint_dir: Path) -> tuple[Path, ...]:
     )
 
 
-def stale(directory: Path, why: str) -> MissingProvenance:
+def _stale(directory: Path, why: str) -> MissingProvenance:
     return MissingProvenance(
         f"{directory} has no provenance ({why}); rerun cobble-dataflow-fixpoint with --force"
     )
@@ -94,7 +94,7 @@ def _attrs(directory: Path, edge: GraphEdge) -> FlowAttrs:
     try:
         return FlowAttrs.model_validate(edge.attrs)
     except ValidationError as error:
-        raise stale(
+        raise _stale(
             directory, "an edge lacks its typed origin, landing or rebuilt flag"
         ) from error
 
@@ -103,7 +103,7 @@ def _sink(directory: Path, row: rows.Row) -> SinkRow:
     try:
         return SinkRow.model_validate(row)
     except ValidationError as error:
-        raise stale(directory, "a sink row lacks its typed sink") from error
+        raise _stale(directory, "a sink row lacks its typed sink") from error
 
 
 def _flow(program: str, attrs: FlowAttrs, definers: _Reaching) -> DepRow:
@@ -150,7 +150,7 @@ def _sunk(program: str, row: SinkRow, definers: _Reaching) -> DepRow:
 def _member_rows(directory: Path, number: int, total: int) -> Iterator[DepRow]:
     logger.info("provenance: members read %d/%d (%s)", number, total, directory.name)
     if not (directory / SINKS_FILE).is_file():
-        raise stale(directory, f"no {SINKS_FILE}")
+        raise _stale(directory, f"no {SINKS_FILE}")
     counts = MemberCounts.model_validate_json(
         (directory / COUNTS_FILE).read_text(encoding="utf-8")
     )

@@ -4,7 +4,6 @@ from dataclasses import dataclass
 
 from cobble.dataflow.combine.stop_kind import StopKind
 from cobble.dataflow.fields.extent_text import NO_RANGE, ByteRange
-from cobble.dataflow.fields.origin import NO_ORIGIN, Origin
 from cobble.dataflow.fields.values import UnresolvedReason
 
 
@@ -15,4 +14,3 @@ class Stop:
     node: str = ""
     param: int = 0
     reasons: tuple[UnresolvedReason, ...] = ()
-    origin: Origin = NO_ORIGIN

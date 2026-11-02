@@ -7,8 +7,6 @@ from cobble.dataflow.combine.resolve import resolve
 from cobble.dataflow.combine.stop import Stop
 from cobble.dataflow.combine.stop_kind import StopKind
 from cobble.dataflow.fields.extent_text import NO_RANGE, ByteRange, byte_range
-from cobble.dataflow.fields.origin import Origin
-from cobble.dataflow.fields.origin_kind import OriginKind
 from cobble.dataflow.fields.values import UnresolvedReason
 from cobble.dataflow.jumps.fact import Fact
 from cobble.dataflow.jumps.jump import Jump
@@ -75,56 +73,10 @@ def test_a_reference_modified_copy_rebases_onto_the_right_source_bytes() -> None
             "J": ((WS, Fact("WS-NEXT@working_storage[0:8]", writers=("M1",))),),
             "M1": ((r("LK-AREA@linkage[0:20]"), Fact("LK-AREA@linkage[0:20]")),),
         },
-        flows={"M1": (Flow("M1", r("LK-AREA@linkage[12:20]"), WS, landing=(0,)),)},
+        flows={"M1": (Flow("M1", r("LK-AREA@linkage[12:20]"), WS),)},
     )
     (stop,) = resolve(t, "J", r("WS-NEXT@working_storage[2:6]")).stops
     assert (stop.kind, stop.at.start, stop.at.end) == (StopKind.RECEIVED, 14, 18)
-
-
-def test_a_copy_maps_bytes_by_where_its_source_landed_and_any_other_write_takes_it_whole() -> (
-    None
-):
-    """Four display digits moved into six land in the target's last four bytes
-    (landing 2), so the target's first two hold zeros, not source bytes. A write
-    with no landing -- a COMPUTE, a numeric move between formats -- and a move into
-    a clamped target, whose bytes nothing places, depend on all of the source."""
-    lk = r("LK-NUM@linkage[10:14]")
-    num = r("WS-NUM@working_storage[0:6]")
-
-    def moved(flow: Flow) -> ProgramTables:
-        return tables(
-            facts={
-                "J": ((num, Fact("WS-NUM@working_storage[0:6]", writers=("M",))),),
-                "M": (
-                    (
-                        r("LK-AREA@linkage[0:20]"),
-                        Fact(
-                            "LK-AREA@linkage[0:20]",
-                            reasons=(UnresolvedReason.INBOUND_LINKAGE,),
-                        ),
-                    ),
-                ),
-            },
-            flows={"M": (flow,)},
-        )
-
-    landed = moved(Flow("M", lk, num, landing=(2,)))
-    computed = moved(Flow("M", lk, num))
-    clamped = moved(Flow("M", lk, r("WS-NUM@working_storage[0:6]~"), landing=(2,)))
-    middle = r("WS-NUM@working_storage[3:5]")
-
-    assert resolve(landed, "J", middle) == Resolution(
-        stops=frozenset(
-            {Stop(StopKind.RECEIVED, at=r("LK-NUM@linkage[11:13]"), param=0)}
-        )
-    )
-    assert resolve(landed, "J", r("WS-NUM@working_storage[0:2]")) == Resolution()
-    assert resolve(computed, "J", middle) == Resolution(
-        stops=frozenset({Stop(StopKind.RECEIVED, at=lk, param=0)})
-    )
-    assert resolve(clamped, "J", middle) == Resolution(
-        stops=frozenset({Stop(StopKind.RECEIVED, at=lk, param=0)})
-    )
 
 
 def test_bytes_left_by_a_link_and_a_call_stop_as_returned_in_the_right_area() -> None:
@@ -203,15 +155,7 @@ def test_a_retrieve_stop_is_decided_by_its_node_not_its_reason() -> None:
     )
 
 
-PROGM = Origin(OriginKind.LITERAL, "'PROGM'")
-FILE = Origin(OriginKind.FILE, "ACCTFILE")
-
-
-def _literal(at: ByteRange) -> Stop:
-    return Stop(StopKind.ORIGIN, at=at, node="M1", origin=PROGM)
-
-
-def test_a_write_from_outside_storage_stops_at_its_origin_with_its_value() -> None:
+def test_a_literal_write_inside_the_walk_contributes_its_value_only() -> None:
     t = tables(
         facts={
             "J": (
@@ -225,11 +169,9 @@ def test_a_write_from_outside_storage_stops_at_its_origin_with_its_value() -> No
                 ),
             )
         },
-        flows={"M1": (Flow("M1", NO_RANGE, WS, origin=PROGM),)},
+        flows={"M1": (Flow("M1", NO_RANGE, WS),)},
     )
-    assert resolve(t, "J", WS) == Resolution(
-        values=frozenset({"PROGM   "}), stops=frozenset({_literal(WS)})
-    )
+    assert resolve(t, "J", WS) == Resolution(values=frozenset({"PROGM   "}))
     unsettled = tables(
         facts={
             "J": (
@@ -244,15 +186,12 @@ def test_a_write_from_outside_storage_stops_at_its_origin_with_its_value() -> No
                 ),
             )
         },
-        flows={"M1": (Flow("M1", NO_RANGE, WS, origin=PROGM),)},
+        flows={"M1": (Flow("M1", NO_RANGE, WS),)},
     )
     assert resolve(unsettled, "J", WS) == Resolution(
         values=frozenset({"PROGM   "}),
         stops=frozenset(
-            {
-                _literal(WS),
-                Stop(StopKind.UNKNOWN, reasons=(UnresolvedReason.INCOMPLETE_WALK,)),
-            }
+            {Stop(StopKind.UNKNOWN, reasons=(UnresolvedReason.INCOMPLETE_WALK,))}
         ),
     )
     on_one_branch = tables(
@@ -269,11 +208,11 @@ def test_a_write_from_outside_storage_stops_at_its_origin_with_its_value() -> No
                 ),
             )
         },
-        flows={"M1": (Flow("M1", NO_RANGE, LK, origin=PROGM),)},
+        flows={"M1": (Flow("M1", NO_RANGE, LK),)},
     )
     assert resolve(on_one_branch, "J", LK) == Resolution(
         values=frozenset({"COMEN01C"}),
-        stops=frozenset({_literal(LK), Stop(StopKind.RECEIVED, at=LK, param=0)}),
+        stops=frozenset({Stop(StopKind.RECEIVED, at=LK, param=0)}),
     )
     literal_and_arithmetic = tables(
         facts={
@@ -289,19 +228,12 @@ def test_a_write_from_outside_storage_stops_at_its_origin_with_its_value() -> No
                 ),
             )
         },
-        flows={
-            "M1": (Flow("M1", NO_RANGE, WS, origin=PROGM),),
-            "A1": (Flow("A1", NO_RANGE, WS, origin=FILE),),
-        },
+        flows={"M1": (Flow("M1", NO_RANGE, WS),), "A1": (Flow("A1", NO_RANGE, WS),)},
     )
     assert resolve(literal_and_arithmetic, "J", WS) == Resolution(
         values=frozenset({"PROGM   "}),
         stops=frozenset(
-            {
-                _literal(WS),
-                Stop(StopKind.ORIGIN, at=WS, node="A1", origin=FILE),
-                Stop(StopKind.UNKNOWN, reasons=(UnresolvedReason.NOT_A_LITERAL,)),
-            }
+            {Stop(StopKind.UNKNOWN, reasons=(UnresolvedReason.NOT_A_LITERAL,))}
         ),
     )
 

@@ -3,15 +3,11 @@
 import json
 from pathlib import Path
 
-import pytest
 from cobble.dataflow.combine.flow import Flow
 from cobble.dataflow.combine.load import load_tables
 from cobble.dataflow.combine.target_site import TargetSite
 from cobble.dataflow.fields.extent_text import byte_range
-from cobble.dataflow.fields.origin import Origin
-from cobble.dataflow.fields.origin_kind import OriginKind
 from cobble.dataflow.fields.values import UnresolvedReason
-from cobble.dataflow.fixpoint.provenance import MissingProvenance
 from cobble.dataflow.jumps.fact import Fact
 from cobble.dataflow.jumps.jump import Jump
 from cobble.dataflow.jumps.jump_area import JumpArea
@@ -63,9 +59,6 @@ def test_tables_index_facts_flows_jumps_received_and_sites(tmp_path: Path) -> No
                         "node": "MAIN/2",
                         "source_extent": "LK-FROM@linkage[0:8]",
                         "target_extent": "WS-NEXT@working_storage[0:8]",
-                        "origin": {"kind": "NONE", "name": ""},
-                        "landing": [0],
-                        "rebuilt": False,
                     },
                 }
             ),
@@ -96,9 +89,6 @@ def test_tables_index_facts_flows_jumps_received_and_sites(tmp_path: Path) -> No
                         "node": "MAIN/1",
                         "source_extent": "",
                         "target_extent": "WS-NEXT@working_storage[0:8]",
-                        "origin": {"kind": "LITERAL", "name": "'PROGM'"},
-                        "landing": [],
-                        "rebuilt": False,
                     },
                 }
             ),
@@ -176,15 +166,8 @@ def test_tables_index_facts_flows_jumps_received_and_sites(tmp_path: Path) -> No
         ),
     }
     assert tables.flows == {
-        "MAIN/2": (Flow("MAIN/2", lk, ws, landing=(0,)),),
-        "MAIN/1": (
-            Flow(
-                "MAIN/1",
-                byte_range("", P),
-                ws,
-                origin=Origin(OriginKind.LITERAL, "'PROGM'"),
-            ),
-        ),
+        "MAIN/2": (Flow("MAIN/2", lk, ws),),
+        "MAIN/1": (Flow("MAIN/1", byte_range("", P), ws),),
     }
     assert tables.jumps == {"MAIN/3": jump, "MAIN/4": returned}
     assert tables.received == ((0, byte_range("DFHCOMMAREA@linkage[0:20]", P)),)
@@ -195,33 +178,3 @@ def test_tables_index_facts_flows_jumps_received_and_sites(tmp_path: Path) -> No
         tables.facts_at("MAIN/2", byte_range("X@linkage[2:4]", P))
         == tables.facts["MAIN/2"]
     )
-
-
-def test_a_member_written_before_flows_carried_their_landing_is_refused(
-    tmp_path: Path,
-) -> None:
-    member = tmp_path / "members" / P
-    member.mkdir(parents=True)
-    _write(
-        member,
-        "graph.jsonl",
-        [
-            json.dumps(
-                {
-                    "type": "edge",
-                    "kind": "FLOWS_TO",
-                    "attrs": {
-                        "node": "MAIN/2",
-                        "source_extent": "LK-FROM@linkage[0:8]",
-                        "target_extent": "WS-NEXT@working_storage[0:8]",
-                    },
-                }
-            )
-        ],
-    )
-
-    with pytest.raises(
-        MissingProvenance,
-        match=f"^{member} has no provenance .*rerun cobble-dataflow-fixpoint with --force$",
-    ):
-        load_tables(tmp_path, P)

@@ -316,10 +316,6 @@ def _unknown(world: _World, program: str, stop: Stop) -> _Crossing:
     return _ending(Held(reasons=frozenset(stop.reasons)))
 
 
-def _origin(world: _World, program: str, stop: Stop) -> _Crossing:
-    return _ending(Held())
-
-
 def _outside_callers(world: _World, program: str) -> Held:
     callers = world.outside.known_into.get(program, ())
     if not callers:
@@ -402,7 +398,6 @@ def _retrieved(world: _World, program: str, stop: Stop) -> _Crossing:
 
 _FOLLOW: Mapping[StopKind, _Follow] = {
     StopKind.UNKNOWN: _unknown,
-    StopKind.ORIGIN: _origin,
     StopKind.RECEIVED: _received,
     StopKind.RETURNED: _read_back,
     StopKind.RETRIEVED: _retrieved,
