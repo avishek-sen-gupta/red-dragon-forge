@@ -1,6 +1,6 @@
 """Every jump, exit, RETRIEVE and entry in one program, and what each hands over."""
 
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Mapping
 
 from cics.statements import CicsOperand, ExecCicsStatement
 from cobble.dataflow.fields.aliases import (
@@ -21,7 +21,6 @@ from cobble.dataflow.jumps.jump_area import JumpArea
 from cobble.dataflow.jumps.jump_kind import JumpKind
 from cobble.dataflow.srccfg.cfg import Cfg, Node
 from cobble.dataflow.srccfg.desugar import CALL_TRANSFERS, commarea_field
-from cobble.dataflow.srccfg.read_kind import ReadKind
 from cobol_asg.asg_types import CobolASG
 from cobol_asg.cobol_statements import (
     ExitProgramStatement,
@@ -317,77 +316,3 @@ def _exit(
 
 def returns(node: Node) -> bool:
     return _KINDS[CALL_TRANSFERS[node.transfer]] in _RETURNS
-
-
-Handed = tuple[tuple[FieldExtent, ReadKind], ...]
-
-
-def jump_reads(
-    asg: CobolASG, node: Node, statement: Statement, index: CellIndex
-) -> Handed:
-    """The bytes a jump reads where it stands, as ``jumps_of`` reads them for its facts:
-    where control goes, consulted; what goes with it, copied, whole, for the caller
-    to cut into the pieces its writes left."""
-    if node.transfer in CALL_TRANSFERS:
-        return _cfg_reads(node, index)
-    return _statement_reads(asg, statement, index)
-
-
-def _statement_reads(asg: CobolASG, statement: Statement, index: CellIndex) -> Handed:
-    match statement:
-        case ExecCicsStatement():
-            return tuple(
-                read
-                for kind in _cics_kind(statement)
-                for read in _cics_reads(asg, statement, kind, index)
-            )
-        case GobackStatement() | ExitProgramStatement() | StopRunStatement():
-            return _exit_reads(asg, index)
-        case _:
-            return ()
-
-
-def _consulted(extents: Iterable[FieldExtent]) -> Handed:
-    return tuple((extent, ReadKind.CONSULTED) for extent in extents)
-
-
-def _copied(operand: str, index: CellIndex) -> Handed:
-    if not operand:
-        return ()
-    return tuple((extent, ReadKind.COPIED) for extent in area_extents(operand, index))
-
-
-def _cfg_reads(node: Node, index: CellIndex) -> Handed:
-    target = (
-        ()
-        if node.target_resolved
-        else _consulted(operand_occurrence_extents(node.target_operand, index))
-    )
-    if _KINDS[CALL_TRANSFERS[node.transfer]] is JumpKind.CALL:
-        return (
-            *target,
-            *(
-                read
-                for argument in node.using
-                for read in _copied(argument.name, index)
-            ),
-        )
-    return (*target, *_copied(commarea_field(node), index))
-
-
-def _cics_reads(
-    asg: CobolASG, statement: ExecCicsStatement, kind: JumpKind, index: CellIndex
-) -> Handed:
-    if kind is JumpKind.EXIT:
-        return _exit_reads(asg, index)
-    if kind is JumpKind.RETRIEVE:
-        return ()
-    transid = _option(statement, "TRANSID")
-    return (
-        *(() if transid.is_literal else _consulted(area_extents(transid.text, index))),
-        *_copied(_option(statement, _CICS_OPTION[kind]).text, index),
-    )
-
-
-def _exit_reads(asg: CobolASG, index: CellIndex) -> Handed:
-    return tuple((extent, ReadKind.COPIED) for _, extent in received_areas(asg, index))

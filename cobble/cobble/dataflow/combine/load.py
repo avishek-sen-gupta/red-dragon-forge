@@ -47,18 +47,15 @@ def _def_fact(row: rows.Row) -> Fact:
 
 
 def _def_facts(
-    member: Path, program: str, jumps: frozenset[str]
+    member: Path, program: str
 ) -> tuple[tuple[str, tuple[ByteRange, Fact]], ...]:
-    """Every copied read, and what a jump consults to decide where control goes: a
-    test's operand or a subscript elsewhere says nothing about the bytes it moves."""
     return tuple(
         (
-            node,
+            rows.text(row, "node"),
             (byte_range(rows.text(row, "extent"), program), _def_fact(row)),
         )
         for row in rows.read(member / "defs.jsonl")
-        for node in (rows.text(row, "node"),)
-        if rows.text(row, "kind") == ReadKind.COPIED.value or node in jumps
+        if rows.text(row, "kind") == ReadKind.COPIED.value
     )
 
 
@@ -97,6 +94,19 @@ def _site_facts(
         (node, (byte_range(site.operand.extent, program), site.operand))
         for node, site in sites.items()
         if site.operand.extent
+    )
+
+
+def _jump_facts(jump: Jump) -> tuple[tuple[str, tuple[ByteRange, Fact]], ...]:
+    facts = (
+        jump.target,
+        jump.transid,
+        *(field for area in jump.areas for field in area.fields),
+    )
+    return tuple(
+        (jump.node, (byte_range(fact.extent, jump.program), fact))
+        for fact in facts
+        if fact.extent
     )
 
 
@@ -146,7 +156,8 @@ def load_tables(fixpoint_dir: Path, program: str) -> ProgramTables:
         program=program,
         facts=_grouped(
             (
-                *_def_facts(member, program, frozenset(j.node for j in real)),
+                *_def_facts(member, program),
+                *(f for jump in real for f in _jump_facts(jump)),
                 *_site_facts(sites, program),
             )
         ),

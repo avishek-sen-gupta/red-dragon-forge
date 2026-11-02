@@ -67,21 +67,20 @@ needs only a few targets.
    it has to cross programs. The combine already walks back across them -- into callers, into a
    called program's exits, into the next task of a `RETURN TRANSID`, into a `START`er -- but
    only for the values that name a dynamic target, and its step inside a program maps byte *i*
-   to byte *i*, drops non-storage origins, and reads one merged writer list per field at jumps.
-   The origins query reuses the combine's crossings after three fixes there, each its own commit:
-   (a) a jump's reads get per-piece `defs.jsonl` rows -- `consulted` for its target and
-   transaction id, `copied` for what it hands over, and at a program's exits for its `LINKAGE` --
-   and the combine reads those instead of `jumps.jsonl`'s merged facts; (b) the step maps bytes
-   by `landing`, an edge without one depending on its whole source; (c) it keeps origin kinds.
-   Unit 1's reason for leaving copied rows out at calls was coarse rows; per-piece rows remove
-   it. On CardDemo (a) gave the combine the transaction ids its jump facts never carried, so it
-   gained 22 `RETURN TRANSID` links, each a program to its own next task, and 10 targets keep
-   their candidates but now report `hop-limit`, since their walks follow those links back
-   through earlier tasks. The user had (b) and (c) done in one commit. The step keeps a
-   non-storage write as an `origin` stop, at the bytes it wrote, naming the writer and the origin;
-   the combine's answers ignore it. On CardDemo 616 storage edges have no `landing` and one has a
-   non-zero one; the combine's outputs are byte-identical and its run time is unchanged. Files
-   crossing between programs come after.
+   to byte *i* and drops non-storage origins. Three fixes there were planned: (a) the combine's
+   facts at jumps, (b) the step maps bytes by `landing`, an edge without one depending on its
+   whole source, (c) it keeps origin kinds. (a) was first built as per-piece `defs.jsonl` rows
+   for every jump and reverted: `jumps.jsonl` already held the target, the transaction id and a
+   writer list per field of each area, and the combine's loader had only skipped the transaction
+   id. Reading it gives CardDemo 22 `RETURN TRANSID` links, each a program to its own next task,
+   with outputs byte-identical to the per-piece rows'; those rows split a field's writers in 8 of
+   329,627 fields, which no output read, and halved a two-second combine, which was not judged
+   worth a second copy of the facts. 10 targets keep their candidates but now report
+   `hop-limit`, since their walks follow those links back through earlier tasks. The user had (b)
+   and (c) done in one commit. The step keeps a non-storage write as an `origin` stop, at the
+   bytes it wrote, naming the writer and the origin; the combine's answers ignore it. On CardDemo
+   616 storage edges have no `landing` and one has a non-zero one; the combine's outputs are
+   byte-identical and its run time is unchanged. Files crossing between programs come after.
 
    **Origins of bytes (A), as first written.** `cobble query origins PROGRAM NODE EXTENT`: walk back from the bytes
    read at a node through their definers and those definers' flow edges, unbounded, each edge

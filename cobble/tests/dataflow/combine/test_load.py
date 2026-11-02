@@ -26,8 +26,7 @@ def _write(directory: Path, name: str, rows: list[str]) -> None:
 
 
 def test_tables_index_facts_flows_jumps_received_and_sites(tmp_path: Path) -> None:
-    """A jump's facts are its consulted rows, one per piece, not its merged target;
-    a consulted row anywhere else -- a subscript at MAIN/2 -- is not loaded."""
+    """A jump's facts are its target, its transaction id and each field it hands over."""
     member = tmp_path / "members" / P
     member.mkdir(parents=True)
     _write(
@@ -44,40 +43,7 @@ def test_tables_index_facts_flows_jumps_received_and_sites(tmp_path: Path) -> No
                     "reasons": ["inbound-linkage"],
                     "kind": "copied",
                 }
-            ),
-            json.dumps(
-                {
-                    "program": P,
-                    "node": "MAIN/2",
-                    "extent": "WS-I@working_storage[8:10]",
-                    "definers": ["MAIN/0"],
-                    "values": [],
-                    "reasons": [],
-                    "kind": "consulted",
-                }
-            ),
-            json.dumps(
-                {
-                    "program": P,
-                    "node": "MAIN/3",
-                    "extent": "WS-NEXT@working_storage[0:4]",
-                    "definers": ["MAIN/1"],
-                    "values": ["PROG"],
-                    "reasons": [],
-                    "kind": "consulted",
-                }
-            ),
-            json.dumps(
-                {
-                    "program": P,
-                    "node": "MAIN/3",
-                    "extent": "WS-NEXT@working_storage[4:8]",
-                    "definers": ["MAIN/2"],
-                    "values": ["M   "],
-                    "reasons": [],
-                    "kind": "consulted",
-                }
-            ),
+            )
         ],
     )
     _write(
@@ -156,7 +122,22 @@ def test_tables_index_facts_flows_jumps_received_and_sites(tmp_path: Path) -> No
         False,
         areas=(JumpArea(0, "DFHCOMMAREA@linkage[0:20]"),),
     )
-    _write(member, "jumps.jsonl", [jump_row(entry), jump_row(jump)])
+    tid = Fact("WS-TRAN@working_storage[20:24]", ("CAUP",))
+    area = Fact("WS-AREA@working_storage[24:40]", writers=("MAIN/2",))
+    returned = Jump(
+        P,
+        "MAIN/4",
+        12,
+        JumpKind.RETURN_TRANSID,
+        False,
+        transid=tid,
+        areas=(JumpArea(0, "WS-AREA@working_storage[24:40]", (area,)),),
+    )
+    _write(
+        member,
+        "jumps.jsonl",
+        [jump_row(entry), jump_row(jump), jump_row(returned)],
+    )
     _write(
         member,
         "targets.jsonl",
@@ -188,15 +169,10 @@ def test_tables_index_facts_flows_jumps_received_and_sites(tmp_path: Path) -> No
                 ),
             ),
         ),
-        "MAIN/3": (
-            (
-                byte_range("WS-NEXT@working_storage[0:4]", P),
-                Fact("WS-NEXT@working_storage[0:4]", ("PROG",), ("MAIN/1",)),
-            ),
-            (
-                byte_range("WS-NEXT@working_storage[4:8]", P),
-                Fact("WS-NEXT@working_storage[4:8]", ("M   ",), ("MAIN/2",)),
-            ),
+        "MAIN/3": ((ws, jump.target),),
+        "MAIN/4": (
+            (byte_range("WS-TRAN@working_storage[20:24]", P), tid),
+            (byte_range("WS-AREA@working_storage[24:40]", P), area),
         ),
     }
     assert tables.flows == {
@@ -210,7 +186,7 @@ def test_tables_index_facts_flows_jumps_received_and_sites(tmp_path: Path) -> No
             ),
         ),
     }
-    assert tables.jumps == {"MAIN/3": jump}
+    assert tables.jumps == {"MAIN/3": jump, "MAIN/4": returned}
     assert tables.received == ((0, byte_range("DFHCOMMAREA@linkage[0:20]", P)),)
     assert tables.sites == {"MAIN/3": TargetSite("CICS_XCTL", "WS-NEXT")}
     assert tables.received_param(byte_range("X@linkage[4:8]", P)) == (0,)
