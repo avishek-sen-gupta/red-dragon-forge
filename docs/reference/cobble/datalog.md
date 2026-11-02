@@ -56,7 +56,7 @@ status 2, naming it, and writes nothing. `make carddemo-all` writes `$OUT/datalo
 | `fp_use` | `p, n, ext, kind` | `fixpoint/defs.jsonl`; `kind` is `copied` for a move's source, `consulted` for a test operand, key, RIDFLD or subscript |
 | `fp_def` / `fp_def_value` / `fp_def_reason` | `p, n, ext, kind, definer` / `v` / `why` | the same |
 | `fp_sink` | `p, n, skind, sname, ext` | `fixpoint/sinks.jsonl`: at node `n`, `p` writes the bytes `ext` to a sink of kind `skind` (`FILE`, `MAP`, `TD_QUEUE`). `sname` is the operand as written: a batch SELECT name, or a CICS field such as `LIT-ACCTFILENAME` whose `field_value` is the file |
-| `fp_sink_definer` | `p, n, skind, sname, definer` | the same |
+| `fp_sink_definer` | `p, n, skind, sname, ext, definer` | the same; `ext` is the piece of the sink's bytes `definer` last wrote |
 | `fp_flow` | `src, dst, n, okind, oname, sext, dext` | `fixpoint/graph.jsonl` edges: at node `n`, bytes `sext` of `src` reach bytes `dext` of `dst`. `okind`/`oname` name the origin when `src` is one (`FILE`, `MAP`, `LITERAL`, `CALL`, …, e.g. `PROG.FILE:CUSTFILE`), `NONE` when `src` is a field |
 | `link` | `caller, n, transfer, callee, cext, eext, returns, why` (`ok` when linked) | `combine/links.jsonl` and `fixpoint/aliases.jsonl` |
 | `target_site` | `caller, n, kind, transfer, expr` | `combine/targets.jsonl` |

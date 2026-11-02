@@ -49,7 +49,21 @@ needs only a few targets.
    of it, and the combine applied them to the rest. The combine, the query and the aggregate
    matrix read `copied` rows only. On CardDemo every other fixpoint table is byte-identical, the
    copied rows equal the old rows, and the stage runs about 3% slower.
-2. **Origins of bytes (A).** `cobble query origins PROGRAM NODE EXTENT`: walk back from the bytes
+2. **A definer row per piece, first.** The walk keeps a partly overwritten extent's bytes apart in
+   its state, but a row merged the writers of every byte of a read: `MOVE REC TO WS-OUT` then
+   `MOVE 'ABCD' TO O-ID` named both statements for all of `WS-OUT`, and an origins walk over that
+   row would give `O-ID` the file's bytes. The user chose one row per piece over a list of pieces
+   inside the old row, because it scales in the writing and a reader filters by node and groups
+   or reduces. `defs.jsonl` and `sinks.jsonl` rows are cut where the writes reaching the read begin
+   and end, with each piece's own definers and values; `fp_sink_definer` gains the piece's `ext`.
+   The query and the provenance reader join by node and byte overlap; the combine and the Datalog
+   rules already did. On CardDemo the pieces of each old row tile it and their definers union to
+   its own, the other fixpoint tables and the combine are byte-identical, and the run time is
+   unchanged. The balance trace rules (`trace.dl`, `combine.dl`) assumed a sink row starts at its
+   record, which pieces break; the user had those rules deleted, in their own commit, as
+   re-derivations rather than joins.
+
+   **Origins of bytes (A).** `cobble query origins PROGRAM NODE EXTENT`: walk back from the bytes
    read at a node through their definers and those definers' flow edges, unbounded, each edge
    taken once. Bytes map through `landing`; an edge with no `landing` (rewritten, or place
    unknown) makes the target depend on its whole source. Each step keeps the extents' may/must

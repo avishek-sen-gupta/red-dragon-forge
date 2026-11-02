@@ -226,7 +226,7 @@ class FieldStore:
     by_name: Mapping[str, tuple[Field, ...]]
     by_program: Mapping[str, tuple[Field, ...]]
     flows: tuple[Flow, ...]
-    definers: Mapping[tuple[str, str, str], tuple[str, ...]]
+    definers: Mapping[tuple[str, str], tuple[tuple[ByteRange, tuple[str, ...]], ...]]
     aliases: tuple[Alias, ...] = ()
 
     def field(self, wanted: str) -> tuple[Field, ...]:
@@ -359,9 +359,19 @@ class FieldStore:
         )
 
     def definers_of(self, flow: Flow) -> tuple[str, ...]:
-        """The statements that could have written what this flow moved."""
-        return self.definers.get(
-            (_program_of(flow.source), flow.node, flow.source_text), ()
+        """The statements that could have written what this flow moved: those of
+        every piece at its node that overlaps its source."""
+        return tuple(
+            sorted(
+                {
+                    definer
+                    for piece, definers in self.definers.get(
+                        (_program_of(flow.source), flow.node), ()
+                    )
+                    if piece.overlaps(flow.source_range)
+                    for definer in definers
+                }
+            )
         )
 
     def across(
@@ -826,6 +836,29 @@ def _program_key(field: Field) -> str:
     return field.program
 
 
+def _pieces_by_node(
+    defs: Sequence[Row],
+) -> Mapping[tuple[str, str], tuple[tuple[ByteRange, tuple[str, ...]], ...]]:
+    keyed = tuple(
+        (
+            (program, rows.text(row, "node")),
+            (
+                byte_range(rows.text(row, "extent"), program),
+                rows.strings(row, "definers"),
+            ),
+        )
+        for row in defs
+        if rows.text(row, "kind") == ReadKind.COPIED.value
+        for program in (rows.text(row, "program"),)
+    )
+    return MappingProxyType(
+        {
+            at: tuple(dict.fromkeys(map(itemgetter(1), group)))
+            for at, group in groupby(sorted(keyed, key=itemgetter(0)), itemgetter(0))
+        }
+    )
+
+
 def store_of(
     declared: Sequence[Row],
     edges: Sequence[Row],
@@ -842,17 +875,7 @@ def store_of(
         by_name=_grouped(fields, _name_of),
         by_program=_grouped(fields, _program_key),
         flows=tuple(_flow(row) for row in edges if rows.text(row, "kind") == FLOWS_TO),
-        definers=MappingProxyType(
-            {
-                (
-                    rows.text(row, "program"),
-                    rows.text(row, "node"),
-                    rows.text(row, "extent"),
-                ): rows.strings(row, "definers")
-                for row in defs
-                if rows.text(row, "kind") == ReadKind.COPIED.value
-            }
-        ),
+        definers=_pieces_by_node(defs),
         aliases=tuple(_alias(row) for row in aliases),
     )
 
@@ -895,7 +918,7 @@ def _ready(declared: Sequence[Row], out_dir: Path, links: Path = Path()) -> Fiel
         "ready: %d fields, %d flows, %d definer rows",
         len(store.fields),
         len(store.flows),
-        len(store.definers),
+        sum(len(found) for found in store.definers.values()),
     )
     return store
 

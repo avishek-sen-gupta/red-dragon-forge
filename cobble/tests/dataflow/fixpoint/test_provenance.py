@@ -17,7 +17,12 @@ from cobble.dataflow.fields.origin_kind import OriginKind
 from cobble.dataflow.fields.sink import NO_SINK, Sink
 from cobble.dataflow.fields.sink_kind import SinkKind
 from cobble.dataflow.fixpoint.provenance import MissingProvenance, provenance
-from tests.dataflow.fixpoint.fixpoint_dir import fixpoint_dir, flow_row, sink_row
+from tests.dataflow.fixpoint.fixpoint_dir import (
+    defs_row,
+    fixpoint_dir,
+    flow_row,
+    sink_row,
+)
 
 
 def _literal_moved_and_sent(program_id: str) -> dict:
@@ -109,3 +114,40 @@ def test_old_sink_rows_are_stale(tmp_path, old):
     )
     with pytest.raises(MissingProvenance, match="^.*/members/P has no provenance"):
         tuple(provenance(out_dir))
+
+
+def test_a_flow_takes_the_definers_and_the_entry_of_every_piece_of_its_source(
+    tmp_path,
+):
+    out_dir = fixpoint_dir(
+        tmp_path,
+        flows=[
+            flow_row(
+                "PROGA",
+                "MAIN/2",
+                "WS-COPY@working_storage[8:16]",
+                "LK-REC@linkage[0:8]",
+            )
+        ],
+        sinks=[],
+        defs=[
+            defs_row("PROGA", "MAIN/2", "LK-REC@linkage[0:4]", ["MAIN/1"]),
+            defs_row("PROGA", "MAIN/2", "LK-REC@linkage[4:8]", (), ["inbound-linkage"]),
+            defs_row("PROGA", "MAIN/3", "LK-REC@linkage[0:8]", ["MAIN/0"]),
+        ],
+    )
+
+    assert tuple(provenance(out_dir)) == (
+        DepRow(
+            program="PROGA",
+            via="",
+            target=byte_range("WS-COPY@working_storage[8:16]", "PROGA"),
+            origin=NO_ORIGIN,
+            source=byte_range("LK-REC@linkage[0:8]", "PROGA"),
+            site="PROGA/MAIN/2",
+            definers=("PROGA/MAIN/1",),
+            sink=NO_SINK,
+            entry=True,
+            landing=(0,),
+        ),
+    )

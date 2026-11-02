@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterator, Mapping
-from itertools import chain
+from itertools import chain, groupby
+from operator import attrgetter
 from pathlib import Path
 
 from cobble.dataflow.fields.dep_row import DepRow
@@ -53,30 +54,39 @@ def _stale(directory: Path, why: str) -> MissingProvenance:
     )
 
 
-_Reaching = Mapping[tuple[str, str], ReachingRow]
-_UNREACHED = ReachingRow(
-    program="",
-    node="",
-    extent="",
-    definers=(),
-    values=(),
-    reasons=(),
-    kind=ReadKind.COPIED,
-)
+_Reaching = Mapping[str, tuple[ReachingRow, ...]]
 
 
 def _definers(directory: Path) -> _Reaching:
-    found = (
-        ReachingRow.model_validate(row) for row in rows.stream(directory / DEFS_FILE)
+    found = sorted(
+        (
+            row
+            for row in (
+                ReachingRow.model_validate(row)
+                for row in rows.stream(directory / DEFS_FILE)
+            )
+            if row.kind is ReadKind.COPIED
+        ),
+        key=attrgetter("node"),
     )
-    return {(row.node, row.extent): row for row in found if row.kind is ReadKind.COPIED}
+    return {node: tuple(group) for node, group in groupby(found, attrgetter("node"))}
 
 
-def _from_entry(source: ByteRange, reaching: ReachingRow) -> bool:
+def _pieces(
+    program: str, node: str, source: ByteRange, definers: _Reaching
+) -> tuple[ReachingRow, ...]:
+    """The rows at ``node`` for the pieces of the bytes ``source`` names."""
+    return tuple(
+        row
+        for row in definers.get(node, ())
+        if byte_range(row.extent, program).overlaps(source)
+    )
+
+
+def _from_entry(source: ByteRange, pieces: tuple[ReachingRow, ...]) -> bool:
     """Linkage bytes that may still hold what the program was entered with."""
-    return (
-        source.region == RegionId.LINKAGE.value
-        and UnresolvedReason.INBOUND_LINKAGE.value in reaching.reasons
+    return source.region == RegionId.LINKAGE.value and any(
+        UnresolvedReason.INBOUND_LINKAGE.value in piece.reasons for piece in pieces
     )
 
 
@@ -102,7 +112,7 @@ def _flow(program: str, attrs: FlowAttrs, definers: _Reaching) -> DepRow:
         if attrs.origin.is_storage
         else NO_RANGE
     )
-    reaching = definers.get((attrs.node, attrs.source_extent), _UNREACHED)
+    pieces = _pieces(program, attrs.node, source, definers)
     return DepRow(
         program=program,
         via="",
@@ -110,9 +120,12 @@ def _flow(program: str, attrs: FlowAttrs, definers: _Reaching) -> DepRow:
         origin=attrs.origin,
         source=source,
         site=f"{program}/{attrs.node}",
-        definers=tuple(f"{program}/{definer}" for definer in reaching.definers),
+        definers=tuple(
+            f"{program}/{definer}"
+            for definer in sorted({d for piece in pieces for d in piece.definers})
+        ),
         sink=NO_SINK,
-        entry=_from_entry(source, reaching),
+        entry=_from_entry(source, pieces),
         landing=attrs.landing,
         rebuilt=attrs.rebuilt,
     )
@@ -120,7 +133,7 @@ def _flow(program: str, attrs: FlowAttrs, definers: _Reaching) -> DepRow:
 
 def _sunk(program: str, row: SinkRow, definers: _Reaching) -> DepRow:
     source = byte_range(row.source_extent, program)
-    reaching = definers.get((row.node, row.source_extent), _UNREACHED)
+    pieces = _pieces(program, row.node, source, definers)
     return DepRow(
         program=program,
         via="",
@@ -130,7 +143,7 @@ def _sunk(program: str, row: SinkRow, definers: _Reaching) -> DepRow:
         site=f"{program}/{row.node}",
         definers=tuple(f"{program}/{definer}" for definer in row.definers),
         sink=row.sink,
-        entry=_from_entry(source, reaching),
+        entry=_from_entry(source, pieces),
     )
 
 

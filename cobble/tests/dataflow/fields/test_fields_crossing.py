@@ -1086,7 +1086,7 @@ def test_the_command_logs_what_it_loads_and_how_the_walk_goes(tmp_path, caplog):
         "reading aliases.jsonl (0.0 MB)",
         f"aliases.jsonl: {lines['aliases.jsonl']} rows",
         f"ready: {len(store.fields)} fields, {len(store.flows)} flows, "
-        f"{len(store.definers)} definer rows",
+        f"{sum(len(found) for found in store.definers.values())} definer rows",
         "answering reaches",
         "field 1 of 1",
     ]

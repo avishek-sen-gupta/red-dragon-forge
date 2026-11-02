@@ -85,8 +85,8 @@ from cobble.dataflow.fields.state import (
     Source,
     State,
     join,
+    pieces,
     pruned,
-    reaching,
     values_at,
 )
 from cobble.dataflow.fields.transfer import (
@@ -997,10 +997,25 @@ def _walked(
     return _worked(cfg, statements, index, live, entry, options, entry_state)
 
 
-def _definers(state: State, extent: FieldExtent) -> frozenset[str]:
-    """Where the value at ``extent`` was last written; nothing when no statement in
-    the program wrote it, and its content is its VALUE clause or nothing at all."""
-    return frozenset(source.node for source in reaching(state, extent))
+def _definers(sources: frozenset[Source]) -> tuple[str, ...]:
+    """Where a piece's value was last written; nothing when no statement in the
+    program wrote it, and its content is its VALUE clause or nothing at all."""
+    return tuple(sorted({source.node for source in sources}))
+
+
+def _defs(
+    node_id: str, state: State, extent: FieldExtent, kind: ReadKind
+) -> tuple[ReachingDef, ...]:
+    return tuple(
+        ReachingDef(
+            node=node_id,
+            extent=piece,
+            definers=_definers(sources),
+            held=values_at(state, piece),
+            kind=kind,
+        )
+        for piece, sources in pieces(state, extent)
+    )
 
 
 def _landing(write: Write, source: Source) -> tuple[int, ...]:
@@ -1041,14 +1056,10 @@ def _at(
             for write, source in moved
         ),
         defs=tuple(
-            ReachingDef(
-                node=node_id,
-                extent=source.extent,
-                definers=tuple(sorted(_definers(state, source.extent))),
-                held=values_at(state, source.extent),
-            )
+            row
             for _, source in moved
             if source.origin.is_storage
+            for row in _defs(node_id, state, source.extent, ReadKind.COPIED)
         ),
     )
 
@@ -1058,17 +1069,12 @@ def _read_at(node: Node, state: State, index: CellIndex) -> _Extracted:
     a RIDFLD, a subscript -- none of which a move's source row covers."""
     return _Extracted(
         defs=tuple(
-            ReachingDef(
-                node=node.id,
-                extent=extent,
-                definers=tuple(sorted(_definers(state, extent))),
-                held=values_at(state, extent),
-                kind=ReadKind.CONSULTED,
-            )
+            row
             for name in names_of(
                 read for read in node.reads if read.kind is ReadKind.CONSULTED
             )
             for extent in operand_extents(RefModOperand(name=name), index).extents
+            for row in _defs(node.id, state, extent, ReadKind.CONSULTED)
         )
     )
 
@@ -1210,8 +1216,8 @@ def _sunk(
             FlowSink(
                 node=node_id,
                 sink=sink.sink,
-                source=extent,
-                definers=tuple(sorted(_definers(after, extent))),
+                source=piece,
+                definers=_definers(sources),
             )
             for node_id, statement in found
             if node_id in states
@@ -1220,6 +1226,7 @@ def _sunk(
             for after in (transfer(statement, node_id, states[node_id], index),)
             for sink in sinks
             for extent in operand_extents(sink.operand, index).extents
+            for piece, sources in pieces(after, extent)
         )
     )
 

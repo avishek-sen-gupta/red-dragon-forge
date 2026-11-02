@@ -1,6 +1,6 @@
 fileignoreconfig:
 - filename: docs/reference/cobble/field-dataflow.md
-  checksum: 3ee89b877961bb5421b53b933278b00f9a8b80dfd918a91be6a3e885e06c91f2
+  checksum: 4aeb4be96e9c66750b9f87e205b17b317c49d450cb5b386c270c76f5d35e2b2d
 - filename: cobble/cobble/dataflow/fixpoint/build_corpus.py
   checksum: b5e58f1c2ea803cd7980a329e3e4a7b4675efcc93f0c7aab0f186d152d8e5a30
 - filename: cobble/cobble/dataflow/fixpoint/options.py
@@ -522,7 +522,7 @@ fileignoreconfig:
 - filename: cobble/tests/experimental/datalog/carddemo_facts/kg_edge_attr.facts
   checksum: e11c116b428391a6703559578797c7d2b8b67b3a44603b53ed863600af574dcd
 - filename: cobble/tests/experimental/datalog/carddemo_facts/fp_def.facts
-  checksum: 147c9aba5a358dea0376239ba7df990eb08d3fca3ca4d775a2bfe91f1c210485
+  checksum: d90b2e804250b68817fb4b4a3705106118c8076e8245ea9687b48d3d654a28cd
 - filename: cobble/tests/experimental/datalog/carddemo_facts/fp_flow.facts
   checksum: 9429cc624266a6a2fc5b496b571dbeed3c77d0ad9ff25dec952ae6130e474033
 - filename: cobble/cobble/dataflow/fixpoint/perform_ranges.py
@@ -537,4 +537,8 @@ fileignoreconfig:
   checksum: db484e1f16010070d713e73c76a3e3ff43516c3e53546d113371c70fac91405e
 - filename: docs/reference/cobble/srccfg.md
   checksum: adc2fbfede4cd410d152e59ab72ac976b4f985fc02196fd3c8a7b6e0065af735
+- filename: cobble/cobble/dataflow/fixpoint/query.py
+  checksum: 0ff919a908b1e9d467bc4f93ff706d4f76353551479e4e7620748b7976a23c31
+- filename: cobble/cobble/dataflow/fixpoint/provenance.py
+  checksum: 3133e78241d0def0d2ab117724c1dbdb246389fff16678435fc19e9724da25d6
 version: "1.0"

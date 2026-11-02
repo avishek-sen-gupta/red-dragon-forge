@@ -710,6 +710,49 @@ def reaching(state: State, read: FieldExtent) -> frozenset[Source]:
     )
 
 
+def pieces(
+    state: State, read: FieldExtent
+) -> tuple[tuple[FieldExtent, frozenset[Source]], ...]:
+    """``read`` cut where the entries it overlaps begin and end, each piece with the
+    sources held over its bytes; a piece no statement wrote holds none.
+
+    ``reaching`` answers for the whole read, so a record copied from a file and then
+    partly overwritten names both writers for every byte. The entries already keep
+    the two apart; cutting the read at their edges keeps them apart in the rows.
+    """
+    held = tuple(
+        (extent, sources)
+        for extent, sources in state.sources.items()
+        if read.may_alias(extent)
+    )
+    cuts = sorted(
+        {read.start, read.end}
+        | {
+            edge
+            for extent, _ in held
+            for edge in (extent.start, extent.end)
+            if read.start < edge < read.end
+        }
+    )
+    return tuple(
+        (
+            piece,
+            frozenset(
+                source
+                for extent, sources in held
+                if piece.may_alias(extent)
+                for source in sources
+            ),
+        )
+        for start, end in pairwise(cuts)
+        for piece in (
+            FieldExtent(
+                read.region, start, end - start, read.precision, read.field_name
+            ),
+        )
+    ) or ((read, frozenset[Source]()),)
+
+
 def _sliced(held: ValueSet, extent: FieldExtent, read: FieldExtent) -> ValueSet:
     at = read.start - extent.start
     return _shared_value(

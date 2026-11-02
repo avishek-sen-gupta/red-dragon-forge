@@ -204,3 +204,91 @@ def test_a_test_inside_a_performed_paragraph_sees_what_was_written_before_the_ca
             "kind": "consulted",
         },
     ]
+
+
+PIECES = "READPIEC"
+
+PIECES_SOURCE = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. READPIEC.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-OUT.
+           05  O-ID             PIC X(4).
+           05  O-AMT            PIC X(4).
+       01  WS-COPY              PIC X(8).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           EXEC CICS READ FILE('ACCTS') INTO(WS-OUT) NOHANDLE
+           END-EXEC.
+           MOVE 'ABCD' TO O-ID.
+           MOVE WS-OUT TO WS-COPY.
+           IF WS-OUT = 'X'
+               STOP RUN
+           END-IF.
+           EXEC CICS WRITE FILE('OUTF') FROM(WS-OUT) RIDFLD(O-ID)
+           END-EXEC.
+           STOP RUN.
+"""
+
+
+def test_a_read_partly_overwritten_since_its_last_write_gets_a_row_per_piece(
+    fixpoint_out: Callable[[str, str], Path],
+) -> None:
+    out = fixpoint_out(PIECES, PIECES_SOURCE)
+    defs = [json.loads(line) for line in (out / "defs.jsonl").read_text().splitlines()]
+    sinks = [
+        json.loads(line) for line in (out / "sinks.jsonl").read_text().splitlines()
+    ]
+
+    assert defs == [
+        {
+            "program": PIECES,
+            "node": "MAIN-PARA/2",
+            "extent": "WS-OUT@working_storage[0:4]",
+            "definers": ["MAIN-PARA/1"],
+            "values": ["ABCD"],
+            "reasons": [],
+            "kind": "copied",
+        },
+        {
+            "program": PIECES,
+            "node": "MAIN-PARA/2",
+            "extent": "WS-OUT@working_storage[4:8]",
+            "definers": ["MAIN-PARA/0"],
+            "values": [],
+            "reasons": ["from-file"],
+            "kind": "copied",
+        },
+        {
+            "program": PIECES,
+            "node": "MAIN-PARA/3#test",
+            "extent": "WS-OUT@working_storage[0:4]",
+            "definers": ["MAIN-PARA/1"],
+            "values": ["ABCD"],
+            "reasons": [],
+            "kind": "consulted",
+        },
+        {
+            "program": PIECES,
+            "node": "MAIN-PARA/3#test",
+            "extent": "WS-OUT@working_storage[4:8]",
+            "definers": ["MAIN-PARA/0"],
+            "values": [],
+            "reasons": ["from-file"],
+            "kind": "consulted",
+        },
+        {
+            "program": PIECES,
+            "node": "MAIN-PARA/4",
+            "extent": "O-ID@working_storage[0:4]",
+            "definers": ["MAIN-PARA/1"],
+            "values": ["ABCD"],
+            "reasons": [],
+            "kind": "consulted",
+        },
+    ]
+    assert [(row["node"], row["source_extent"], row["definers"]) for row in sinks] == [
+        ("MAIN-PARA/4", "WS-OUT@working_storage[0:4]", ["MAIN-PARA/1"]),
+        ("MAIN-PARA/4", "WS-OUT@working_storage[4:8]", ["MAIN-PARA/0"]),
+    ]

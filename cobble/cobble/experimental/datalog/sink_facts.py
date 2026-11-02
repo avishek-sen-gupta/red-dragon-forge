@@ -10,7 +10,9 @@ from cobble.experimental.datalog.run_files import lines
 
 _SITE = (symbol("p"), symbol("n"), symbol("skind"), symbol("sname"))
 FP_SINK = Relation("fp_sink", (*_SITE, symbol("ext")))
-FP_SINK_DEFINER = Relation("fp_sink_definer", (*_SITE, symbol("definer")))
+FP_SINK_DEFINER = Relation(
+    "fp_sink_definer", (*_SITE, symbol("ext"), symbol("definer"))
+)
 
 
 def sink_facts(run: Path) -> tuple[Facts, ...]:
@@ -35,7 +37,14 @@ def sink_facts(run: Path) -> tuple[Facts, ...]:
         Facts(
             FP_SINK_DEFINER,
             tuple(
-                (row.program, row.node, str(row.sink.kind), row.sink.name, definer)
+                (
+                    row.program,
+                    row.node,
+                    str(row.sink.kind),
+                    row.sink.name,
+                    row.source_extent,
+                    definer,
+                )
                 for row in rows
                 for definer in row.definers
             ),

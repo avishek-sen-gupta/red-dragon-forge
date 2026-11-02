@@ -10,7 +10,10 @@ from cobble.dataflow.fields.access_extent_line import AccessExtentLine
 from cobble.dataflow.fields.access_line import AccessLine
 from cobble.dataflow.fields.origin import Origin
 from cobble.dataflow.fields.origin_kind import OriginKind
+from cobble.dataflow.fields.sink import Sink
+from cobble.dataflow.fields.sink_kind import SinkKind
 from cobble.dataflow.fixpoint.member_counts import MemberCounts
+from cobble.dataflow.fixpoint.sink_row import SinkRow
 from cobble.dataflow.srccfg.bundle import Bundle, bundle_jsonl
 from cobble.dataflow.srccfg.cfg import (
     Atom,
@@ -69,7 +72,7 @@ SCHEMA = (
     ".decl fp_def_value(p:symbol, n:symbol, ext:symbol, kind:symbol, v:symbol)",
     ".decl fp_flow(src:symbol, dst:symbol, n:symbol, okind:symbol, oname:symbol, sext:symbol, dext:symbol)",
     ".decl fp_sink(p:symbol, n:symbol, skind:symbol, sname:symbol, ext:symbol)",
-    ".decl fp_sink_definer(p:symbol, n:symbol, skind:symbol, sname:symbol, definer:symbol)",
+    ".decl fp_sink_definer(p:symbol, n:symbol, skind:symbol, sname:symbol, ext:symbol, definer:symbol)",
     ".decl fp_unresolved(p:symbol, why:symbol)",
     ".decl fp_use(p:symbol, n:symbol, ext:symbol, kind:symbol)",
     ".decl jump(p:symbol, n:symbol, kind:symbol, returns:symbol)",
@@ -173,6 +176,24 @@ def _slots() -> FieldGraph:
     )
 
 
+SINK_ROWS = "".join(
+    f"{row.model_dump_json()}\n"
+    for row in (
+        SinkRow(
+            program="PROGA",
+            node="MAIN/2",
+            sink=Sink(SinkKind.FILE, "OUTFILE"),
+            source_extent=extent,
+            definers=definers,
+        )
+        for extent, definers in (
+            ("WS-A@working_storage[0:2]", ("MAIN/0",)),
+            ("WS-A@working_storage[2:4]", ("MAIN/0", "MAIN/1")),
+        )
+    )
+)
+
+
 def _access() -> str:
     return AccessLine(
         kind="access",
@@ -204,6 +225,7 @@ def run(tmp_path: Path) -> Path:
     _written(root / "fixpoint" / "graph.jsonl", FLOW_EDGE)
     write_graph(root / "graph.jsonl", _slots())
     tuple(_written(root / name, "") for name in EMPTY_ARTIFACTS)
+    _written(root / "fixpoint" / "sinks.jsonl", SINK_ROWS)
     return root
 
 
@@ -255,6 +277,15 @@ def test_a_run_becomes_one_facts_file_per_relation_from_its_typed_artifacts(
         ["PROGA:REC.WS-A", "PROGA:REC.WS-B", "0", "0", "4"]
     ]
     assert _facts(out, "cluster") == []
+    assert _facts(out, "fp_sink") == [
+        ["PROGA", "MAIN/2", "FILE", "OUTFILE", "WS-A@working_storage[0:2]"],
+        ["PROGA", "MAIN/2", "FILE", "OUTFILE", "WS-A@working_storage[2:4]"],
+    ]
+    assert _facts(out, "fp_sink_definer") == [
+        ["PROGA", "MAIN/2", "FILE", "OUTFILE", "WS-A@working_storage[0:2]", "MAIN/0"],
+        ["PROGA", "MAIN/2", "FILE", "OUTFILE", "WS-A@working_storage[2:4]", "MAIN/0"],
+        ["PROGA", "MAIN/2", "FILE", "OUTFILE", "WS-A@working_storage[2:4]", "MAIN/1"],
+    ]
 
 
 def test_the_schema_declares_every_relation_a_facts_file_was_written_for(
