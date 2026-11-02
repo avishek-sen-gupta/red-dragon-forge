@@ -22,6 +22,8 @@ def _write(directory: Path, name: str, rows: list[str]) -> None:
 
 
 def test_tables_index_facts_flows_jumps_received_and_sites(tmp_path: Path) -> None:
+    """A jump's facts are its consulted rows, one per piece, not its merged target;
+    a consulted row anywhere else -- a subscript at MAIN/2 -- is not loaded."""
     member = tmp_path / "members" / P
     member.mkdir(parents=True)
     _write(
@@ -38,7 +40,40 @@ def test_tables_index_facts_flows_jumps_received_and_sites(tmp_path: Path) -> No
                     "reasons": ["inbound-linkage"],
                     "kind": "copied",
                 }
-            )
+            ),
+            json.dumps(
+                {
+                    "program": P,
+                    "node": "MAIN/2",
+                    "extent": "WS-I@working_storage[8:10]",
+                    "definers": ["MAIN/0"],
+                    "values": [],
+                    "reasons": [],
+                    "kind": "consulted",
+                }
+            ),
+            json.dumps(
+                {
+                    "program": P,
+                    "node": "MAIN/3",
+                    "extent": "WS-NEXT@working_storage[0:4]",
+                    "definers": ["MAIN/1"],
+                    "values": ["PROG"],
+                    "reasons": [],
+                    "kind": "consulted",
+                }
+            ),
+            json.dumps(
+                {
+                    "program": P,
+                    "node": "MAIN/3",
+                    "extent": "WS-NEXT@working_storage[4:8]",
+                    "definers": ["MAIN/2"],
+                    "values": ["M   "],
+                    "reasons": [],
+                    "kind": "consulted",
+                }
+            ),
         ],
     )
     _write(
@@ -143,7 +178,16 @@ def test_tables_index_facts_flows_jumps_received_and_sites(tmp_path: Path) -> No
                 ),
             ),
         ),
-        "MAIN/3": ((ws, jump.target),),
+        "MAIN/3": (
+            (
+                byte_range("WS-NEXT@working_storage[0:4]", P),
+                Fact("WS-NEXT@working_storage[0:4]", ("PROG",), ("MAIN/1",)),
+            ),
+            (
+                byte_range("WS-NEXT@working_storage[4:8]", P),
+                Fact("WS-NEXT@working_storage[4:8]", ("M   ",), ("MAIN/2",)),
+            ),
+        ),
     }
     assert tables.flows == {
         "MAIN/2": (Flow("MAIN/2", lk, ws),),

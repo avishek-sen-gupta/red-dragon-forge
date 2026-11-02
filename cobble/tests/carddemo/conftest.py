@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pytest
-from cobble.corpus_config import load_bms_config, load_corpus_config
+from cobble.corpus_config import CorpusConfig, load_bms_config, load_corpus_config
+from cobble.dataflow.combine.cli import cli as combine
 from cobble.dataflow.fields.emit_extents import emit
 from cobble.dataflow.fields.extents_options import ExtentsOptions
 from cobble.dataflow.fixpoint.build_corpus import cli
@@ -27,6 +29,7 @@ UNPARSED = {"CBPAUP0C", "COPAUA0C", "COPAUS0C", "COPAUS1C", "COACCT01", "CODATE0
 class CardDemoRun:
     extents: Path
     fixpoint: Path
+    combine: Path
 
 
 def _bridge_jar() -> Path:
@@ -38,6 +41,22 @@ def _bridge_jar() -> Path:
 
 def _here(path: Path) -> Path:
     return path if path.is_absolute() else COBBLE / path
+
+
+def _toml(config: CorpusConfig) -> str:
+    """The corpus table the combine's command reads, naming this run's own cache."""
+    entries = {
+        "cobol_dir": str(config.cobol_dir),
+        "cobol_globs": list(config.cobol_globs),
+        "jcl_dir": str(_here(config.jcl_dir)),
+        "jcl_globs": list(config.jcl_globs),
+        "csd_files": [str(_here(path)) for path in config.csd_files],
+        "copybook_dirs": [str(path) for path in config.copybook_dirs],
+        "asg_dir": str(config.asg_dir),
+    }
+    return "[corpus]\n" + "".join(
+        f"{key} = {json.dumps(value)}\n" for key, value in entries.items()
+    )
 
 
 @pytest.fixture(scope="session")
@@ -94,4 +113,23 @@ def carddemo(tmp_path_factory: pytest.TempPathFactory) -> CardDemoRun:
             "--all",
         ]
     )
-    return CardDemoRun(extents=extents, fixpoint=fixpoint)
+    corpus_toml = root / "corpus.toml"
+    corpus_toml.write_text(_toml(config), encoding="utf-8")
+    out = root / "combine"
+    assert (
+        combine(
+            [
+                "--config",
+                str(corpus_toml),
+                "--fixpoint-dir",
+                str(fixpoint),
+                "--out-dir",
+                str(out),
+                "--all",
+                "--max-hops",
+                "5",
+            ]
+        )
+        == 0
+    )
+    return CardDemoRun(extents=extents, fixpoint=fixpoint, combine=out)

@@ -38,7 +38,7 @@ cobble's suite turns on its acceptance tests, which start a JVM and run much lon
 
 cobble's `tests/carddemo/` uses the vendored CardDemo as an integration testbed. A session fixture
 generates its BMS copybooks, parses every program from source, lays out the extents and runs
-the fixpoint, about a minute in all, into a temporary directory; each test asserts rows against
+the fixpoint and the combine, about a minute in all, into a temporary directory; each test asserts rows against
 answers read from the CardDemo source by hand, citing the lines. It needs the ProLeap bridge JAR
 (`make jar`) and `hlasm_export` (`make hlasm`), and skips without them. The programs that do
 not parse (`EXEC DLI`, and the MQ copybook CardDemo does not ship) are asserted by name.

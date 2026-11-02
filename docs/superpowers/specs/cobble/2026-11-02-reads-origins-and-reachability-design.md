@@ -63,7 +63,23 @@ needs only a few targets.
    record, which pieces break; the user had those rules deleted, in their own commit, as
    re-derivations rather than joins.
 
-   **Origins of bytes (A).** `cobble query origins PROGRAM NODE EXTENT`: walk back from the bytes
+   **Origins of bytes (A), revised.** A walk inside one program was proposed first and refused:
+   it has to cross programs. The combine already walks back across them -- into callers, into a
+   called program's exits, into the next task of a `RETURN TRANSID`, into a `START`er -- but
+   only for the values that name a dynamic target, and its step inside a program maps byte *i*
+   to byte *i*, drops non-storage origins, and reads one merged writer list per field at jumps.
+   The origins query reuses the combine's crossings after three fixes there, each its own commit:
+   (a) a jump's reads get per-piece `defs.jsonl` rows -- `consulted` for its target and
+   transaction id, `copied` for what it hands over, and at a program's exits for its `LINKAGE` --
+   and the combine reads those instead of `jumps.jsonl`'s merged facts; (b) the step maps bytes
+   by `landing`, an edge without one depending on its whole source; (c) it keeps origin kinds.
+   Unit 1's reason for leaving copied rows out at calls was coarse rows; per-piece rows remove
+   it. On CardDemo (a) gave the combine the transaction ids its jump facts never carried, so it
+   gained 22 `RETURN TRANSID` links, each a program to its own next task, and 10 targets keep
+   their candidates but now report `hop-limit`, since their walks follow those links back
+   through earlier tasks. Files crossing between programs come after.
+
+   **Origins of bytes (A), as first written.** `cobble query origins PROGRAM NODE EXTENT`: walk back from the bytes
    read at a node through their definers and those definers' flow edges, unbounded, each edge
    taken once. Bytes map through `landing`; an edge with no `landing` (rewritten, or place
    unknown) makes the target depend on its whole source. Each step keeps the extents' may/must

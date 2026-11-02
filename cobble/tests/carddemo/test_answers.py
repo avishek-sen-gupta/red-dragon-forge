@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+from cobble.dataflow.fields.extent_text import byte_range
 from tests.carddemo.conftest import CardDemoRun
 
 WRITE = "9600-WRITE-PROCESSING"
@@ -15,8 +16,8 @@ def _start(run: CardDemoRun, field_id: str) -> int:
         for row in map(json.loads, run.extents.read_text().splitlines())
         if row["id"] == field_id
     )
-    (start,) = row["starts"]
-    return start
+    (extent,) = row["extents"]
+    return byte_range(extent, row["program"]).start
 
 
 def test_each_field_coactupc_rewrites_to_the_account_file_names_its_own_last_write(
@@ -56,3 +57,35 @@ def test_each_field_coactupc_rewrites_to_the_account_file_names_its_own_last_wri
         )
     ]
     assert {row["sink"]["name"] for row in rows} == {"LIT-ACCTFILENAME"}
+
+
+def test_coactupc_hands_its_commarea_to_its_own_next_task(
+    carddemo: CardDemoRun,
+) -> None:
+    """COACTUPC.cbl:1015-1018 ends each task with RETURN TRANSID(LIT-THISTRANID)
+    COMMAREA(WS-COMMAREA); LIT-THISTRANID is VALUE 'CAUP' (:535-536), and the CSD
+    defines TRANSACTION(CAUP) PROGRAM(COACTUPC). WS-COMMAREA is PIC X(2000) (:850)
+    and the next task receives it as DFHCOMMAREA (:854-856), so the two line up
+    over 2000 bytes."""
+    base = _start(carddemo, "COACTUPC.WS-COMMAREA")
+    links = [
+        row
+        for row in map(
+            json.loads, (carddemo.combine / "links.jsonl").read_text().splitlines()
+        )
+        if row["caller"] == "COACTUPC" and row["transfer"] == "RETURN_TRANSID"
+    ]
+
+    assert links == [
+        {
+            "caller": "COACTUPC",
+            "node": "COMMON-RETURN/3",
+            "transfer": "RETURN_TRANSID",
+            "callee": "COACTUPC",
+            "caller_extent": f"WS-COMMAREA@working_storage[{base}:{base + 2000}]",
+            "callee_extent": "DFHCOMMAREA@linkage[0:2000]",
+            "returns": False,
+            "reason": "",
+            "discovered": False,
+        }
+    ]

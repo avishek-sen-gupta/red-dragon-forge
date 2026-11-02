@@ -1,0 +1,11 @@
+{"program": "PROGA", "node": "MAIN-PARA/1", "extent": "WS-ONE@working_storage[28:32]", "definers": [], "values": [], "reasons": ["uninitialised"], "kind": "copied"}
+{"program": "PROGA", "node": "MAIN-PARA/1", "extent": "WS-TWO@working_storage[32:36]", "definers": [], "values": [], "reasons": ["uninitialised"], "kind": "copied"}
+{"program": "PROGA", "node": "MAIN-PARA/1", "extent": "WS-THREE@working_storage[36:40]", "definers": [], "values": [], "reasons": ["uninitialised"], "kind": "copied"}
+{"program": "PROGA", "node": "MAIN-PARA/3", "extent": "WS-AREA@working_storage[0:8]", "definers": ["MAIN-PARA/0"], "values": ["PROGA   "], "reasons": [], "kind": "copied"}
+{"program": "PROGA", "node": "MAIN-PARA/3", "extent": "WS-NEXT@working_storage[20:28]", "definers": [], "values": ["PROGB   "], "reasons": [], "kind": "consulted"}
+{"program": "PROGA", "node": "MAIN-PARA/3", "extent": "WS-AREA@working_storage[8:20]", "definers": [], "values": [], "reasons": ["uninitialised"], "kind": "copied"}
+{"program": "PROGB", "node": "MAIN-PARA/1", "extent": "WS-X@working_storage[0:6]", "definers": [], "values": ["HELLO "], "reasons": [], "kind": "copied"}
+{"program": "PROGB", "node": "MAIN-PARA/2", "extent": "DFHCOMMAREA@linkage[0:20]", "definers": [], "values": [], "reasons": ["inbound-linkage"], "kind": "copied"}
+{"program": "SUBP", "node": "MAIN-PARA/1", "extent": "LK-1@linkage[0:4]", "definers": ["MAIN-PARA/0"], "values": ["ABCD"], "reasons": [], "kind": "copied"}
+{"program": "SUBP", "node": "MAIN-PARA/1", "extent": "LK-2@linkage[4:8]", "definers": [], "values": [], "reasons": ["inbound-linkage"], "kind": "copied"}
+{"program": "SUBP", "node": "MAIN-PARA/1", "extent": "LK-3@linkage[8:12]", "definers": [], "values": [], "reasons": ["inbound-linkage"], "kind": "copied"}

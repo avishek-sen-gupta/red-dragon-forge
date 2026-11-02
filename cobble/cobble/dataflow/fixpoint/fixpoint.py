@@ -100,7 +100,7 @@ from cobble.dataflow.fields.transfer import (
 )
 from cobble.dataflow.fields.unmodelled_write import UnmodelledWrite
 from cobble.dataflow.fields.values import EMPTY as VALUES_EMPTY
-from cobble.dataflow.fields.values import ValueSet
+from cobble.dataflow.fields.values import UnresolvedReason, ValueSet
 from cobble.dataflow.fixpoint.fallthrough import fallthroughs_pruned
 from cobble.dataflow.fixpoint.perform_ranges import (
     NO_RANGES,
@@ -114,7 +114,7 @@ from cobble.dataflow.fixpoint.live import EVERYTHING, Live
 from cobble.dataflow.fixpoint.options import DEFAULT_OPTIONS, AnalysisOptions
 from cobble.dataflow.fixpoint.stepped import Stepped
 from cobble.dataflow.fixpoint.targets import ResolvedTarget, resolved_targets
-from cobble.dataflow.jumps.discover import jumps_of
+from cobble.dataflow.jumps.discover import jump_reads, jumps_of
 from cobble.dataflow.jumps.jump import Jump
 from cobble.dataflow.layout import UnsizeableFieldError, program_records
 from cobble.dataflow.srccfg.build import label_id, paragraph_order
@@ -1079,10 +1079,42 @@ def _read_at(node: Node, state: State, index: CellIndex) -> _Extracted:
     )
 
 
+def _handed_at(
+    asg: CobolASG,
+    node: Node,
+    statement: Statement,
+    state: State,
+    index: CellIndex,
+    walk: _Walk,
+) -> _Extracted:
+    """The definitions reaching what a jump reads where it stands: where control
+    goes, and the bytes that go with it. A walk that did not settle says so on each,
+    as the jump's own facts do."""
+    return _Extracted(
+        defs=tuple(
+            row if walk.settled else _unsettled(row)
+            for extent, kind in jump_reads(asg, node, statement, index)
+            for row in _defs(node.id, state, extent, kind)
+        )
+    )
+
+
+def _unsettled(row: ReachingDef) -> ReachingDef:
+    held = row.held
+    return replace(
+        row,
+        held=ValueSet(
+            values=held.values,
+            reasons=held.reasons | {UnresolvedReason.INCOMPLETE_WALK},
+        ),
+    )
+
+
 def _extracted(
+    asg: CobolASG,
     cfg: Cfg,
     found: tuple[tuple[str, Statement], ...],
-    states: Mapping[str, State],
+    walk: _Walk,
     index: CellIndex,
     kept: Callable[[str, FieldExtent], bool],
 ) -> _Extracted:
@@ -1098,6 +1130,7 @@ def _extracted(
     order a reader compares against the listing.
     """
     statements = dict(found)
+    states = walk.states
     parts = tuple(
         part
         for node in cfg.nodes
@@ -1109,6 +1142,15 @@ def _extracted(
                 else ()
             ),
             _read_at(node, states[node.id], index),
+            *(
+                (
+                    _handed_at(
+                        asg, node, statements[node.id], states[node.id], index, walk
+                    ),
+                )
+                if node.id in statements
+                else ()
+            ),
         )
     )
     return _Extracted(
@@ -1168,7 +1210,7 @@ def analyse(
         cfg, statements, index, live, entry, options, _for(entry_state, live, entry)
     )
     kept = _kept_after(cfg, live)
-    extracted = _extracted(cfg, found, walk.states, index, kept)
+    extracted = _extracted(asg, cfg, found, walk, index, kept)
     written = _written(found, index)
     return ProgramFlow(
         program=cfg.program,

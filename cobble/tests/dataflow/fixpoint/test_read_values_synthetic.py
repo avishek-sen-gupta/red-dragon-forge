@@ -121,7 +121,7 @@ READS_SOURCE = """\
 """
 
 
-def test_a_test_operand_and_a_ridfld_get_consulted_rows_and_a_call_argument_none(
+def test_a_test_operand_and_a_ridfld_are_consulted_and_a_call_argument_is_copied(
     fixpoint_out: Callable[[str, str], Path],
 ) -> None:
     rows = [
@@ -158,6 +158,15 @@ def test_a_test_operand_and_a_ridfld_get_consulted_rows_and_a_call_argument_none
             "values": ["ABCD"],
             "reasons": [],
             "kind": "consulted",
+        },
+        {
+            "program": READS,
+            "node": "MAIN-PARA/4",
+            "extent": "WS-ARG@working_storage[12:16]",
+            "definers": [],
+            "values": ["ARG1"],
+            "reasons": [],
+            "kind": "copied",
         },
     ]
 
@@ -291,4 +300,86 @@ def test_a_read_partly_overwritten_since_its_last_write_gets_a_row_per_piece(
     assert [(row["node"], row["source_extent"], row["definers"]) for row in sinks] == [
         ("MAIN-PARA/4", "WS-OUT@working_storage[0:4]", ["MAIN-PARA/1"]),
         ("MAIN-PARA/4", "WS-OUT@working_storage[4:8]", ["MAIN-PARA/0"]),
+    ]
+
+
+HANDED = "READJUMP"
+
+HANDED_SOURCE = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. READJUMP.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-PGM               PIC X(8).
+       01  WS-TRAN              PIC X(4) VALUE 'TRN1'.
+       01  WS-AREA.
+           05  A-ID             PIC X(4).
+           05  A-REST           PIC X(4).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           MOVE 'PROGB' TO WS-PGM.
+           MOVE 'IIIIRRRR' TO WS-AREA.
+           MOVE 'XXXX' TO A-ID.
+           IF WS-PGM = SPACES
+               EXEC CICS RETURN TRANSID(WS-TRAN) COMMAREA(WS-AREA)
+               END-EXEC
+           END-IF.
+           EXEC CICS XCTL PROGRAM(WS-PGM) COMMAREA(WS-AREA)
+           END-EXEC.
+"""
+
+
+def _row(
+    node: str,
+    extent: str,
+    definers: list[str],
+    values: list[str],
+    kind: str,
+) -> dict[str, object]:
+    return {
+        "program": HANDED,
+        "node": node,
+        "extent": extent,
+        "definers": definers,
+        "values": values,
+        "reasons": [],
+        "kind": kind,
+    }
+
+
+def test_what_a_jump_hands_over_is_copied_per_piece_and_where_it_goes_is_consulted(
+    fixpoint_out: Callable[[str, str], Path],
+) -> None:
+    """The XCTL's program name and the RETURN's transaction id decide where control
+    goes, so they are consulted; the COMMAREA's bytes go with it, so they are
+    copied, cut where MOVE 'XXXX' TO A-ID overwrote the group's first four."""
+    rows = [
+        json.loads(line)
+        for line in (fixpoint_out(HANDED, HANDED_SOURCE) / "defs.jsonl")
+        .read_text()
+        .splitlines()
+    ]
+    at = ("MAIN-PARA/3.then.0", "MAIN-PARA/4")
+
+    assert [row for row in rows if row["node"] in at] == [
+        _row(
+            at[0], "WS-AREA@working_storage[12:16]", ["MAIN-PARA/2"], ["XXXX"], "copied"
+        ),
+        _row(
+            at[0], "WS-AREA@working_storage[16:20]", ["MAIN-PARA/1"], ["RRRR"], "copied"
+        ),
+        _row(at[0], "WS-TRAN@working_storage[8:12]", [], ["TRN1"], "consulted"),
+        _row(
+            at[1],
+            "WS-PGM@working_storage[0:8]",
+            ["MAIN-PARA/0"],
+            ["PROGB   "],
+            "consulted",
+        ),
+        _row(
+            at[1], "WS-AREA@working_storage[12:16]", ["MAIN-PARA/2"], ["XXXX"], "copied"
+        ),
+        _row(
+            at[1], "WS-AREA@working_storage[16:20]", ["MAIN-PARA/1"], ["RRRR"], "copied"
+        ),
     ]
