@@ -21,14 +21,6 @@ COBBLE = Path(__file__).resolve().parents[3]
 LIBRARY = COBBLE / "cobble" / "experimental" / "datalog" / "rules"
 CARDDEMO_FACTS = Path(__file__).resolve().parent / "carddemo_facts"
 MASTER = "AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS"
-BALANCE_TRACE = (
-    '#include "sinks.dl"\n#include "combine.dl"\n'
-    f'trace_target(p, n, r, s+12, s+24) :- sink_dataset(p, n, r, s, _, _, "{MASTER}").\n'
-    ".decl sources(p:symbol, kind:symbol, name:symbol)\n"
-    'sources(p, "file", f) :- origin_hit(p, _, "FILE", on), named(p, on, f).\n'
-    'sources(p, "screen", m) :- origin_hit(p, _, "MAP", on), named(p, on, m).\n'
-    'sources(p, "literal", "-") :- origin_hit(p, d, "LITERAL", _), pure(p, d).\n'
-)
 
 
 def _relations() -> tuple[Relation, ...]:
@@ -76,10 +68,6 @@ def evaluate(tmp_path: Path, question: str) -> dict[str, set[tuple[str, ...]]]:
     }
 
 
-def _of(rows: set[tuple[str, ...]], program: str) -> set[tuple[str, ...]]:
-    return {row for row in rows if row[0] == program}
-
-
 def test_an_operand_names_the_file_or_map_its_field_holds_with_trailing_spaces_stripped(
     tmp_path: Path,
 ) -> None:
@@ -119,61 +107,6 @@ def test_a_file_write_lands_in_the_dataset_its_name_resolves_to(
         ("COACTUPC", "ACCTDAT", MASTER),
         ("COBIL00C", "ACCTDAT", MASTER),
         ("CBIMPORT", "ACCOUNT-OUTPUT", "AWS.M2.CARDDEMO.ACCTDATA.IMPORT"),
-    }
-
-
-def test_the_trace_finds_the_files_and_screen_a_new_balance_comes_from(
-    tmp_path: Path,
-) -> None:
-    """CBACT04C.cbl:352 adds interest computed at :464-467 from TCATBAL and
-    DISCGRP to the old balance; CBTRN02C.cbl:547 adds DALYTRAN-AMT; COACTUPC.cbl
-    :1105-1108 converts the typed ACURBALI and :3964 moves it into the record."""
-    sources = evaluate(tmp_path, BALANCE_TRACE + ".output sources\n")["sources"]
-
-    assert _of(sources, "CBACT04C") == {
-        ("CBACT04C", "file", "ACCOUNT-FILE"),
-        ("CBACT04C", "file", "TCATBAL-FILE"),
-        ("CBACT04C", "file", "DISCGRP-FILE"),
-    }
-    assert _of(sources, "CBTRN02C") == {
-        ("CBTRN02C", "file", "ACCOUNT-FILE"),
-        ("CBTRN02C", "file", "DALYTRAN-FILE"),
-    }
-    assert {row for row in _of(sources, "COACTUPC") if row[1] == "screen"} == {
-        ("COACTUPC", "screen", "CACTUPA")
-    }
-
-
-def test_a_definition_every_path_overwrites_is_not_a_source(tmp_path: Path) -> None:
-    """COBIL00C's READPREV value (:214) is overwritten at :218 and :224 before the
-    COMPUTE at :234 on every path that returns each PERFORM to its own call site."""
-    sources = evaluate(tmp_path, BALANCE_TRACE + ".output sources\n")["sources"]
-
-    assert _of(sources, "COBIL00C") == {("COBIL00C", "file", "ACCTDAT")}
-
-
-def test_a_constant_counts_only_on_a_plain_copy_chain_not_behind_arithmetic(
-    tmp_path: Path,
-) -> None:
-    """CBACT04C seeds its interest accumulator with 0 and ADDs into it (:467),
-    then ADDs the total into the balance (:352): the 0 is behind combining
-    nodes, so it is no source. The combining nodes are those ADDs and COMPUTEs:
-    CBACT04C :352, :464, :467; CBTRN02C :547; COBIL00C :234."""
-    question = BALANCE_TRACE + (
-        ".decl combining(p:symbol, d:symbol)\ncombining(p, d) :- multi(p, d).\n"
-        ".output sources\n.output combining\n"
-    )
-    out = evaluate(tmp_path, question)
-
-    assert {
-        row for row in out["sources"] if row[1] == "literal" and row[0] != "COACTUPC"
-    } == set()
-    assert out["combining"] == {
-        ("CBACT04C", "1050-UPDATE-ACCOUNT/0"),
-        ("CBACT04C", "1300-COMPUTE-INTEREST/0"),
-        ("CBACT04C", "1300-COMPUTE-INTEREST/1"),
-        ("CBTRN02C", "2800-UPDATE-ACCOUNT-REC/0"),
-        ("COBIL00C", "PROCESS-ENTER-KEY/4.then.0.then.22"),
     }
 
 

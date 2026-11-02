@@ -84,14 +84,8 @@ source alone, and a deliberate break of it fails its test; the tests run on real
 | `names.dl` | `named(p, operand, name)`: the operand field's `VALUE`, trailing spaces stripped, or the operand itself | nothing |
 | `files.dl` | `file_ds(p, name, dsn)`: a batch SELECT name through its DD to the DSN a step running the program binds; a CICS file through the CSD | nothing |
 | `sinks.dl` | `sink_dataset(p, n, region, s, e, f, dsn)`: a file write's bytes and the dataset it lands in | nothing |
-| `trace.dl` | the backward byte trace to typed origins (`cand`, `need`, `step`, `origin_hit`); aligned copies keep exact bytes, a flow between fields of different sizes takes the whole source | `trace_target(p, n, region, a, b)` |
-| `combine.dl` | `multi(p, d)`: a traced node with two or more sources; `pure(p, d)`: on a plain copy chain from the target | builds on `trace.dl` |
 | `navigation.dl` | `reaches(t, p)`: programs reachable by XCTL and XCTL candidates | `nav_start(t, p)`, `nav_stop(p)` |
 | `branches.dl` | `branch(p, n, outcome, callee)`: the XCTL each outcome of a test leads to | `branch_test(p, n)` |
-
-`trace.dl` follows `fp_def`, whose walk returns each PERFORM to its own call site but does not
-correlate test outcomes: a definition that reaches a use only through a contradictory combination of
-tests is still reported.
 
 ## Running a question
 
