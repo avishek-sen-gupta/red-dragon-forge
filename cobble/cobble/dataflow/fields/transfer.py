@@ -34,6 +34,7 @@ from cics.statements import CicsOperand, ExecCicsStatement, operand_reference
 from cobble.asg_walk import descend
 from cobble.dataflow.fields.extent import CellIndex, OperandExtents, operand_extents
 from cobble.dataflow.fields.file_read import FileRead
+from cobble.dataflow.fields.initialized import initialized_extents
 from cobble.dataflow.fields.move_kind import MoveKind
 from cobble.dataflow.fields.origin import NO_ORIGIN, Origin
 from cobble.dataflow.fields.origin_kind import OriginKind
@@ -516,24 +517,41 @@ def _initialize_targets(statement: InitializeStatement) -> tuple[RefModOperand, 
 def _initialize_writes(
     statement: InitializeStatement, node: str, index: CellIndex, state: State
 ) -> Iterator[Write]:
-    """The group's whole extent, from LITERAL -- not one write per child cell.
+    """The bytes each operand's items take, from LITERAL, in contiguous runs.
 
-    Every child was written, and every child's write said the identical thing:
-    same origin, same defining node, differing only in a target extent the
-    group's own extent already contains. Which children those are is in the
-    declared extents, which a consumer intersects against this one, so the
-    fan-out was a per-edge restatement of the layout.
+    One write per run, not per child cell: every child's write would say the
+    identical thing, differing only in a target extent the run already contains.
+    The runs leave out what the statement skips (``initialized_extents``), so a
+    FILLER keeps whatever was written to it before.
 
     ``INITIALIZE`` sets a category default this unit does not model, so the
     value is ``NOT_A_LITERAL`` rather than the literal bytes a numeric
     INITIALIZE actually zeroes.
     """
-    return _origin_writes(
-        _initialize_targets(statement),
-        Origin(OriginKind.LITERAL, ""),
-        node,
-        index,
-        values=because(UnresolvedReason.NOT_A_LITERAL),
+    origin = Origin(OriginKind.LITERAL, "")
+    values = because(UnresolvedReason.NOT_A_LITERAL)
+    return chain.from_iterable(
+        _initialized_writes(operand, origin, node, index, values)
+        for operand in _initialize_targets(statement)
+    )
+
+
+def _initialized_writes(
+    operand: RefModOperand,
+    origin: Origin,
+    node: str,
+    index: CellIndex,
+    values: ValueSet,
+) -> Iterator[Write]:
+    extents = operand_extents(operand, index).extents
+    if not extents:
+        return _origin_writes((operand,), origin, node, index, values)
+    return iter(
+        tuple(
+            Write(target, _synthetic(origin, node), values=values)
+            for extent in extents
+            for target in initialized_extents(operand, extent, index)
+        )
     )
 
 

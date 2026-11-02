@@ -35,7 +35,7 @@ from cobble.path_utils import ensure_dir
 logger = logging.getLogger(__name__)
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-_HLASM = (
+HLASM = (
     _REPO_ROOT.parent
     / "vendor"
     / "red-dragon"
@@ -83,7 +83,7 @@ def _generate_one(bms: Path, config: BmsConfig, env: Mapping[str, str]) -> Path:
     storage instead of as a build that failed here.
     """
     export = subprocess.run(
-        [str(_HLASM), str(bms), "--syslib", str(config.macros_dir)],
+        [str(HLASM), str(bms), "--syslib", str(config.macros_dir)],
         capture_output=True,
         check=True,
     )
@@ -109,15 +109,21 @@ def main() -> int:
     configure_cli_logging()
     config = load_bms_config(_parse_args().config)
 
-    if not _HLASM.is_file():
+    if not HLASM.is_file():
         sys.exit(
-            f"hlasm_export not built: {_HLASM} (run `make setup` or `make hlasm` at the forge root)"
+            f"hlasm_export not built: {HLASM} (run `make setup` or `make hlasm` at the forge root)"
         )
+    generate(config)
+    return 0
+
+
+def generate(config: BmsConfig) -> tuple[Path, ...]:
+    """Every map in the corpus written to ``config.sym_dir`` as its copybook."""
     ensure_dir(config.sym_dir)
     env = _child_env()
     written = tuple(_generate_one(bms, config, env) for bms in _bms_sources(config))
     logger.info("generated %d symbolic copybooks -> %s", len(written), config.sym_dir)
-    return 0
+    return written
 
 
 if __name__ == "__main__":

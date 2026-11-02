@@ -66,6 +66,7 @@ FILLER = Cell(
     occurs=0,
     value="COACTVWC",
     value_is_figurative=False,
+    filler=True,
     index=(),
     decl=5,
     ordinal=5,
@@ -122,15 +123,16 @@ def test_the_rows_rebuild_the_records_they_were_written_from(tmp_path: Path):
     assert (menu.origin, menu.size, len(menu.cells)) == ("WORKING-STORAGE", 554, 108)
 
 
-def test_rows_written_before_the_justified_column_are_refused_not_read_as_left_aligned(
-    tmp_path: Path,
+@pytest.mark.parametrize("missing", ["justified", "fillers"])
+def test_rows_written_before_a_column_existed_are_refused_not_read_as_its_default(
+    tmp_path: Path, missing: str
 ):
     path = _written(program_layout(_asg(MEMBER)), MEMBER, tmp_path / "extents.jsonl")
     older = [
         {
             column: cells
             for column, cells in json.loads(line).items()
-            if column != "justified"
+            if column != missing
         }
         for line in path.read_text(encoding="utf-8").splitlines()
     ]

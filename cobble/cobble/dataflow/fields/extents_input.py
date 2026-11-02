@@ -56,6 +56,7 @@ class _Columns:
     values: tuple[str, ...]
     figurative: tuple[bool, ...]
     justified: tuple[bool, ...]
+    fillers: tuple[bool, ...]
     indexes: tuple[tuple[int, ...], ...]
     decls: tuple[int, ...]
     ordinals: tuple[int, ...]
@@ -78,6 +79,8 @@ def _columns(row: rows.Row) -> _Columns:
         raise StaleExtents(
             "extents.jsonl has no justified column; rerun cobble-extents"
         )
+    if "names" in row and "fillers" not in row:
+        raise StaleExtents("extents.jsonl has no fillers column; rerun cobble-extents")
     return _Columns(
         names=rows.strings(row, "names"),
         records=rows.strings(row, "records"),
@@ -92,6 +95,7 @@ def _columns(row: rows.Row) -> _Columns:
         values=rows.strings(row, "values"),
         figurative=rows.flags(row, "figurative"),
         justified=rows.flags(row, "justified"),
+        fillers=rows.flags(row, "fillers"),
         indexes=rows.number_lists(row, "indexes"),
         decls=rows.numbers(row, "decls"),
         ordinals=rows.numbers(row, "ordinals"),
@@ -118,6 +122,7 @@ def _declared_cell(columns: _Columns, n: int) -> DeclaredCell:
             value=columns.values[n],
             value_is_figurative=columns.figurative[n],
             justified=columns.justified[n],
+            filler=columns.fillers[n],
             index=columns.indexes[n],
             decl=columns.decls[n],
             ordinal=columns.ordinals[n],

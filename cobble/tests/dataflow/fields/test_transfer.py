@@ -236,11 +236,19 @@ def test_a_computed_subscript_target_is_a_weak_update(
     assert reached == {"WS-A", "WS-B"}
 
 
-def test_initialize_gives_every_member_a_literal(
+def test_initialize_gives_every_member_a_literal_but_leaves_fillers_and_redefinitions(
     program_of, field, after, names_reaching
 ):
+    """Enterprise COBOL's INITIALIZE rules, 1a: without the FILLER phrase an
+    elementary FILLER item is not a receiving operand, nor is anything that
+    redefines or lies under a redefinition below the operand. WS-R redefines a
+    group holding only a FILLER, so its bytes keep the earlier MOVE too."""
+    earlier = Origin(OriginKind.LITERAL, "'ZZZZZZZZZZZZ'")
     asg = program_of(
-        [{"type": "INITIALIZE", "operands": ["REC"]}],
+        [
+            _move("'ZZZZZZZZZZZZ'", "REC"),
+            {"type": "INITIALIZE", "operands": ["REC"]},
+        ],
         data_fields=[
             field(
                 1,
@@ -248,6 +256,14 @@ def test_initialize_gives_every_member_a_literal(
                 children=[
                     field(5, "WS-A", "X(4)", offset=0),
                     field(5, "WS-B", "X(4)", offset=4),
+                    field(5, "FILLER_1", "X(2)", offset=8, filler=True),
+                    field(
+                        5,
+                        "WS-G",
+                        offset=10,
+                        children=[field(10, "FILLER_2", "X(2)", offset=0, filler=True)],
+                    ),
+                    field(5, "WS-R", "X(2)", offset=10, redefines="WS-G"),
                 ],
             )
         ],
@@ -255,6 +271,8 @@ def test_initialize_gives_every_member_a_literal(
     state, index = after(asg)
     assert names_reaching(state, index, "WS-A") == {Origin(OriginKind.LITERAL, "")}
     assert names_reaching(state, index, "WS-B") == {Origin(OriginKind.LITERAL, "")}
+    assert names_reaching(state, index, "FILLER_1") == {earlier}
+    assert names_reaching(state, index, "WS-R") == {earlier}
 
 
 def test_add_gives_the_target_the_union_of_its_operands_literals_included(

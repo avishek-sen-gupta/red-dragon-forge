@@ -65,10 +65,11 @@ cobble-extents --asg-dir ASG_DIR --out OUT [--max-workers N] [--synthesize-undec
 One row per declared name: `id`, `level`, `usage`, `extents` (one per occurrence, so `OCCURS`
 gives several), `program`, then arrays parallel to `extents` holding each occurrence's record,
 qualification, start, length, level, PIC, usage, `REDEFINES`, `OCCURS`, subscripts, `VALUE`,
-`JUSTIFIED RIGHT` and parent, plus the record's origin and size. The fixpoint and the queries
-read their layout from this table; `cobble.dataflow.fields.extents_input` is its reader. Run it
-again whenever the ASG cache changes; a table written before the `justified` column is refused
-with a message to rerun `cobble-extents`.
+`JUSTIFIED RIGHT`, whether it is a `FILLER` (`fillers`) and parent, plus the record's origin and
+size. The fixpoint and the queries read their layout from this table;
+`cobble.dataflow.fields.extents_input` is its reader. Run it again whenever the ASG cache changes;
+a table written before the `justified` or `fillers` column is refused with a message to rerun
+`cobble-extents`.
 
 With `--synthesize-undeclared`, a field reference in the procedure division, or a write target the
 fixpoint counts such as a CICS `RECEIVE INTO`, that the fixpoint would find no declaration for gets one, written to the table as if a copybook had declared it:
@@ -117,7 +118,10 @@ side is clamped; the entry keeps its writers and its values become `not-a-litera
 
 The transfer models `MOVE`, `INITIALIZE`, arithmetic, `COMPUTE`, `STRING`, `READ`, `CALL`,
 `EXEC CICS` and `WRITE`/`REWRITE ... FROM`, which moves the `FROM` operand into the record
-area. A `READ` fills its file's record area, every 01 the parser places under its FD, and
+area. `INITIALIZE` writes the elementary items under its operand and leaves out what Enterprise
+COBOL's INITIALIZE rules exclude without the `FILLER` phrase: `FILLER` items, and items that
+redefine or lie under a redefinition below the operand, so their bytes keep their earlier
+writers. A reference-modified or computed-subscript operand is written whole. A `READ` fills its file's record area, every 01 the parser places under its FD, and
 its `INTO` field when it has one. Any other statement that writes storage (`ACCEPT`, `UNSTRING`, `INSPECT`, `SET`,
 `SEARCH`, the `CORRESPONDING` forms, `XML GENERATE`) is a weak
 write of the names its CFG node lists (`INSPECT REPLACING`/`CONVERTING` lists its subject, as
