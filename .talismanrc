@@ -549,4 +549,6 @@ fileignoreconfig:
   checksum: d702dff8bb4d8e95ca8704568c46dc421e3d0376fccc026ebadac7254b0fcbd1
 - filename: docs/superpowers/plans/2026-11-05-horn-clause-lowering-stages-0-1.md
   checksum: eff6e5a5cb9092973a585978b702f0ce5de89350ba8298d37d5e283cc037bb98
+- filename: cobble/tests/carddemo/test_horn.py
+  checksum: f29b0c3efe6a3e6d18b1056f83ae15f3e34186183669f1f1eb61a7c5036875e0
 version: "1.0"

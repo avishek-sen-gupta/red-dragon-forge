@@ -342,3 +342,28 @@ Deviations, decided during execution:
   reaches, so a range that only does `GO TO` leaves the resume reachable by the CFG's own account.
   The test's range instead does `GO TO` only when `F = 'Y'`, and the resume is `UNSAT` with
   `F = 'Y'` and `SAT` with `F = 'N'`.
+
+Stage 1, 2026-11-05. With z3 strings, the four blank-input gates gave no answer within 60 s, and
+one ran 30 minutes before it was stopped. With the user's agreement, the state became
+bit-vectors, and names the extents stage synthesised for undeclared uses stopped being tracked
+(`EIBAID`, `EIBCALEN` and `%HANDLER[ANY]` had been tracked as `PIC X(10)`). COSGN00C then has 8
+tracked fields.
+
+| gate | answer | solver time |
+|---|---|---|
+| `test_signon_can_transfer_to_the_user_menu` | `SAT` | 0.007 s |
+| `test_signon_can_transfer_to_the_admin_menu` | `SAT` | 0.006 s |
+| `test_signon_never_sends_an_admin_to_the_user_menu` | `UNSAT` | 0.005 s |
+| `test_signon_never_sends_a_user_to_the_admin_menu` | `UNSAT` | 0.005 s |
+| `test_signon_never_transfers_with_a_blank_user_id` | `UNSAT` | 0.243 s |
+| `test_signon_never_transfers_with_a_low_values_user_id` | `UNSAT` | 0.282 s |
+| `test_signon_never_transfers_with_a_blank_password` | `UNSAT` | 0.218 s |
+| `test_signon_never_transfers_with_a_low_values_password` | `UNSAT` | 0.245 s |
+
+Deviations, decided during execution:
+- Stage 0 was unsound for SET: a SET node writes the 88 name, which has no extents row, so the
+  parent kept its value. A written 88 now frees, or exactly assigns, its parent.
+  `test_a_set_the_encoding_cannot_follow_frees_the_parent` pins it.
+- `exact_writes` takes no `node`: nothing in it used the node.
+- `ZERO`, `ZEROS` and `ZEROES` join the figuratives.
+- Two unit tests compare `F` once, since a field never compared is not tracked.

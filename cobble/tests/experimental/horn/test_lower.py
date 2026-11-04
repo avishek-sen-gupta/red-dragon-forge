@@ -20,9 +20,13 @@ def _clock() -> Callable[[], float]:
     return lambda: next(ticks)
 
 
-def _asg(paragraphs: Sequence[tuple[str, Sequence[Statement]]]) -> CobolASG:
+def _asg(
+    paragraphs: Sequence[tuple[str, Sequence[Statement]]],
+    data: Sequence[Statement] = (),
+) -> CobolASG:
     body = {
         "program_id": "PROGA",
+        "data_fields": list(data),
         "paragraphs": [
             {"name": name, "statements": list(statements)}
             for name, statements in paragraphs
@@ -63,6 +67,32 @@ def _move(value: str, target: str) -> Statement:
     return {"type": "MOVE", "operands": [{"name": value}, {"name": target}]}
 
 
+def _move_literal(value: str, target: str) -> Statement:
+    source = {"kind": "lit", "name": value}
+    return {"type": "MOVE", "operands": [source, {"name": target}]}
+
+
+def _set_true(condition: str) -> Statement:
+    return {
+        "type": "SET",
+        "set_type": "TO",
+        "targets": [{"kind": "ref", "name": condition}],
+        "values": [{"kind": "lit", "value": "TRUE"}],
+    }
+
+
+def _flag(name: str, pic: str, conditions: Mapping[str, Sequence[str]]) -> Statement:
+    return {
+        "name": name,
+        "level": 1,
+        "pic": pic,
+        "conditions": [
+            {"name": condition, "values": [{"from": value} for value in values]}
+            for condition, values in conditions.items()
+        ],
+    }
+
+
 def _if(
     left: str, right: str, then: Sequence[Statement], otherwise: Sequence[Statement]
 ) -> Statement:
@@ -99,8 +129,17 @@ def _ask(
     extents: Sequence[ExtentLine],
     writer: str,
     conditions: Sequence[Condition] = (),
+    data: Sequence[Statement] = (),
+    undeclared: Sequence[str] = (),
 ) -> Answer:
-    asg = _asg(paragraphs)
+    named = frozenset(str(entry["name"]) for entry in data)
+    declared = tuple(
+        {"name": name, "level": 1, "pic": pic or "X"}
+        for row in extents
+        for name, pic in zip(row.names, row.pics, strict=True)
+        if name not in named and name not in undeclared
+    )
+    asg = _asg(paragraphs, (*data, *declared))
     program = program_of(asg, extents)
     node = next(node.id for node in program.cfg.nodes if writer in node.writes)
     return reaches(lower(program), Point("PROGA", node), conditions, _clock()).answer
@@ -199,3 +238,78 @@ def test_a_goto_out_of_a_range_does_not_return_to_the_perform() -> None:
         _ask(program, FIELDS, "R-OUT", [_f(Op.EQ, "'Y'")]),
         _ask(program, FIELDS, "R-OUT", [_f(Op.EQ, "'N'")]),
     ) == (Answer.SAT, Answer.UNSAT, Answer.SAT)
+
+
+X_OUT = _move("'x'", "X-OUT")
+
+FLAGS = (_flag("F", "X", {"F-ON": ("'Y'",), "F-AB": ("'A'", "'B'")}),)
+
+
+def test_a_literal_move_sets_the_flag_exactly() -> None:
+    program = [("MAIN", [_move_literal("'Y'", "F"), _if("F", "'Q'", [], []), X_OUT])]
+
+    assert (
+        _ask(program, FIELDS, "X-OUT", [_f(Op.EQ, "'N'")]),
+        _ask(program, FIELDS, "X-OUT", [_f(Op.EQ, "'Y'")]),
+    ) == (Answer.UNSAT, Answer.SAT)
+
+
+def test_set_to_true_assigns_the_condition_value() -> None:
+    program = [("MAIN", [_set_true("F-ON"), _if("F", "'Q'", [], []), X_OUT])]
+
+    assert (
+        _ask(program, FIELDS, "X-OUT", [_f(Op.EQ, "'N'")], FLAGS),
+        _ask(program, FIELDS, "X-OUT", [_f(Op.EQ, "'Y'")], FLAGS),
+    ) == (Answer.UNSAT, Answer.SAT)
+
+
+def test_a_set_the_encoding_cannot_follow_frees_the_parent() -> None:
+    then = [_set_true("F-AB"), _move("'x'", "X-OUT")]
+    program = [("MAIN", [_if("F", "'Y'", then, [])])]
+
+    assert _ask(program, FIELDS, "X-OUT", [_f(Op.EQ, "'A'")], FLAGS) == Answer.SAT
+
+
+def test_a_moved_literal_is_padded_to_the_field() -> None:
+    extents = (_field("F3", 0, 3), *FIELDS)
+    program = [
+        (
+            "MAIN",
+            [
+                _move_literal("'Y'", "F3"),
+                _if("F3", "'Q'", [], []),
+                _move("'x'", "X-OUT"),
+            ],
+        )
+    ]
+
+    assert (
+        _ask(program, extents, "X-OUT", [Condition("F3", Op.EQ, "'Y  '")]),
+        _ask(program, extents, "X-OUT", [Condition("F3", Op.EQ, "'YYY'")]),
+    ) == (Answer.SAT, Answer.UNSAT)
+
+
+def test_a_long_literal_is_truncated_to_the_field() -> None:
+    extents = (_field("F3", 0, 3), *FIELDS)
+    program = [
+        (
+            "MAIN",
+            [
+                _move_literal("'ABCDE'", "F3"),
+                _if("F3", "'Q'", [], []),
+                _move("'x'", "X-OUT"),
+            ],
+        )
+    ]
+
+    assert _ask(program, extents, "X-OUT", [Condition("F3", Op.NE, "'ABC'")]) == (
+        Answer.UNSAT
+    )
+
+
+def test_a_name_the_program_never_declares_is_not_tracked() -> None:
+    extents = (_field("U", 2, 10), *FIELDS)
+    program = [("MAIN", [_if("U", "'Y'", [_move("'x'", "X-OUT")], [])])]
+
+    with pytest.raises(ValueError, match="^U is not a tracked field$"):
+        _ask(program, extents, "X-OUT", [Condition("U", Op.EQ, "'Y'")], (), ("U",))

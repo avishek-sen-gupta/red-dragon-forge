@@ -35,15 +35,16 @@ def every(variables: Sequence[z3.ExprRef], body: z3.BoolRef) -> z3.BoolRef:
     return _boolean(z3.ForAll(list(variables), body), "a quantified rule")
 
 
-def text(value: str) -> z3.SeqRef:
-    term = z3.StringVal(value)
-    if isinstance(term, z3.SeqRef):
+def constant(value: str) -> z3.BitVecRef:
+    content = value.encode("latin-1")
+    term = z3.BitVecVal(int.from_bytes(content, "big"), 8 * len(content))
+    if isinstance(term, z3.BitVecRef):
         return term
-    raise TypeError(f"{value!r} is not a string term")
+    raise TypeError(f"{value!r} is not a bit-vector term")
 
 
-def string(name: str) -> z3.SeqRef:
-    term = z3.String(name)
-    if isinstance(term, z3.SeqRef):
+def bits(name: str, length: int) -> z3.BitVecRef:
+    term = z3.BitVec(name, 8 * length)
+    if isinstance(term, z3.BitVecRef):
         return term
-    raise TypeError(f"{name} is not a string term")
+    raise TypeError(f"{name} is not a bit-vector term")

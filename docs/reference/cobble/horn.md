@@ -2,8 +2,10 @@
 
 One program's control-flow graph written as constrained Horn clauses, and a question about it
 answered by Z3's Spacer engine (the `z3-solver` package). The code is
-`cobble/experimental/horn/`; nothing else in cobble imports it, and every use of z3 stays inside
-it. There is no command yet: a question is asked from Python, as the CardDemo tests do.
+`cobble/experimental/horn/`. Two `.importlinter` contracts keep it removable in one piece:
+`horn-is-a-leaf` lets nothing outside the package import it, and `z3-only-in-horn` lets nothing
+outside it import z3. Deleting the experiment is deleting the package, its tests, those
+contracts, `horn-not-datalog` and the `z3-solver` dependency. There is no command yet: a question is asked from Python, as the CardDemo tests do.
 
 ## What it reads
 
@@ -14,12 +16,17 @@ A program's ASG, which gives the CFG (`program_cfg`), the statement at each node
 
 ## The encoding
 
-- **Tracked fields.** A name declared with exactly one extent, `PIC X…`, `USAGE DISPLAY`, and
-  compared by some `==` or `!=` test. Its value is a z3 string of the field's length. A name
-  declared twice, a numeric field, a group and anything never compared is not tracked.
+- **Tracked fields.** A name the program declares with exactly one extent, `PIC X…`,
+  `USAGE DISPLAY`, and compared by some `==` or `!=` test. Its value is a bit-vector of 8 bits
+  per byte; text becomes bytes as Latin-1, the same way for every literal, so equal text gives
+  equal bits. A name declared twice, a numeric field, a group, anything never compared, and a
+  name the extents stage declared only because the program uses it undeclared are not tracked.
+  Bit-vectors replaced z3 strings: with strings, sign-on's blank-input questions ran past 60 s;
+  with bit-vectors they answer in under a second.
 - **Tests.** A TEST atom is encoded exactly when its op is `==` or `!=`, its left side is
   tracked, and its right side is a quoted literal no longer than the field (padded right with
-  spaces), `SPACE(S)`, `LOW-VALUE(S)`, `HIGH-VALUE(S)`, or a tracked field of the same length.
+  spaces), `SPACE(S)`, `LOW-VALUE(S)`, `HIGH-VALUE(S)`, `ZERO(S)`/`ZEROES`, or a tracked
+  field of the same length.
   Every other test, unresolved ones included, constrains nothing.
 - **Contexts.** One relation per node per context. A context is the top level, or one PERFORM
   range, named by the PERFORM's target label and its `range_end`. A range's relations carry the
@@ -28,10 +35,16 @@ A program's ASG, which gives the CFG (`program_cfg`), the statement at each node
 - **Edges.** FLOW, FALLTHRU, GOTO, TRUE and FALSE are followed; TRUE and FALSE carry the test or
   its negation. RETURN edges are not followed; returns go through summaries. A FALLTHRU out of a
   range's end is not followed inside that range. A node with no successors ends the task.
-- **Writes.** Every tracked field whose bytes overlap a written name's extent becomes
-  unconstrained after the write; the others keep their value.
-- **Unconstrained.** The initial state, every input, every write, every untracked field and every
-  test not encoded exactly. A missing fact therefore never removes a run, so `unsat` holds for
+- **Exact writes.** `SET c TO TRUE`, where `c` is an 88 with one value and no range on a tracked
+  parent, gives the parent that value, padded to its length. `MOVE` of a quoted literal or a
+  figurative into a tracked field with no reference modification or subscript gives the
+  literal truncated or padded right with spaces, or the figurative repeated.
+- **Other writes.** Every tracked field whose bytes overlap a written name's extent becomes
+  unconstrained after the write; the others keep their value. A written 88 name stands for its
+  parent's bytes. An exact write is used only when no other name the statement writes overlaps
+  the field.
+- **Unconstrained.** The initial state (VALUE clauses are not read), every input, every write
+  other than the exact ones, every untracked field and every test not encoded exactly. A missing fact therefore never removes a run, so `unsat` holds for
   the program the CFG describes.
 
 The CFG's own over-approximations carry over: where `build.py` keeps the edge past a PERFORM whose

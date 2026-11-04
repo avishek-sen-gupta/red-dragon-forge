@@ -1,6 +1,7 @@
 """The fields whose values the encoding follows exactly: one alphanumeric extent, compared by a test."""
 
 from collections.abc import Sequence
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 
 from cobble.dataflow.fields.extent_line import ExtentLine
@@ -54,10 +55,13 @@ def _trackable(name: str, declared: Sequence[Declared]) -> bool:
     )
 
 
-def tracked_fields(cfg: Cfg, extents: Sequence[ExtentLine]) -> tuple[Tracked, ...]:
+def tracked_fields(
+    cfg: Cfg, extents: Sequence[ExtentLine], undeclared: AbstractSet[str]
+) -> tuple[Tracked, ...]:
     declared = declarations(extents)
+    compared = _compared(cfg) - undeclared
     return tuple(
         Tracked(entry.name, entry.extent.length, entry.extent)
         for entry in declared
-        if entry.name in _compared(cfg) and _trackable(entry.name, declared)
+        if entry.name in compared and _trackable(entry.name, declared)
     )

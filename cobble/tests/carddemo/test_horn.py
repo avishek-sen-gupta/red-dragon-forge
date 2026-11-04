@@ -72,3 +72,32 @@ def test_signon_never_sends_a_user_to_the_admin_menu(signon: HornSystem) -> None
     CDEMO-USER-TYPE = 'A'."""
     other = Condition("CDEMO-USER-TYPE", Op.NE, "'A'")
     assert _ask(signon, ADMIN_MENU, (other,)) == Answer.UNSAT
+
+
+def _never_with(system: HornSystem, field: str, value: str) -> Answer:
+    return _ask(system, USER_MENU, (Condition(field, Op.EQ, value),))
+
+
+def test_signon_never_transfers_with_a_blank_user_id(signon: HornSystem) -> None:
+    """COSGN00C.cbl:118-119 WHEN USERIDI OF COSGN0AI = SPACES OR LOW-VALUES MOVE 'Y'
+    TO WS-ERR-FLG, and :138-139 IF NOT ERR-FLG-ON PERFORM READ-USER-SEC-FILE, the
+    paragraph holding the XCTL. ERR-FLG-ON is VALUE 'Y' (:41). Nothing between
+    writes WS-ERR-FLG or USERIDI."""
+    assert _never_with(signon, "USERIDI", "SPACES") == Answer.UNSAT
+
+
+def test_signon_never_transfers_with_a_low_values_user_id(signon: HornSystem) -> None:
+    """COSGN00C.cbl:118-119 and :138-139, as above, for LOW-VALUES."""
+    assert _never_with(signon, "USERIDI", "LOW-VALUES") == Answer.UNSAT
+
+
+def test_signon_never_transfers_with_a_blank_password(signon: HornSystem) -> None:
+    """COSGN00C.cbl:123-124 WHEN PASSWDI OF COSGN0AI = SPACES OR LOW-VALUES MOVE 'Y'
+    TO WS-ERR-FLG, and :138-139. A blank user id takes the first WHEN, which sets the
+    same flag."""
+    assert _never_with(signon, "PASSWDI", "SPACES") == Answer.UNSAT
+
+
+def test_signon_never_transfers_with_a_low_values_password(signon: HornSystem) -> None:
+    """COSGN00C.cbl:123-124 and :138-139, as above, for LOW-VALUES."""
+    assert _never_with(signon, "PASSWDI", "LOW-VALUES") == Answer.UNSAT

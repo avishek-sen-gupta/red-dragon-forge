@@ -1,4 +1,5 @@
 [importlinter]
+include_external_packages = True
 root_packages =
     cics
     squall
@@ -123,6 +124,22 @@ source_modules =
     cobble.experimental.horn
 forbidden_modules =
     cobble.experimental.datalog
+
+[importlinter:contract:horn-is-a-leaf]
+name = Nothing outside the Horn lowering imports it, so the experiment can be deleted whole
+type = protected
+protected_modules =
+    cobble.experimental.horn
+allowed_importers =
+    cobble.experimental.horn
+
+[importlinter:contract:z3-only-in-horn]
+name = Only the Horn lowering uses z3
+type = protected
+protected_modules =
+    z3
+allowed_importers =
+    cobble.experimental.horn
 
 [importlinter:contract:cobble-no-runtime]
 name = Cobble is static analysis — it must not reach into any runtime

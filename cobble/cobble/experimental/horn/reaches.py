@@ -14,7 +14,9 @@ from cobble.experimental.horn.verdict import Verdict
 
 
 def _condition(
-    condition: Condition, state: Mapping[str, z3.SeqRef], fields: Mapping[str, Tracked]
+    condition: Condition,
+    state: Mapping[str, z3.BitVecRef],
+    fields: Mapping[str, Tracked],
 ) -> tuple[z3.BoolRef, ...]:
     if condition.field not in fields:
         raise ValueError(f"{condition.field} is not a tracked field")
@@ -27,8 +29,8 @@ def _condition(
 
 
 def _arguments(
-    relation: z3.FuncDeclRef, entry: Sequence[z3.SeqRef], now: Sequence[z3.SeqRef]
-) -> tuple[z3.SeqRef, ...]:
+    relation: z3.FuncDeclRef, entry: Sequence[z3.BitVecRef], now: Sequence[z3.BitVecRef]
+) -> tuple[z3.BitVecRef, ...]:
     return (*entry, *now) if relation.arity() > len(now) else tuple(now)
 
 
