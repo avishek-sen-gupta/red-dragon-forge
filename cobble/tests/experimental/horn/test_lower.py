@@ -3,7 +3,6 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 
 import pytest
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
-from cobble.dataflow.fields.extent_line import ExtentLine
 from cobble.experimental.horn.answer import Answer
 from cobble.experimental.horn.condition import Condition, Op
 from cobble.experimental.horn.lower import lower
@@ -22,7 +21,8 @@ def _clock() -> Callable[[], float]:
 
 def _asg(
     paragraphs: Sequence[tuple[str, Sequence[Statement]]],
-    data: Sequence[Statement] = (),
+    data: Sequence[Statement],
+    **extra: object,
 ) -> CobolASG:
     body = {
         "program_id": "PROGA",
@@ -31,35 +31,23 @@ def _asg(
             {"name": name, "statements": list(statements)}
             for name, statements in paragraphs
         ],
+        **extra,
     }
     with cached_asg_dialect_parsers_registered():
         return CobolASG.from_dict(json.loads(json.dumps(body)))
 
 
-def _field(name: str, start: int, length: int, pic: str = "X") -> ExtentLine:
-    return _declared(name, ((start, length),), pic)
+def _x(name: str, pic: str = "X", **extra: object) -> Statement:
+    return {"name": name, "level": 1, "pic": pic, **extra}
 
 
-def _declared(
-    name: str, places: Sequence[tuple[int, int]], pic: str = "X"
-) -> ExtentLine:
-    return ExtentLine(
-        id=f"PROGA.{name}",
-        program="PROGA",
-        extents=tuple(
-            f"{name}@working_storage[{start}:{start + length}]"
-            for start, length in places
-        ),
-        names=tuple(name for _ in places),
-        records=tuple(name for _ in places),
-        paths=tuple((name,) for _ in places),
-        levels=tuple(1 for _ in places),
-        pics=tuple(pic for _ in places),
-        usages=tuple("DISPLAY" for _ in places),
-        occurs=tuple(0 for _ in places),
-        origins=tuple("WORKING-STORAGE" for _ in places),
-        values=tuple("" for _ in places),
-        redefines=tuple("" for _ in places),
+def _flagged(name: str, conditions: Mapping[str, Sequence[str]]) -> Statement:
+    return _x(
+        name,
+        conditions=[
+            {"name": condition, "values": [{"from": value} for value in values]}
+            for condition, values in conditions.items()
+        ],
     )
 
 
@@ -68,46 +56,47 @@ def _move(value: str, target: str) -> Statement:
 
 
 def _move_literal(value: str, target: str) -> Statement:
-    source = {"kind": "lit", "name": value}
-    return {"type": "MOVE", "operands": [source, {"name": target}]}
-
-
-def _set_true(condition: str) -> Statement:
     return {
-        "type": "SET",
-        "set_type": "TO",
-        "targets": [{"kind": "ref", "name": condition}],
-        "values": [{"kind": "lit", "value": "TRUE"}],
-    }
-
-
-def _flag(name: str, pic: str, conditions: Mapping[str, Sequence[str]]) -> Statement:
-    return {
-        "name": name,
-        "level": 1,
-        "pic": pic,
-        "conditions": [
-            {"name": condition, "values": [{"from": value} for value in values]}
-            for condition, values in conditions.items()
-        ],
+        "type": "MOVE",
+        "operands": [{"kind": "lit", "name": value}, {"name": target}],
     }
 
 
 def _if(
-    left: str, right: str, then: Sequence[Statement], otherwise: Sequence[Statement]
+    left: Mapping[str, object],
+    right: str,
+    then: Sequence[Statement],
+    otherwise: Sequence[Statement] = (),
 ) -> Statement:
     return {
         "type": "IF",
         "condition": {
             "not": False,
             "relation": {
-                "left": {"kind": "ref", "name": left},
+                "left": dict(left),
                 "op": "==",
                 "right": {"kind": "lit", "value": right},
             },
         },
         "children": list(then),
         "else_children": list(otherwise),
+    }
+
+
+def _ref(name: str) -> Mapping[str, object]:
+    return {"kind": "ref", "name": name}
+
+
+def _test(name: str, right: str, then: Sequence[Statement] = ()) -> Statement:
+    return _if(_ref(name), right, then)
+
+
+def _set_true(*conditions: str) -> Statement:
+    return {
+        "type": "SET",
+        "set_type": "TO",
+        "targets": [{"kind": "ref", "name": c} for c in conditions],
+        "values": [{"kind": "lit", "value": "TRUE"}],
     }
 
 
@@ -120,27 +109,18 @@ def _goto(target: str) -> Statement:
 
 
 STOP: Statement = {"type": "STOP_RUN"}
-
-FIELDS = (_field("F", 0, 1), _field("G", 1, 1))
+X_OUT = _move("'x'", "X-OUT")
+FIELDS = (_x("F"), _x("G"), _x("X-OUT"))
 
 
 def _ask(
     paragraphs: Sequence[tuple[str, Sequence[Statement]]],
-    extents: Sequence[ExtentLine],
+    data: Sequence[Statement],
     writer: str,
     conditions: Sequence[Condition] = (),
-    data: Sequence[Statement] = (),
-    undeclared: Sequence[str] = (),
+    **extra: object,
 ) -> Answer:
-    named = frozenset(str(entry["name"]) for entry in data)
-    declared = tuple(
-        {"name": name, "level": 1, "pic": pic or "X"}
-        for row in extents
-        for name, pic in zip(row.names, row.pics, strict=True)
-        if name not in named and name not in undeclared
-    )
-    asg = _asg(paragraphs, (*data, *declared))
-    program = program_of(asg, extents)
+    program = program_of(_asg(paragraphs, data, **extra))
     node = next(node.id for node in program.cfg.nodes if writer in node.writes)
     return reaches(lower(program), Point("PROGA", node), conditions, _clock()).answer
 
@@ -150,7 +130,7 @@ def _f(op: Op, value: str) -> Condition:
 
 
 def test_a_test_constrains_the_values_after_it() -> None:
-    program = [("MAIN", [_if("F", "'Y'", [_move("'x'", "X-OUT")], [])])]
+    program = [("MAIN", [_test("F", "'Y'", [X_OUT])])]
 
     assert (
         _ask(program, FIELDS, "X-OUT", [_f(Op.EQ, "'N'")]),
@@ -160,48 +140,55 @@ def test_a_test_constrains_the_values_after_it() -> None:
 
 
 def test_contradictory_tests_make_a_point_unreachable() -> None:
-    inner = _if("F", "'Y'", [_move("'x'", "X-OUT")], [])
-    program = [("MAIN", [_if("F", "'N'", [inner], [])])]
+    program = [("MAIN", [_test("F", "'N'", [_test("F", "'Y'", [X_OUT])])])]
 
     assert _ask(program, FIELDS, "X-OUT") == Answer.UNSAT
 
 
 def test_a_write_frees_the_field_it_overlaps() -> None:
-    then = [_move("G", "F"), _move("'x'", "X-OUT")]
-    program = [("MAIN", [_if("F", "'Y'", then, [])])]
+    program = [("MAIN", [_test("F", "'Y'", [_move("G", "F"), X_OUT])])]
 
     assert _ask(program, FIELDS, "X-OUT", [_f(Op.EQ, "'N'")]) == Answer.SAT
 
 
 def test_a_group_write_frees_the_flags_inside_it() -> None:
-    extents = (_field("REC", 0, 2, pic=""), *FIELDS)
-    then = [_move("G", "REC"), _move("'x'", "X-OUT")]
-    program = [("MAIN", [_if("F", "'Y'", then, [])])]
+    record = {
+        "name": "REC",
+        "level": 1,
+        "children": [
+            {"name": "F", "level": 5, "pic": "X", "offset": 0},
+            {"name": "H", "level": 5, "pic": "X", "offset": 1},
+        ],
+    }
+    data = (record, _x("G", "X(2)"), _x("X-OUT"))
+    program = [("MAIN", [_test("F", "'Y'", [_move("G", "REC"), X_OUT])])]
 
-    assert _ask(program, extents, "X-OUT", [_f(Op.EQ, "'N'")]) == Answer.SAT
+    assert _ask(program, data, "X-OUT", [_f(Op.EQ, "'N'")]) == Answer.SAT
 
 
 def test_a_perform_returns_only_to_its_own_caller() -> None:
+    data = (*FIELDS, _x("A-OUT"), _x("B-OUT"), _x("P-OUT"))
     program = [
         (
             "MAIN",
             [
-                _if("F", "'Y'", [_perform("P"), _move("'a'", "A-OUT")], []),
-                _if("F", "'N'", [_perform("P"), _move("'b'", "B-OUT")], []),
+                _test("F", "'Y'", [_perform("P"), _move("'a'", "A-OUT")]),
+                _test("F", "'N'", [_perform("P"), _move("'b'", "B-OUT")]),
                 STOP,
             ],
         ),
-        ("P", [_if("F", "'Y'", [_move("'p'", "P-OUT")], [])]),
+        ("P", [_test("F", "'Y'", [_move("'p'", "P-OUT")])]),
     ]
 
     assert (
-        _ask(program, FIELDS, "B-OUT", [_f(Op.EQ, "'Y'")]),
-        _ask(program, FIELDS, "B-OUT", [_f(Op.EQ, "'N'")]),
-        _ask(program, FIELDS, "A-OUT", [_f(Op.EQ, "'Y'")]),
+        _ask(program, data, "B-OUT", [_f(Op.EQ, "'Y'")]),
+        _ask(program, data, "B-OUT", [_f(Op.EQ, "'N'")]),
+        _ask(program, data, "A-OUT", [_f(Op.EQ, "'Y'")]),
     ) == (Answer.UNSAT, Answer.SAT, Answer.SAT)
 
 
 def test_a_thru_range_falls_through_inside_and_stops_at_its_end() -> None:
+    data = (*FIELDS, _x("A-OUT"), _x("B-OUT"), _x("C-OUT"), _x("R-OUT"))
     program = [
         ("MAIN", [_perform("A", thru="B"), _move("'r'", "R-OUT"), STOP]),
         ("A", [_move("'a'", "A-OUT")]),
@@ -210,43 +197,60 @@ def test_a_thru_range_falls_through_inside_and_stops_at_its_end() -> None:
     ]
 
     assert (
-        _ask(program, FIELDS, "B-OUT"),
-        _ask(program, FIELDS, "R-OUT"),
-        _ask(program, FIELDS, "C-OUT"),
+        _ask(program, data, "B-OUT"),
+        _ask(program, data, "R-OUT"),
+        _ask(program, data, "C-OUT"),
     ) == (Answer.SAT, Answer.SAT, Answer.UNSAT)
 
 
 def test_a_name_declared_twice_is_not_tracked() -> None:
-    extents = (_declared("D", ((0, 1), (5, 1))), *FIELDS)
-    inner = _if("D", "'Y'", [_move("'x'", "X-OUT")], [])
-    program = [("MAIN", [_if("D", "'N'", [inner], [])])]
+    def record(name: str) -> Statement:
+        return {
+            "name": name,
+            "level": 1,
+            "children": [{"name": "D", "level": 5, "pic": "X", "offset": 0}],
+        }
 
-    assert _ask(program, extents, "X-OUT") == Answer.SAT
+    data = (record("R1"), record("R2"), *FIELDS)
+    program = [("MAIN", [_test("D", "'N'", [_test("D", "'Y'", [X_OUT])])])]
+
+    assert _ask(program, data, "X-OUT") == Answer.SAT
     with pytest.raises(ValueError, match="^D is not a tracked field$"):
-        _ask(program, extents, "X-OUT", [Condition("D", Op.EQ, "'Y'")])
+        _ask(program, data, "X-OUT", [Condition("D", Op.EQ, "'Y'")])
 
 
 def test_a_goto_out_of_a_range_does_not_return_to_the_perform() -> None:
+    data = (*FIELDS, _x("Q-OUT"), _x("R-OUT"))
     program = [
         ("MAIN", [_perform("P"), _move("'r'", "R-OUT"), STOP]),
-        ("P", [_if("F", "'Y'", [_goto("Q")], [])]),
+        ("P", [_test("F", "'Y'", [_goto("Q")])]),
         ("Q", [_move("'q'", "Q-OUT")]),
     ]
 
     assert (
-        _ask(program, FIELDS, "Q-OUT", [_f(Op.EQ, "'Y'")]),
-        _ask(program, FIELDS, "R-OUT", [_f(Op.EQ, "'Y'")]),
-        _ask(program, FIELDS, "R-OUT", [_f(Op.EQ, "'N'")]),
+        _ask(program, data, "Q-OUT", [_f(Op.EQ, "'Y'")]),
+        _ask(program, data, "R-OUT", [_f(Op.EQ, "'Y'")]),
+        _ask(program, data, "R-OUT", [_f(Op.EQ, "'N'")]),
     ) == (Answer.SAT, Answer.UNSAT, Answer.SAT)
 
 
-X_OUT = _move("'x'", "X-OUT")
+def test_a_perform_of_a_range_the_program_lacks_frees_every_tracked_byte() -> None:
+    """The CFG keeps the edge past an unresolved PERFORM, and nothing says what
+    the missing range did."""
+    program = [("MAIN", [_test("F", "'Y'", [_perform("MISSING"), X_OUT])])]
 
-FLAGS = (_flag("F", "X", {"F-ON": ("'Y'",), "F-AB": ("'A'", "'B'")}),)
+    assert _ask(program, FIELDS, "X-OUT", [_f(Op.EQ, "'N'")]) == Answer.SAT
+
+
+FLAGS = (
+    _flagged("F", {"F-ON": ("'Y'",), "F-AB": ("'A'", "'B'")}),
+    _x("G"),
+    _x("X-OUT"),
+)
 
 
 def test_a_literal_move_sets_the_flag_exactly() -> None:
-    program = [("MAIN", [_move_literal("'Y'", "F"), _if("F", "'Q'", [], []), X_OUT])]
+    program = [("MAIN", [_move_literal("'Y'", "F"), _test("F", "'Q'"), X_OUT])]
 
     assert (
         _ask(program, FIELDS, "X-OUT", [_f(Op.EQ, "'N'")]),
@@ -254,62 +258,247 @@ def test_a_literal_move_sets_the_flag_exactly() -> None:
     ) == (Answer.UNSAT, Answer.SAT)
 
 
-def test_set_to_true_assigns_the_condition_value() -> None:
-    program = [("MAIN", [_set_true("F-ON"), _if("F", "'Q'", [], []), X_OUT])]
+def test_a_figurative_move_fills_the_field() -> None:
+    data = (_x("F3", "X(3)"), *FIELDS)
+    program = [
+        (
+            "MAIN",
+            [
+                {
+                    "type": "MOVE",
+                    "operands": [
+                        {"kind": "figurative", "name": "SPACES"},
+                        {"name": "F3"},
+                    ],
+                },
+                _test("F3", "'Q'"),
+                X_OUT,
+            ],
+        )
+    ]
+    blank = Condition("F3", Op.EQ, "SPACES")
+    low = Condition("F3", Op.EQ, "LOW-VALUES")
 
     assert (
-        _ask(program, FIELDS, "X-OUT", [_f(Op.EQ, "'N'")], FLAGS),
-        _ask(program, FIELDS, "X-OUT", [_f(Op.EQ, "'Y'")], FLAGS),
-    ) == (Answer.UNSAT, Answer.SAT)
+        _ask(program, data, "X-OUT", [blank]),
+        _ask(program, data, "X-OUT", [low]),
+    ) == (
+        Answer.SAT,
+        Answer.UNSAT,
+    )
 
 
-def test_a_set_the_encoding_cannot_follow_frees_the_parent() -> None:
-    then = [_set_true("F-AB"), _move("'x'", "X-OUT")]
-    program = [("MAIN", [_if("F", "'Y'", then, [])])]
+def test_set_to_true_moves_the_first_value_and_set_names_each_condition_in_order() -> (
+    None
+):
+    """SET F-ON F-AB TO TRUE moves 'Y' and then 'A', the first value of F-AB."""
+    program = [("MAIN", [_set_true("F-ON", "F-AB"), _test("F", "'Q'"), X_OUT])]
 
-    assert _ask(program, FIELDS, "X-OUT", [_f(Op.EQ, "'A'")], FLAGS) == Answer.SAT
+    assert (
+        _ask(program, FLAGS, "X-OUT", [_f(Op.EQ, "'A'")]),
+        _ask(program, FLAGS, "X-OUT", [_f(Op.EQ, "'Y'")]),
+    ) == (Answer.SAT, Answer.UNSAT)
 
 
-def test_a_moved_literal_is_padded_to_the_field() -> None:
-    extents = (_field("F3", 0, 3), *FIELDS)
+def test_a_qualified_condition_sets_the_field_its_qualifier_names() -> None:
+    def holder(record: str, flag: str, value: str) -> Statement:
+        return {
+            "name": record,
+            "level": 1,
+            "children": [
+                {
+                    "name": flag,
+                    "level": 5,
+                    "pic": "X",
+                    "offset": 0,
+                    "conditions": [{"name": "ON", "values": [{"from": value}]}],
+                }
+            ],
+        }
+
+    data = (holder("G1", "P1", "'1'"), holder("G2", "P2", "'2'"), _x("X-OUT"))
+    target = {"kind": "ref", "name": "ON", "qualifiers": ["G2"]}
+    set_on = {
+        "type": "SET",
+        "set_type": "TO",
+        "targets": [target],
+        "values": [{"kind": "lit", "value": "TRUE"}],
+    }
+    program = [("MAIN", [_test("P2", "'N'", [set_on, _test("P1", "'Q'"), X_OUT])])]
+
+    assert (
+        _ask(program, data, "X-OUT", [Condition("P2", Op.EQ, "'2'")]),
+        _ask(program, data, "X-OUT", [Condition("P2", Op.EQ, "'N'")]),
+    ) == (Answer.SAT, Answer.UNSAT)
+
+
+def test_a_moved_literal_is_padded_and_truncated_to_the_field() -> None:
+    data = (_x("F3", "X(3)"), _x("F2", "X(2)"), *FIELDS)
     program = [
         (
             "MAIN",
             [
                 _move_literal("'Y'", "F3"),
-                _if("F3", "'Q'", [], []),
-                _move("'x'", "X-OUT"),
+                _move_literal("'ABCDE'", "F2"),
+                _test("F3", "'Q'"),
+                _test("F2", "'Q'"),
+                X_OUT,
             ],
         )
     ]
 
     assert (
-        _ask(program, extents, "X-OUT", [Condition("F3", Op.EQ, "'Y  '")]),
-        _ask(program, extents, "X-OUT", [Condition("F3", Op.EQ, "'YYY'")]),
+        _ask(program, data, "X-OUT", [Condition("F3", Op.EQ, "'Y  '")]),
+        _ask(program, data, "X-OUT", [Condition("F3", Op.EQ, "'YYY'")]),
+        _ask(program, data, "X-OUT", [Condition("F2", Op.NE, "'AB'")]),
+    ) == (Answer.SAT, Answer.UNSAT, Answer.UNSAT)
+
+
+def test_two_writes_to_one_field_in_one_statement_apply_in_order() -> None:
+    """MOVE 'Y' TO F3 F3(2:1) leaves 'YY ': the second target is part of the first."""
+    data = (_x("F3", "X(3)"), *FIELDS)
+    part = {
+        "name": "F3",
+        "ref_mod_start": {"kind": "lit", "value": "2"},
+        "ref_mod_length": {"kind": "lit", "value": "1"},
+    }
+    move = {
+        "type": "MOVE",
+        "operands": [{"kind": "lit", "name": "'Y'"}, {"name": "F3"}, part],
+    }
+    program = [("MAIN", [move, _test("F3", "'Q'"), X_OUT])]
+
+    assert (
+        _ask(program, data, "X-OUT", [Condition("F3", Op.EQ, "'YY '")]),
+        _ask(program, data, "X-OUT", [Condition("F3", Op.EQ, "'Y  '")]),
     ) == (Answer.SAT, Answer.UNSAT)
 
 
-def test_a_long_literal_is_truncated_to_the_field() -> None:
-    extents = (_field("F3", 0, 3), *FIELDS)
+def test_a_test_on_part_of_a_field_constrains_nothing() -> None:
+    data = (_x("F3", "X(3)"), *FIELDS)
+    part = {
+        "kind": "ref",
+        "name": "F3",
+        "ref_mod_start": {"kind": "lit", "value": "1"},
+        "ref_mod_length": {"kind": "lit", "value": "1"},
+    }
+    program = [("MAIN", [_test("F3", "'Q'"), _if(part, "'Y'", [X_OUT])])]
+
+    assert _ask(program, data, "X-OUT", [Condition("F3", Op.EQ, "'YES'")]) == Answer.SAT
+
+
+def test_a_sort_return_frees_the_field_it_reads_into() -> None:
     program = [
         (
             "MAIN",
             [
-                _move_literal("'ABCDE'", "F3"),
-                _if("F3", "'Q'", [], []),
-                _move("'x'", "X-OUT"),
+                _test(
+                    "F",
+                    "'Y'",
+                    [
+                        {
+                            "type": "RETURN",
+                            "file_name": "SF",
+                            "into": {"name": "F"},
+                            "at_end": [],
+                            "not_at_end": [],
+                        },
+                        X_OUT,
+                    ],
+                )
             ],
         )
     ]
 
-    assert _ask(program, extents, "X-OUT", [Condition("F3", Op.NE, "'ABC'")]) == (
-        Answer.UNSAT
+    assert (
+        _ask(
+            program,
+            FIELDS,
+            "X-OUT",
+            [_f(Op.EQ, "'N'")],
+            file_control=[{"file_name": "SF"}],
+            file_fields=[
+                {"level": 1, "name": "SF-REC", "pic": "X(8)", "fd_name": "SF"}
+            ],
+        )
+        == Answer.SAT
     )
 
 
+def test_a_statement_the_encoding_does_not_know_frees_every_tracked_byte() -> None:
+    """UNSTRING is written by name in the CFG but its effect is not modelled; ENTRY
+    is a statement nothing describes at all."""
+    unstring = {
+        "type": "UNSTRING",
+        "source": {"name": "G"},
+        "delimiters": [],
+        "into": [{"target": {"name": "F"}}],
+    }
+    entry = {"type": "ENTRY", "name": "'ALT'", "using": []}
+    unstrung = [("MAIN", [_test("F", "'Y'", [unstring, X_OUT])])]
+    entered = [("MAIN", [_test("F", "'Y'", [entry, X_OUT])])]
+
+    assert (
+        _ask(unstrung, FIELDS, "X-OUT", [_f(Op.EQ, "'N'")]),
+        _ask(entered, FIELDS, "X-OUT", [_f(Op.EQ, "'N'")]),
+    ) == (Answer.SAT, Answer.SAT)
+
+
+def test_a_file_statement_frees_the_file_status_field() -> None:
+    data = (*FIELDS, _x("FS", "X(2)"))
+    program = [
+        (
+            "MAIN",
+            [
+                _test(
+                    "FS",
+                    "'00'",
+                    [{"type": "CLOSE", "files": [{"file_name": "IN-F"}]}, X_OUT],
+                ),
+            ],
+        )
+    ]
+
+    assert (
+        _ask(
+            program,
+            data,
+            "X-OUT",
+            [Condition("FS", Op.EQ, "'10'")],
+            file_control=[{"file_name": "IN-F", "file_status_var": {"name": "FS"}}],
+        )
+        == Answer.SAT
+    )
+
+
+def test_a_justified_receiver_is_not_given_the_left_aligned_literal() -> None:
+    data = (_x("F3", "X(3)", justified_right=True), *FIELDS)
+    program = [("MAIN", [_move_literal("'Y'", "F3"), _test("F3", "'Q'"), X_OUT])]
+
+    assert _ask(program, data, "X-OUT", [Condition("F3", Op.EQ, "'  Y'")]) == Answer.SAT
+
+
 def test_a_name_the_program_never_declares_is_not_tracked() -> None:
-    extents = (_field("U", 2, 10), *FIELDS)
-    program = [("MAIN", [_if("U", "'Y'", [_move("'x'", "X-OUT")], [])])]
+    program = [("MAIN", [_test("U", "'Y'", [X_OUT])])]
 
     with pytest.raises(ValueError, match="^U is not a tracked field$"):
-        _ask(program, extents, "X-OUT", [Condition("U", Op.EQ, "'Y'")], (), ("U",))
+        _ask(program, FIELDS, "X-OUT", [Condition("U", Op.EQ, "'Y'")])
+
+
+def test_a_write_the_cfg_lists_but_the_transfer_misses_frees_the_field() -> None:
+    """The CFG says FORMATTIME writes its output options; the transfer has no rule
+    for it, so the node's own list is what frees the field."""
+    data = (_x("D8", "X(8)"), _x("WS-T", "X(8)"), *FIELDS)
+    formattime = {
+        "type": "EXEC_CICS",
+        "verb": "FORMATTIME",
+        "options": {
+            "ABSTIME": {"text": "WS-T", "is_literal": False},
+            "MMDDYYYY": {"text": "D8", "is_literal": False},
+        },
+    }
+    program = [("MAIN", [_test("D8", "'NONE    '", [formattime, X_OUT])])]
+
+    assert _ask(program, data, "X-OUT", [Condition("D8", Op.EQ, "'01022026'")]) == (
+        Answer.SAT
+    )

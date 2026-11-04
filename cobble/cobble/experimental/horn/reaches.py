@@ -1,6 +1,6 @@
 """Ask whether a program point can be reached with given field values."""
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 
 import z3
 from cobble.experimental.horn.atoms import comparison
@@ -8,20 +8,18 @@ from cobble.experimental.horn.condition import Condition
 from cobble.experimental.horn.lower import HornSystem, states
 from cobble.experimental.horn.point import Point
 from cobble.experimental.horn.solve import solve
+from cobble.experimental.horn.storage import Storage
 from cobble.experimental.horn.terms import conjunction, every, holds
-from cobble.experimental.horn.tracked import Tracked
 from cobble.experimental.horn.verdict import Verdict
 
 
 def _condition(
-    condition: Condition,
-    state: Mapping[str, z3.BitVecRef],
-    fields: Mapping[str, Tracked],
+    condition: Condition, storage: Storage, state: Sequence[z3.BitVecRef]
 ) -> tuple[z3.BoolRef, ...]:
-    if condition.field not in fields:
+    if not storage.tracked(condition.field):
         raise ValueError(f"{condition.field} is not a tracked field")
     terms = comparison(
-        condition.field, condition.op.value, condition.value, state, fields
+        condition.field, condition.op.value, condition.value, storage, state
     )
     if not terms:
         raise ValueError(f"{condition.value} cannot be compared with {condition.field}")
@@ -29,7 +27,9 @@ def _condition(
 
 
 def _arguments(
-    relation: z3.FuncDeclRef, entry: Sequence[z3.BitVecRef], now: Sequence[z3.BitVecRef]
+    relation: z3.FuncDeclRef,
+    entry: Sequence[z3.BitVecRef],
+    now: Sequence[z3.BitVecRef],
 ) -> tuple[z3.BitVecRef, ...]:
     return (*entry, *now) if relation.arity() > len(now) else tuple(now)
 
@@ -40,10 +40,8 @@ def reaches(
     conditions: Sequence[Condition],
     clock: Callable[[], float],
 ) -> Verdict:
-    v = states(system.fields)
-    fields = {field.name: field for field in system.fields}
-    state = {field.name: now for field, now in zip(system.fields, v.now, strict=True)}
-    asked = tuple(t for c in conditions for t in _condition(c, state, fields))
+    v = states(system.storage)
+    asked = tuple(t for c in conditions for t in _condition(c, system.storage, v.now))
     goal = z3.Function("goal", z3.BoolSort())
     rules = tuple(
         every(

@@ -8,7 +8,6 @@ from collections.abc import Sequence
 
 import pytest
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
-from cobble.dataflow.fields.extent_line import ExtentLine
 from cobble.experimental.horn.answer import Answer
 from cobble.experimental.horn.condition import Condition, Op
 from cobble.experimental.horn.lower import HornSystem, lower
@@ -24,18 +23,25 @@ SIGNON = "COSGN00C"
 USER_MENU = Point(SIGNON, "READ-USER-SEC-FILE/1.when.0.0.then.5.else.0")
 ADMIN_MENU = Point(SIGNON, "READ-USER-SEC-FILE/1.when.0.0.then.5.then.0")
 
+BILLPAY = "COBIL00C"
+CONFIRMED = Point(BILLPAY, "PROCESS-ENTER-KEY/4.then.0.then.0")
+REWRITE = Point(BILLPAY, "UPDATE-ACCTDAT-FILE/0")
+
+
+def _lowered(run: CardDemoRun, program: str) -> HornSystem:
+    with cached_asg_dialect_parsers_registered():
+        asg = first_program_at(cache_path(run.asg, run.cobol / f"{program}.cbl"))
+        return lower(program_of(asg))
+
 
 @pytest.fixture(scope="module")
 def signon(carddemo: CardDemoRun) -> HornSystem:
-    extents = tuple(
-        ExtentLine.model_validate_json(line)
-        for line in carddemo.extents.read_text().splitlines()
-    )
-    with cached_asg_dialect_parsers_registered():
-        asg = first_program_at(
-            cache_path(carddemo.asg, carddemo.cobol / f"{SIGNON}.cbl")
-        )
-        return lower(program_of(asg, extents))
+    return _lowered(carddemo, SIGNON)
+
+
+@pytest.fixture(scope="module")
+def billpay(carddemo: CardDemoRun) -> HornSystem:
+    return _lowered(carddemo, BILLPAY)
 
 
 def _ask(system: HornSystem, point: Point, conditions: Sequence[Condition]) -> Answer:
@@ -101,3 +107,46 @@ def test_signon_never_transfers_with_a_blank_password(signon: HornSystem) -> Non
 def test_signon_never_transfers_with_a_low_values_password(signon: HornSystem) -> None:
     """COSGN00C.cbl:123-124 and :138-139, as above, for LOW-VALUES."""
     assert _never_with(signon, "PASSWDI", "LOW-VALUES") == Answer.UNSAT
+
+
+def test_billpay_proceeds_only_on_a_y_or_lowercase_y_in_the_confirm_field(
+    billpay: HornSystem,
+) -> None:
+    """COBIL00C.cbl:156 SET CONF-PAY-NO TO TRUE; :173-176 EVALUATE CONFIRMI WHEN 'Y'
+    WHEN 'y' SET CONF-PAY-YES TO TRUE; :210 IF CONF-PAY-YES PERFORM
+    READ-CXACAIX-FILE (:211). Nothing else sets CONF-PAY-YES."""
+    neither = (
+        Condition("CONFIRMI", Op.NE, "'Y'"),
+        Condition("CONFIRMI", Op.NE, "'y'"),
+    )
+    assert (_ask(billpay, CONFIRMED, ()), _ask(billpay, CONFIRMED, neither)) == (
+        Answer.SAT,
+        Answer.UNSAT,
+    )
+
+
+def test_billpay_never_proceeds_with_a_blank_or_low_values_account_id(
+    billpay: HornSystem,
+) -> None:
+    """COBIL00C.cbl:159-160 WHEN ACTIDINI OF COBIL0AI = SPACES OR LOW-VALUES MOVE
+    'Y' TO WS-ERR-FLG, and :208 IF NOT ERR-FLG-ON guards :210-211. Nothing between
+    clears the flag or writes ACTIDINI."""
+    assert (
+        _ask(billpay, CONFIRMED, (Condition("ACTIDINI", Op.EQ, "SPACES"),)),
+        _ask(billpay, CONFIRMED, (Condition("ACTIDINI", Op.EQ, "LOW-VALUES"),)),
+    ) == (Answer.UNSAT, Answer.UNSAT)
+
+
+def test_billpay_rewrites_the_balance_after_a_failed_transaction_write(
+    billpay: HornSystem,
+) -> None:
+    """COBIL00C.cbl:233 PERFORM WRITE-TRANSACT-FILE, then :234-235 COMPUTE and
+    PERFORM UPDATE-ACCTDAT-FILE with no test between. A successful write clears the
+    screen (:523-524, :563-565: CONFIRMI to SPACES); a failed one sets WS-ERR-FLG to
+    'Y' (:535, :542) and leaves CONFIRMI as typed. So the REWRITE can run with
+    CONFIRMI still 'Y' only after a failed write."""
+    confirmed = Condition("CONFIRMI", Op.EQ, "'Y'")
+    assert (
+        _ask(billpay, REWRITE, (confirmed, Condition("WS-ERR-FLG", Op.EQ, "'N'"))),
+        _ask(billpay, REWRITE, (confirmed, Condition("WS-ERR-FLG", Op.EQ, "'Y'"))),
+    ) == (Answer.UNSAT, Answer.SAT)

@@ -1,36 +1,42 @@
-"""One program as the lowering reads it: CFG, statements, 88-levels, extents, and the names it never declares."""
+"""One program as the lowering reads it: its CFG, the fixpoint's statements, and its layout."""
 
-from collections.abc import Mapping, Sequence
+from __future__ import annotations
+
+from collections.abc import Mapping
 from dataclasses import dataclass
 
-from cobble.dataflow.fields.extent_line import ExtentLine
+from cobble.dataflow.fields.extent import CellIndex, operand_extents
 from cobble.dataflow.fields.program_layout import program_layout
-from cobble.dataflow.fields.undeclared import undeclared_names
+from cobble.dataflow.fields.transfer import Statement
+from cobble.dataflow.fixpoint.fixpoint import program_statements
 from cobble.dataflow.srccfg.cfg import Cfg
-from cobble.dataflow.srccfg.conditions import EightyEight, condition_index
 from cobble.dataflow.srccfg.program import program_cfg
-from cobble.dataflow.srccfg.statements import statement_index
 from cobol_asg.asg_types import CobolASG
-from cobol_asg.cobol_statements import CobolStatementType
+from cobol_memory.field_extent import FieldExtent
 
 
 @dataclass(frozen=True)
 class Program:
+    """``file_statuses`` are the bytes of every FILE STATUS field, which any file
+    statement may set."""
+
     cfg: Cfg
-    statements: Mapping[str, CobolStatementType]
-    conditions: Mapping[str, EightyEight]
-    extents: tuple[ExtentLine, ...]
-    undeclared: frozenset[str]
+    statements: Mapping[str, Statement]
+    index: CellIndex
+    file_statuses: tuple[FieldExtent, ...]
 
 
-def program_of(asg: CobolASG, extents: Sequence[ExtentLine]) -> Program:
+def program_of(asg: CobolASG) -> Program:
     cfg = program_cfg(asg)
+    index = program_layout(asg).index
     return Program(
         cfg,
-        statement_index(asg),
-        condition_index(asg),
-        tuple(row for row in extents if row.program == cfg.program),
-        frozenset(
-            path[-1] for path, _ in undeclared_names(asg, program_layout(asg).index)
+        program_statements(asg, cfg),
+        index,
+        tuple(
+            extent
+            for entry in asg.file_control
+            if entry.file_status_var.name
+            for extent in operand_extents(entry.file_status_var, index).extents
         ),
     )

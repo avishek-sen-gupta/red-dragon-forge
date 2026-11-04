@@ -35,12 +35,27 @@ def every(variables: Sequence[z3.ExprRef], body: z3.BoolRef) -> z3.BoolRef:
     return _boolean(z3.ForAll(list(variables), body), "a quantified rule")
 
 
-def constant(value: str) -> z3.BitVecRef:
-    content = value.encode("latin-1")
-    term = z3.BitVecVal(int.from_bytes(content, "big"), 8 * len(content))
+def constant(value: bytes) -> z3.BitVecRef:
+    term = z3.BitVecVal(int.from_bytes(value, "big"), 8 * len(value))
     if isinstance(term, z3.BitVecRef):
         return term
     raise TypeError(f"{value!r} is not a bit-vector term")
+
+
+def extract(high: int, low: int, value: z3.BitVecRef) -> z3.BitVecRef:
+    term = z3.Extract(high, low, value)
+    if isinstance(term, z3.BitVecRef):
+        return term
+    raise TypeError("an extract is not a bit-vector term")
+
+
+def concat(*parts: z3.BitVecRef) -> z3.BitVecRef:
+    if len(parts) == 1:
+        return parts[0]
+    term = z3.Concat(*parts)
+    if isinstance(term, z3.BitVecRef):
+        return term
+    raise TypeError("a concatenation is not a bit-vector term")
 
 
 def bits(name: str, length: int) -> z3.BitVecRef:

@@ -553,4 +553,8 @@ fileignoreconfig:
   checksum: f29b0c3efe6a3e6d18b1056f83ae15f3e34186183669f1f1eb61a7c5036875e0
 - filename: cobble/tests/dataflow/srccfg/test_desugar_perform.py
   checksum: 58c3933d8719ceb42290eb397ee659688e5e426b6d24279fe7f2d4697a3f16dd
+- filename: cobble/cobble/experimental/horn/storage.py
+  checksum: 950927515908a0ecc9156a051ce9325a619a72b0bbafd624f8070de2b180c0f9
+- filename: cobble/cobble/experimental/horn/lower.py
+  checksum: af7709433d1ab010f323a0e5ecef2e5ec0d1c283fbb175278a7ee6f6d629111a
 version: "1.0"
