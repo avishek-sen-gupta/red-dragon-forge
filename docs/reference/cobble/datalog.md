@@ -13,6 +13,7 @@ relation with `.decl` and `.input` inside an include guard, so a question may in
 than once. Each relation is defined once, in
 `cobble/experimental/datalog/`, and that definition writes both its facts file and its schema
 line. Every artifact is read through its typed reader; nothing is guessed or parsed out of text.
+The [Horn clause lowering](horn.md) does not read these facts; it reads the same artifacts.
 
 A run missing an artifact the facts need, or holding none of the files a per-program directory
 should (`srccfg/cfg-*.jsonl`, `accesses/*.jsonl`, `fixpoint/members/*/counts.json`), fails with exit

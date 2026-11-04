@@ -90,12 +90,17 @@ The solver time for each question is recorded in the stage's plan.
 
 0. **Qualified node ids, and a spike.**
    - Clauses name a point as program plus node id.
-   - `guards` is fixed to resolve a node within its program: `WRITE-TRANSACT-FILE/0` exists in
-     COBIL00C and COTRN02C, and the query merged them. Other artefacts already carry `program`
-     beside `node` and are left alone.
+   - `guards` names the program in each block it prints. A CFG file holds every program the
+     seed reaches, and `WRITE-TRANSACT-FILE/0` exists in COBIL00C and COTRN02C. The query
+     printed a block for each program under the same unlabelled heading (40 paths and 4), and
+     a reader cannot tell them apart. Other artefacts already carry `program` beside `node` and
+     are left alone.
    - The spike lowers sign-on's control flow and test atoms, and measures solver time.
-   - Gate: the goal "COSGN00C reaches its XCTL to COMEN01C" is `sat`, and the solver's
-     derivation passes exactly the tests of `guards` path 0, with the same polarities.
+   - Gate: COSGN00C can reach its XCTL to COMEN01C and its XCTL to COADM01C (`sat`). It never
+     reaches the first with `CDEMO-USER-TYPE = 'A'`, nor the second with any other type
+     (`unsat`). A gate comparing the solver's derivation with `guards` path 0 was dropped:
+     without assignments, the infeasible paths are just as satisfiable, and the solver may
+     return any of them.
 1. **Control flow, tests and flag assignments, one task.** `SET` and literal `MOVE` are
    encoded; everything else is unconstrained, the incoming commarea included.
    - Gate: sign-on's four blank-id and blank-password paths to COMEN01C are `unsat`, and path 0

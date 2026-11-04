@@ -111,6 +111,7 @@ def test_the_guards_report_prints_one_line_per_path() -> None:
 
     lines = guards_report(cfg, writer)
 
+    assert lines[0] == f"PROGA {writer}: 2 path(s)"
     assert len([line for line in lines if line.startswith("  path")]) == 2
 
 

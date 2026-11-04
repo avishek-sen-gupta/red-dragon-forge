@@ -116,6 +116,14 @@ source_modules =
 forbidden_modules =
     interpreter
 
+[importlinter:contract:horn-not-datalog]
+name = The Horn lowering does not read the Datalog export
+type = forbidden
+source_modules =
+    cobble.experimental.horn
+forbidden_modules =
+    cobble.experimental.datalog
+
 [importlinter:contract:cobble-no-runtime]
 name = Cobble is static analysis — it must not reach into any runtime
 type = forbidden

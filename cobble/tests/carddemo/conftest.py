@@ -30,6 +30,8 @@ class CardDemoRun:
     extents: Path
     fixpoint: Path
     combine: Path
+    asg: Path
+    cobol: Path
 
 
 def _bridge_jar() -> Path:
@@ -132,4 +134,6 @@ def carddemo(tmp_path_factory: pytest.TempPathFactory) -> CardDemoRun:
         )
         == 0
     )
-    return CardDemoRun(extents=extents, fixpoint=fixpoint, combine=out)
+    return CardDemoRun(
+        extents=extents, fixpoint=fixpoint, combine=out, asg=asg, cobol=config.cobol_dir
+    )

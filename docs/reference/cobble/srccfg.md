@@ -82,7 +82,9 @@ cobble-srccfg-query {provenance,guards,coassign} SUBJECT --cfg CFG
 | `coassign` | field name | fields assigned together with it, at or above `--min-tier` |
 
 `--max-depth` bounds how far `provenance` follows each direction. `--max-paths` caps the paths
-enumerated for reaching conditions (default 64). The queries run per program: a field crossing
+enumerated for reaching conditions (default 64). A CFG file holds every program the seed reaches,
+and a node id can exist in more than one, so `guards` prints one block per program, headed
+`PROGRAM NODE: N path(s)`. The queries run per program: a field crossing
 a commarea stops at the boundary. Cross-program flow is the [field dataflow](field-dataflow.md).
 
 ## cobble-srccfg-reachability-walk

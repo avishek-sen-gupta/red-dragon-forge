@@ -545,4 +545,8 @@ fileignoreconfig:
   checksum: f7e810706798cae17f5e624765afd2d5156b58721cb8563f2b970cec3610a704
 - filename: docs/superpowers/specs/cobble/2026-11-04-horn-clause-lowering-design.md
   checksum: 2a900af30e0b2d199179491ca1a0f3d4b7377296acdb85cd3f95c81e3eaf7261
+- filename: cobble/cobble/experimental/horn/context.py
+  checksum: d702dff8bb4d8e95ca8704568c46dc421e3d0376fccc026ebadac7254b0fcbd1
+- filename: docs/superpowers/plans/2026-11-05-horn-clause-lowering-stages-0-1.md
+  checksum: eff6e5a5cb9092973a585978b702f0ce5de89350ba8298d37d5e283cc037bb98
 version: "1.0"

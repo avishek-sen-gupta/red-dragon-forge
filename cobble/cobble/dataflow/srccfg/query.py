@@ -106,7 +106,7 @@ def guards_report(
     guards = _guard_lines(cfg, reaching, node_id)
     truncated_note = (f"  {SUBSET_NOTE}",) if node_id in reaching.truncated else ()
     return (
-        f"{node_id}: {len(guards_of(reaching, node_id))} path(s)",
+        f"{cfg.program} {node_id}: {len(guards_of(reaching, node_id))} path(s)",
         *tuple(f"  path {n}: {text}" for n, text in enumerate(guards.texts)),
         *tuple(f"  {note}" for note in guards.notes),
         *truncated_note,

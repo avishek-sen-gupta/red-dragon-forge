@@ -16,6 +16,7 @@ dependencies = [
     "squall",
     "numpy>=2.5.4",
     "scipy>=1.18.1",
+    "z3-solver>=4.13",
     "scikit-learn>=1.5",
 ]
 
