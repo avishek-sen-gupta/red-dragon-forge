@@ -116,14 +116,15 @@ An exact write removes every entry it fully covers. An exact write into part of 
 splits it: the untouched bytes keep their writers and values. Nothing is split where either
 side is clamped; the entry keeps its writers and its values become `not-a-literal`.
 
-The transfer models `MOVE`, `INITIALIZE`, arithmetic, `COMPUTE`, `STRING`, `READ`, `CALL`,
-`EXEC CICS` and `WRITE`/`REWRITE ... FROM`, which moves the `FROM` operand into the record
-area. `INITIALIZE` writes the elementary items under its operand and leaves out what Enterprise
+The transfer models `MOVE`, `INITIALIZE`, arithmetic, `COMPUTE`, `STRING`, `READ`, sort
+`RETURN`, `CALL`, `EXEC CICS`, `WRITE`/`REWRITE`/`RELEASE ... FROM`, which moves the `FROM`
+operand into the record area, and `SET` of condition names `TO TRUE`, which moves each 88's
+first value into the field it tests, as a `MOVE` of that literal would. `INITIALIZE` writes the elementary items under its operand and leaves out what Enterprise
 COBOL's INITIALIZE rules exclude without the `FILLER` phrase: `FILLER` items, and items that
 redefine or lie under a redefinition below the operand, so their bytes keep their earlier
-writers. A reference-modified or computed-subscript operand is written whole. A `READ` fills its file's record area, every 01 the parser places under its FD, and
-its `INTO` field when it has one. Any other statement that writes storage (`ACCEPT`, `UNSTRING`, `INSPECT`, `SET`,
-`SEARCH`, the `CORRESPONDING` forms, `XML GENERATE`) is a weak
+writers. A reference-modified or computed-subscript operand is written whole. A `READ`, or a `RETURN` from a sort file, fills its file's record area, every 01 the parser
+places under its FD or SD, and its `INTO` field when it has one. Any other statement that writes storage (`ACCEPT`, `UNSTRING`, `INSPECT`, any other `SET`
+-- `TO FALSE`, an index, a pointer, a condition no declaration resolves --, `SEARCH`, the `CORRESPONDING` forms, `XML GENERATE`) is a weak
 write of the names its CFG node lists (`INSPECT REPLACING`/`CONVERTING` lists its subject, as
 read and written): it adds a definer, removes nothing, and adds the reason
 `unmodelled`. `EXEC SQL ... INTO` and `FETCH ... INTO` are not modelled.

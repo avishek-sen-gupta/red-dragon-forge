@@ -551,4 +551,6 @@ fileignoreconfig:
   checksum: eff6e5a5cb9092973a585978b702f0ce5de89350ba8298d37d5e283cc037bb98
 - filename: cobble/tests/carddemo/test_horn.py
   checksum: f29b0c3efe6a3e6d18b1056f83ae15f3e34186183669f1f1eb61a7c5036875e0
+- filename: cobble/tests/dataflow/srccfg/test_desugar_perform.py
+  checksum: 58c3933d8719ceb42290eb397ee659688e5e426b6d24279fe7f2d4697a3f16dd
 version: "1.0"

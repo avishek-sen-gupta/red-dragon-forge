@@ -56,10 +56,12 @@ from cobble.dataflow.srccfg.conditions import (
     EightyEight,
     Not,
     Or,
+    conditions_named,
     read_condition,
     read_when_object,
     resolve_atom,
 )
+from cobble.dataflow.srccfg.declared_condition import DeclaredCondition
 from cobble.dataflow.srccfg.literals import is_literal
 from cobble.dataflow.srccfg.paragraphs import end_id
 from cobble.dataflow.srccfg.read import Read, reads_of
@@ -80,13 +82,19 @@ from cobol_asg.cobol_statements import (
     AcceptStatement,
     CallUsingParam,
     EvaluateStatement,
+    MergeStatement,
     PerformTimesSpec,
     PerformVaryingSpec,
+    ProcedureRange,
+    SetStatement,
+    SortSource,
+    SortStatement,
     WhenStatement,
 )
 from cobol_asg.evaluate_selection import SelectionSubject
 from cobol_asg.exit_kind import ExitKind
 from cobol_asg.ref_mod import RefModOperand
+from cobol_asg.sort_files import SortFiles
 from squall.statements import Kind
 
 GOTO_TRANSFER = "GO TO"
@@ -128,6 +136,8 @@ COMMAREA_OPTION = "COMMAREA"
 FILE_OPTIONS = ("FILE", "DATASET")
 
 WRITES_ONLY_KINDS = ("InitializeStatement",)
+CONDITION_TRUTHS = ("TRUE", "FALSE")
+NO_PROCEDURE = SortFiles(())
 # A verb whose sink is outside the program still reads its operands.
 READS_ONLY_KINDS = ("DisplayStatement",)
 # A verb whose source is outside the program still writes its target.
@@ -148,6 +158,7 @@ class Ctx:
     paragraph: str
     flows: ProgramContext
     index: Mapping[str, EightyEight]
+    declared: Mapping[str, tuple[DeclaredCondition, ...]] = MappingProxyType({})
     source_file: str = ""
     section: str = ""
     sentence: str = ""
@@ -228,7 +239,36 @@ def _plain(statement, ctx: Ctx, path: str) -> Fragment:
 def _writes_reads(statement, ctx: Ctx, kind: str) -> tuple[tuple[str, ...], ...]:
     if kind in _GAP_FILL_KINDS:
         return _local_roles(statement, kind)
-    return _flow_roles(statement, ctx)
+    writes, reads = _flow_roles(statement, ctx)
+    if isinstance(statement, SetStatement) and is_condition_set(statement):
+        return (_condition_parents(statement, ctx), reads)
+    return (writes, reads)
+
+
+def is_condition_set(statement: SetStatement) -> bool:
+    """SET ... TO TRUE or TO FALSE, the one SET whose targets are level-88 names."""
+    return (
+        statement.set_type == "TO"
+        and len(statement.values) == 1
+        and statement.values[0].value.upper() in CONDITION_TRUTHS
+    )
+
+
+def _condition_parents(statement: SetStatement, ctx: Ctx) -> tuple[str, ...]:
+    """The field each condition tests; a name no declaration resolves stays as it
+    was written, so the write is still visible."""
+    return _dedupe(
+        next(
+            iter(
+                entry.enclosing[0]
+                for entry in conditions_named(
+                    target.name, target.qualifiers, ctx.declared
+                )
+            ),
+            target.name.upper(),
+        )
+        for target in statement.targets
+    )
 
 
 def _local_roles(statement, kind: str) -> tuple[tuple[str, ...], ...]:
@@ -1553,8 +1593,34 @@ def _NOWHERE(ctx: Ctx) -> str:
     return ""
 
 
+def _sort(statement: SortStatement | MergeStatement, ctx: Ctx, path: str) -> Fragment:
+    """SORT and MERGE run their INPUT PROCEDURE, order the records, then run their
+    OUTPUT PROCEDURE: each procedure is a call that returns to the statement, as a
+    PERFORM of that range does. MERGE has no input procedure; USING and GIVING files
+    move records between files and call nothing."""
+    calls = (
+        *_procedure_call(
+            getattr(statement, "source", NO_PROCEDURE), ctx, path, "#input"
+        ),
+        _plain(statement, ctx, path),
+        *_procedure_call(statement.sink, ctx, path, "#output"),
+    )
+    return seq(calls, nop_id=node_id(ctx, path, "#empty"))
+
+
+def _procedure_call(
+    source: SortSource, ctx: Ctx, path: str, suffix: str
+) -> tuple[Fragment, ...]:
+    if not isinstance(source, ProcedureRange):
+        return ()
+    target = _range_target(source.target.paragraph.upper(), source.thru.paragraph)
+    return (_call(ctx, f"{path}{suffix}", target),)
+
+
 _HANDLERS = {
     "IfStatement": _if,
+    "SortStatement": _sort,
+    "MergeStatement": _sort,
     "EvaluateStatement": _evaluate,
     "GotoStatement": _goto,
     "PerformStatement": _perform,

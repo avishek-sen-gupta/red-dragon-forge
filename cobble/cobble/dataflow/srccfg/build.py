@@ -30,7 +30,8 @@ from cobble.dataflow.srccfg.cfg import (
     seq,
     span_of,
 )
-from cobble.dataflow.srccfg.conditions import condition_index
+from cobble.dataflow.srccfg.conditions import condition_index, declared_conditions
+from cobble.dataflow.srccfg.declared_condition import DeclaredCondition
 from cobble.dataflow.srccfg.paragraphs import (
     ParagraphRef,
     end_id,
@@ -114,9 +115,12 @@ def _lowered(
     everything but where PERFORMs and GO TOs land."""
     context = program_context(asg)
     index = condition_index(asg)
+    declared = declared_conditions(asg)
     governing = governing_directives(asg)
     parts = tuple(
-        _paragraph_cfg(ref, asg.program_id, context, index, source_file, governing)
+        _paragraph_cfg(
+            ref, asg.program_id, context, index, declared, source_file, governing
+        )
         for ref in order
     )
     spans = _section_spans(
@@ -197,6 +201,7 @@ def _paragraph_cfg(
     program: str,
     context,
     index,
+    declared: Mapping[str, tuple[DeclaredCondition, ...]],
     source_file: str = "",
     governing: Mapping[str, Governing] = MappingProxyType({}),
 ) -> tuple[tuple[Node, ...], tuple[Edge, ...]]:
@@ -205,6 +210,7 @@ def _paragraph_cfg(
         paragraph=ref.name,
         flows=context,
         index=index,
+        declared=declared,
         source_file=source_file,
         section=ref.section,
         whenever=governing,

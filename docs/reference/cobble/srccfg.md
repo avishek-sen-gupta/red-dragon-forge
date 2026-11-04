@@ -60,6 +60,13 @@ field, with an empty `entry`.
   continues, and the range's `RETURN` edge lands there.
 - Two kinds of `PERFORM` keep a `FLOW` edge to the next statement and have no `resume`: one
   whose range the program does not declare, and one whose range end nothing reaches.
+- `SORT` and `MERGE` call their `INPUT PROCEDURE` and `OUTPUT PROCEDURE` the way a `PERFORM`
+  calls its range: node `<id>#input` before the statement's own node, `<id>#output` after it,
+  each with a `resume` and a range end. `USING` and `GIVING` files call nothing.
+- `SET` of a condition name `TO TRUE` or `TO FALSE` writes the field the 88 tests, chosen by the
+  reference's qualifiers among same-named 88s. A sort `RETURN` writes its SD record and `INTO`
+  field, as `READ` does; `RELEASE ... FROM` moves its field into the SD record, as
+  `WRITE ... FROM` does.
 - Lowered constructs: `PERFORM` with resume and range end, `GO TO`, `EXIT PARAGRAPH`/`SECTION`/
   `PERFORM [CYCLE]`, `NEXT SENTENCE`, `EVALUATE` with stacked `WHEN`s, the end-of-file, I-O
   error, size error, `CALL` exception, `STRING`/`UNSTRING` overflow and `WRITE` end-of-page arms, CICS raise arms

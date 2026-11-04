@@ -32,6 +32,7 @@ from types import MappingProxyType
 
 from cics.statements import CicsOperand, ExecCicsStatement, operand_reference
 from cobble.asg_walk import descend
+from cobble.dataflow.fields.condition_set import ConditionSet
 from cobble.dataflow.fields.extent import CellIndex, OperandExtents, operand_extents
 from cobble.dataflow.fields.file_read import FileRead
 from cobble.dataflow.fields.initialized import initialized_extents
@@ -79,6 +80,7 @@ from cobol_asg.cobol_statements import (
     InitializeStatement,
     MoveStatement,
     ReadStatement,
+    ReleaseStatement,
     RewriteStatement,
     StringSending,
     StringStatement,
@@ -100,7 +102,9 @@ from cobol_memory.field_extent import FieldExtent
 
 # cobol_asg has no statement base class, and its own union leaves out the
 # dialect-parsed EXEC CICS form, so the two have to be spelled together here.
-Statement = CobolStatementType | ExecCicsStatement | UnmodelledWrite | FileRead
+Statement = (
+    CobolStatementType | ExecCicsStatement | UnmodelledWrite | FileRead | ConditionSet
+)
 
 _CICS_FILE_VERBS = frozenset({"READ", "READNEXT", "READPREV"})
 COMMAREA = "COMMAREA"
@@ -484,15 +488,18 @@ REBUILT = (
 format, or assembled from pieces -- rather than copy bytes into it from elsewhere."""
 
 
-def _implied_move(statement: WriteStatement | RewriteStatement) -> MoveStatement:
-    """``WRITE rec FROM x`` and ``REWRITE rec FROM x`` move x into the record area
-    first; without FROM the record area already holds what goes out."""
+def _implied_move(
+    statement: WriteStatement | RewriteStatement | ReleaseStatement,
+) -> MoveStatement:
+    """``WRITE rec FROM x``, ``REWRITE rec FROM x`` and ``RELEASE rec FROM x`` move x
+    into the record area first; without FROM the record area already holds what goes
+    out."""
     targets = [RefModOperand(name=statement.record_name)]
     return MoveStatement(source=statement.from_field, targets=targets)
 
 
 def _record_targets(
-    statement: WriteStatement | RewriteStatement,
+    statement: WriteStatement | RewriteStatement | ReleaseStatement,
 ) -> tuple[RefModOperand, ...]:
     if not statement.from_field.name:
         return ()
@@ -500,7 +507,7 @@ def _record_targets(
 
 
 def _record_writes(
-    statement: WriteStatement | RewriteStatement,
+    statement: WriteStatement | RewriteStatement | ReleaseStatement,
     node: str,
     index: CellIndex,
     state: State,
@@ -981,8 +988,21 @@ def _unmodelled_writes(
     )
 
 
+def _condition_set_writes(
+    statement: ConditionSet, node: str, index: CellIndex, state: State
+) -> Iterator[Write]:
+    return chain.from_iterable(
+        _move_writes(move, node, index, state) for move in statement.moves
+    )
+
+
+def _condition_set_targets(statement: ConditionSet) -> tuple[RefModOperand, ...]:
+    return tuple(target for move in statement.moves for target in _move_targets(move))
+
+
 HANDLED: tuple[type, ...] = (
     MoveStatement,
+    ConditionSet,
     InitializeStatement,
     ArithmeticStatement,
     ComputeStatement,
@@ -990,6 +1010,7 @@ HANDLED: tuple[type, ...] = (
     ReadStatement,
     WriteStatement,
     RewriteStatement,
+    ReleaseStatement,
     CallStatement,
     ExecCicsStatement,
     FileRead,
@@ -998,6 +1019,7 @@ HANDLED: tuple[type, ...] = (
 _WRITES_BY_KIND: Mapping[str, Callable[..., Iterator[Write]]] = MappingProxyType(
     {
         "MoveStatement": _move_writes,
+        "ConditionSet": _condition_set_writes,
         "InitializeStatement": _initialize_writes,
         "ArithmeticStatement": _arithmetic_writes,
         "ComputeStatement": _compute_writes,
@@ -1005,6 +1027,7 @@ _WRITES_BY_KIND: Mapping[str, Callable[..., Iterator[Write]]] = MappingProxyType
         "ReadStatement": _read_writes,
         "WriteStatement": _record_writes,
         "RewriteStatement": _record_writes,
+        "ReleaseStatement": _record_writes,
         "CallStatement": _call_writes,
         "ExecCicsStatement": _cics_writes,
         "UnmodelledWrite": _unmodelled_writes,
@@ -1017,6 +1040,7 @@ _TARGETS_BY_KIND: Mapping[str, Callable[..., tuple[RefModOperand, ...]]] = (
     MappingProxyType(
         {
             "MoveStatement": _move_targets,
+            "ConditionSet": _condition_set_targets,
             "InitializeStatement": _initialize_targets,
             "ArithmeticStatement": _arithmetic_targets,
             "ComputeStatement": _compute_targets,
@@ -1024,6 +1048,7 @@ _TARGETS_BY_KIND: Mapping[str, Callable[..., tuple[RefModOperand, ...]]] = (
             "ReadStatement": _read_targets,
             "WriteStatement": _record_targets,
             "RewriteStatement": _record_targets,
+            "ReleaseStatement": _record_targets,
             "CallStatement": _call_targets,
             "ExecCicsStatement": _cics_targets,
             "UnmodelledWrite": _unmodelled_targets,

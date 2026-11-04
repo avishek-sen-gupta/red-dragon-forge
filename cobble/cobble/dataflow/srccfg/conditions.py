@@ -12,19 +12,22 @@ that loss is visible in every report because ``resolved`` is False.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from functools import reduce
 from itertools import accumulate, repeat, takewhile
 
 from cobble.dataflow.srccfg.cfg import UNRESOLVED, Atom
+from cobble.dataflow.srccfg.declared_condition import DeclaredCondition
 from cobble.dataflow.srccfg.expression_text import expression_text
 from cobble.dataflow.srccfg.synthetic import dfhresp_operand
 from cobol_asg.any_object import AnyObject
 from cobol_asg.condition_name import ConditionValue
 from cobol_asg.evaluate_selection import SelectionObject, SelectionSubject
 from cobol_asg.expression_subject import ExpressionSubject
+from cobol_asg.operand_kind import OperandKind
 from cobol_asg.range_object import RangeObject
+from cobol_asg.ref_mod import RefModOperand
 from cobol_asg.selection_condition import SelectionCondition
 from cobol_asg.truth_value import TruthValue
 from cobol_asg.value_object import ValueObject
@@ -304,6 +307,65 @@ def _entries(cobol_field) -> tuple[EightyEight, ...]:
         )
         for condition in cobol_field.conditions
     )
+
+
+def declared_conditions(asg) -> Mapping[str, tuple[DeclaredCondition, ...]]:
+    """Every declaration of every 88 name, by upper-case name, ambiguous ones kept:
+    a qualified reference chooses among them (``conditions_named``)."""
+    roots = (
+        *asg.data_fields,
+        *asg.linkage_fields,
+        *asg.local_storage_fields,
+        *asg.file_fields,
+    )
+    found = _declared_under(roots, ())
+    names = frozenset(entry.name for entry in found)
+    return {name: tuple(e for e in found if e.name == name) for name in names}
+
+
+def conditions_named(
+    name: str,
+    qualifiers: Sequence[str],
+    declared: Mapping[str, tuple[DeclaredCondition, ...]],
+) -> tuple[DeclaredCondition, ...]:
+    """The one declaration a reference denotes, or nothing when it denotes none or
+    several -- several is an ambiguous reference, which COBOL rejects."""
+    found = tuple(
+        entry
+        for entry in declared.get(name.upper(), ())
+        if entry.qualified_by(qualifiers)
+    )
+    return found if len(found) == 1 else ()
+
+
+def _declared_under(fields, above: tuple[str, ...]) -> tuple[DeclaredCondition, ...]:
+    return tuple(
+        entry
+        for cobol_field in fields
+        for chain in ((cobol_field.name.upper(), *above),)
+        for entry in (
+            *_declared_at(cobol_field, chain),
+            *_declared_under(cobol_field.children, chain),
+        )
+    )
+
+
+def _declared_at(cobol_field, chain: tuple[str, ...]) -> tuple[DeclaredCondition, ...]:
+    return tuple(
+        DeclaredCondition(
+            name=condition.name.upper(),
+            enclosing=chain,
+            first=_first_value(condition.values),
+        )
+        for condition in cobol_field.conditions
+    )
+
+
+def _first_value(values: Sequence[ConditionValue]) -> RefModOperand:
+    if not values:
+        return RefModOperand(name="")
+    kind = OperandKind.FIGURATIVE if values[0].figurative else OperandKind.LIT
+    return RefModOperand(name=_shown(values[0], values[0].from_val), kind=kind)
 
 
 def resolve_atom(atom: Atom, index: Mapping[str, EightyEight]) -> Atom:

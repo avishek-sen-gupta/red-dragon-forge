@@ -631,8 +631,10 @@ _RULES: Mapping[str, Callable[..., tuple[Block, ...]]] = {
     "SearchStatement": _search,
     "CallStatement": _call,
     "ReadStatement": _read,
+    "ReturnStatement": _read,
     "WriteStatement": _write,
     "RewriteStatement": _write,
+    "ReleaseStatement": _write,
     "XmlGenerateStatement": _xml_generate,
     "ExecCicsStatement": _exec_cics,
 }
@@ -651,8 +653,10 @@ _VERB_LABELS: Mapping[str, str] = {
     "SearchStatement": "SEARCH",
     "CallStatement": "CALL",
     "ReadStatement": "READ",
+    "ReturnStatement": "RETURN",
     "WriteStatement": "WRITE",
     "RewriteStatement": "REWRITE",
+    "ReleaseStatement": "RELEASE",
     "XmlGenerateStatement": "XML_GENERATE",
 }
 

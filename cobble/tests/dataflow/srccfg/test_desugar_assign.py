@@ -6,11 +6,11 @@ statement moves, and this slice only turns its answer into nodes.
 
 from __future__ import annotations
 
-from cobble.dataflow.srccfg.read import names_of
 from cobble.dataflow.depgraph.flows import program_context
 from cobble.dataflow.srccfg.cfg import EdgeKind, NodeKind
-from cobble.dataflow.srccfg.conditions import condition_index
+from cobble.dataflow.srccfg.conditions import condition_index, declared_conditions
 from cobble.dataflow.srccfg.desugar import Ctx, lower_statement, lower_statements
+from cobble.dataflow.srccfg.read import names_of
 
 
 def _ctx(asg, paragraph: str = "MAIN") -> Ctx:
@@ -19,6 +19,7 @@ def _ctx(asg, paragraph: str = "MAIN") -> Ctx:
         paragraph=paragraph,
         flows=program_context(asg),
         index=condition_index(asg),
+        declared=declared_conditions(asg),
     )
 
 
@@ -397,6 +398,79 @@ def test_a_file_statement_names_the_record_its_fd_declares(program_of) -> None:
         (("WS-COPY", "FD-CARD-REC"), ("FILE:CARD-INPUT",)),
         (("FILE:CARD-OUTPUT",), ("OUT-REC",)),
     ]
+
+
+def test_a_sort_return_fills_its_sd_record_and_its_into_field(program_of) -> None:
+    """RETURN reads the next sorted record into the SD's record area, and into INTO
+    too when there is one, exactly as READ does for an FD."""
+    asg = program_of(
+        [
+            {
+                "type": "RETURN",
+                "file_name": "SORT-WORK",
+                "into": {"name": "WS-COPY"},
+                "at_end": [],
+                "not_at_end": [],
+            }
+        ],
+        file_control=[{"file_name": "SORT-WORK"}],
+        file_fields=[
+            {"level": 1, "name": "SW-REC", "pic": "X(16)", "fd_name": "SORT-WORK"}
+        ],
+    )
+    (node,) = lower_statements(asg.paragraphs[0].statements, _ctx(asg), "").nodes
+
+    assert (node.writes, names_of(node.reads), node.transfer) == (
+        ("WS-COPY", "SW-REC"),
+        ("FILE:SORT-WORK",),
+        "RETURN",
+    )
+
+
+def test_a_set_of_a_condition_writes_the_field_the_condition_tests(
+    program_of,
+) -> None:
+    """A level-88 name has no storage of its own: SET ... TO TRUE writes its parent.
+    Qualifiers pick one of several 88s of the same name, matched against the
+    items enclosing it, so ``ON OF GRP-B`` finds the ON under P3 inside GRP-B."""
+
+    def _flag(name: str, condition: str) -> dict:
+        return {
+            "level": 1,
+            "name": name,
+            "pic": "X",
+            "conditions": [{"name": condition, "values": [{"from": "'Y'"}]}],
+        }
+
+    def _set(target: str, qualifiers: list[str]) -> dict:
+        return {
+            "type": "SET",
+            "set_type": "TO",
+            "targets": [{"kind": "ref", "name": target, "qualifiers": qualifiers}],
+            "values": [{"kind": "lit", "value": "TRUE"}],
+        }
+
+    asg = program_of(
+        [
+            _set("FLAG-ON", []),
+            _set("ON", ["P2"]),
+            _set("ON", ["P1"]),
+            _set("ON", ["GRP-B"]),
+        ],
+        data_fields=[
+            _flag("WS-FLAG", "FLAG-ON"),
+            _flag("P1", "ON"),
+            _flag("P2", "ON"),
+            {
+                "level": 1,
+                "name": "GRP-B",
+                "children": [{**_flag("P3", "ON"), "level": 5}],
+            },
+        ],
+    )
+    nodes = lower_statements(asg.paragraphs[0].statements, _ctx(asg), "").nodes
+
+    assert [node.writes for node in nodes] == [("WS-FLAG",), ("P2",), ("P1",), ("P3",)]
 
 
 def test_a_set_reads_the_field_it_copies_and_no_literal(program_of) -> None:

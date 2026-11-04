@@ -8,10 +8,7 @@ prunes that, and it belongs to the reaching-conditions pass, not here.
 
 from __future__ import annotations
 
-from cobble.dataflow.srccfg.read import Read, names_of
-from cobble.dataflow.srccfg.read_kind import ReadKind
 from cobble.dataflow.depgraph.flows import program_context
-
 from cobble.dataflow.srccfg.build import (
     build_program,
     end_id,
@@ -27,6 +24,8 @@ from cobble.dataflow.srccfg.desugar import (
     Ctx,
     lower_statements,
 )
+from cobble.dataflow.srccfg.read import Read, names_of
+from cobble.dataflow.srccfg.read_kind import ReadKind
 
 
 def _ctx(asg) -> Ctx:
@@ -549,3 +548,90 @@ def test_a_perform_that_can_never_return_keeps_its_way_on(asg_of) -> None:
         ("0000-MAIN/1", EdgeKind.FLOW),
     ]
     assert cfg.node("0000-MAIN/0").resume == ""
+
+
+def test_a_sort_performs_its_input_procedure_then_its_output_procedure(
+    asg_of,
+) -> None:
+    """SORT runs the INPUT PROCEDURE, sorts, then runs the OUTPUT PROCEDURE, each
+    returning to the SORT the way a PERFORM returns. RELEASE ... FROM moves its
+    field into the sort record and the record to the sort file, as WRITE ... FROM
+    does."""
+    cfg = build_program(
+        asg_of(
+            {
+                "program_id": "PROGA",
+                "file_control": [{"file_name": "SORT-WORK"}],
+                "file_fields": [
+                    {
+                        "level": 1,
+                        "name": "SW-REC",
+                        "pic": "X(8)",
+                        "fd_name": "SORT-WORK",
+                    }
+                ],
+                "data_fields": [{"level": 1, "name": "WS-IN", "pic": "X(8)"}],
+                "paragraphs": [
+                    {
+                        "name": "MAIN",
+                        "statements": [
+                            {
+                                "type": "SORT",
+                                "file_name": "SORT-WORK",
+                                "keys": [
+                                    {
+                                        "direction": "ASCENDING",
+                                        "key": {"name": "SW-REC"},
+                                    }
+                                ],
+                                "input_procedure": {"target": "FEED"},
+                                "output_procedure": {
+                                    "target": "TAKE",
+                                    "thru": "TAKE-END",
+                                },
+                            },
+                            {"type": "STOP_RUN"},
+                        ],
+                    },
+                    {
+                        "name": "FEED",
+                        "statements": [
+                            {
+                                "type": "RELEASE",
+                                "record_name": "SW-REC",
+                                "from": {"name": "WS-IN"},
+                            }
+                        ],
+                    },
+                    {"name": "TAKE", "statements": []},
+                    {"name": "TAKE-END", "statements": []},
+                ],
+            }
+        )
+    )
+    performs = sorted(
+        (edge.source, edge.target)
+        for edge in cfg.edges
+        if edge.kind is EdgeKind.PERFORM
+    )
+    release = next(node for node in cfg.nodes if node.transfer == "RELEASE")
+    flows = sorted(
+        (edge.source, edge.target)
+        for edge in cfg.edges
+        if edge.source.startswith("MAIN/0")
+    )
+
+    assert performs == [("MAIN/0#input", "FEED#label"), ("MAIN/0#output", "TAKE#label")]
+    assert (cfg.node("MAIN/0#output").range_end, cfg.node("MAIN/0#input").resume) == (
+        "TAKE-END#end",
+        "MAIN/0",
+    )
+    assert (release.writes, names_of(release.reads)) == (
+        ("SW-REC", "FILE:SORT-WORK"),
+        ("WS-IN", "SW-REC"),
+    )
+    assert flows == [
+        ("MAIN/0", "MAIN/0#output"),
+        ("MAIN/0#input", "FEED#label"),
+        ("MAIN/0#output", "TAKE#label"),
+    ]

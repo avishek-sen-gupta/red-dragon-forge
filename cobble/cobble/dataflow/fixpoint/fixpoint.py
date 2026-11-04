@@ -72,11 +72,12 @@ from itertools import accumulate, pairwise, repeat, takewhile
 from types import MappingProxyType
 
 from cobble.dataflow.depgraph.flows import IDENTITY_PREFIXES
+from cobble.dataflow.fields.condition_set import ConditionSet
 from cobble.dataflow.fields.extent import CellIndex, cell_index, operand_extents
 from cobble.dataflow.fields.file_read import FileRead
 from cobble.dataflow.fields.image import initial_image
-from cobble.dataflow.fields.program_layout import NO_LAYOUT, ProgramLayout, layout_of
 from cobble.dataflow.fields.origin import Origin
+from cobble.dataflow.fields.program_layout import NO_LAYOUT, ProgramLayout, layout_of
 from cobble.dataflow.fields.sink import Sink
 from cobble.dataflow.fields.sink_site import SinkSite
 from cobble.dataflow.fields.sinks import sinks_of
@@ -102,6 +103,8 @@ from cobble.dataflow.fields.unmodelled_write import UnmodelledWrite
 from cobble.dataflow.fields.values import EMPTY as VALUES_EMPTY
 from cobble.dataflow.fields.values import ValueSet
 from cobble.dataflow.fixpoint.fallthrough import fallthroughs_pruned
+from cobble.dataflow.fixpoint.live import EVERYTHING, Live
+from cobble.dataflow.fixpoint.options import DEFAULT_OPTIONS, AnalysisOptions
 from cobble.dataflow.fixpoint.perform_ranges import (
     NO_RANGES,
     PerformRanges,
@@ -110,8 +113,6 @@ from cobble.dataflow.fixpoint.perform_ranges import (
     restored,
     split,
 )
-from cobble.dataflow.fixpoint.live import EVERYTHING, Live
-from cobble.dataflow.fixpoint.options import DEFAULT_OPTIONS, AnalysisOptions
 from cobble.dataflow.fixpoint.stepped import Stepped
 from cobble.dataflow.fixpoint.targets import ResolvedTarget, resolved_targets
 from cobble.dataflow.jumps.discover import jumps_of
@@ -119,7 +120,14 @@ from cobble.dataflow.jumps.jump import Jump
 from cobble.dataflow.layout import UnsizeableFieldError, program_records
 from cobble.dataflow.srccfg.build import label_id, paragraph_order
 from cobble.dataflow.srccfg.cfg import Cfg, EdgeKind, Node
-from cobble.dataflow.srccfg.conditions import EightyEight, condition_index
+from cobble.dataflow.srccfg.conditions import (
+    EightyEight,
+    condition_index,
+    conditions_named,
+    declared_conditions,
+)
+from cobble.dataflow.srccfg.declared_condition import DeclaredCondition
+from cobble.dataflow.srccfg.desugar import is_condition_set
 from cobble.dataflow.srccfg.literals import is_literal
 from cobble.dataflow.srccfg.order import DepthFirstOrder, depth_first_order
 from cobble.dataflow.srccfg.program import program_cfg
@@ -127,7 +135,12 @@ from cobble.dataflow.srccfg.read import copied_names, names_of
 from cobble.dataflow.srccfg.read_kind import ReadKind
 from cobble.dataflow.srccfg.statements import statement_index
 from cobol_asg.asg_types import CobolASG
-from cobol_asg.cobol_statements import ReadStatement
+from cobol_asg.cobol_statements import (
+    MoveStatement,
+    ReadStatement,
+    ReturnStatement,
+    SetStatement,
+)
 from cobol_asg.ref_mod import RefModOperand
 from cobol_memory.field_extent import FieldExtent
 from cobol_memory.region_id import RegionId
@@ -415,7 +428,10 @@ def _statements_at(
 def program_statements(asg: CobolASG, cfg: Cfg) -> Mapping[str, Statement]:
     """The statement at every CFG node, as the transfer reads them."""
     return with_unmodelled(
-        with_record_areas(statement_index(asg), asg.file_record_to_select),
+        with_condition_sets(
+            with_record_areas(statement_index(asg), asg.file_record_to_select),
+            declared_conditions(asg),
+        ),
         cfg,
         condition_index(asg),
     )
@@ -435,7 +451,7 @@ def with_record_areas(
 
 
 def _file_read(statement: Statement, file_of_record: Mapping[str, str]) -> Statement:
-    if not isinstance(statement, ReadStatement):
+    if not isinstance(statement, (ReadStatement, ReturnStatement)):
         return statement
     into = (statement.into,) if statement.into.name else ()
     records = tuple(
@@ -444,6 +460,50 @@ def _file_read(statement: Statement, file_of_record: Mapping[str, str]) -> State
         if owner == statement.file_name.upper()
     )
     return FileRead(file_name=statement.file_name, targets=into + records)
+
+
+TRUE = "TRUE"
+
+
+def with_condition_sets(
+    statements: Mapping[str, Statement],
+    declared: Mapping[str, tuple[DeclaredCondition, ...]],
+) -> Mapping[str, Statement]:
+    """Every SET ... TO TRUE whose conditions all resolve, as the MOVE of each
+    condition's first value into the field it tests. Anything else -- TO FALSE, an
+    88 with no value, a name no declaration resolves -- stays a SET, which the
+    unmodelled pass reads as a weak write."""
+    return MappingProxyType(
+        {
+            node_id: _condition_set_or(statement, declared)
+            for node_id, statement in statements.items()
+        }
+    )
+
+
+def _condition_set_or(
+    statement: Statement, declared: Mapping[str, tuple[DeclaredCondition, ...]]
+) -> Statement:
+    if not isinstance(statement, SetStatement):
+        return statement
+    if not (is_condition_set(statement) and _truth(statement) == TRUE):
+        return statement
+    found = tuple(
+        conditions_named(target.name, target.qualifiers, declared)
+        for target in statement.targets
+    )
+    if not all(len(one) == 1 and one[0].first.name for one in found):
+        return statement
+    return ConditionSet(
+        moves=tuple(
+            MoveStatement(source=entry.first, targets=[entry.parent])
+            for (entry,) in found
+        )
+    )
+
+
+def _truth(statement: SetStatement) -> str:
+    return statement.values[0].value.upper()
 
 
 def with_unmodelled(
