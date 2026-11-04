@@ -36,7 +36,11 @@ def _rel(left: str, op: str, right: str, negated: bool = False) -> dict:
 
 def test_a_relational_condition_becomes_one_atom_with_its_parts() -> None:
     assert read_condition(_rel("WS-FLAG-A", "==", "'Y'")) == Atom(
-        text="WS-FLAG-A == 'Y'", left="WS-FLAG-A", op="==", right="'Y'"
+        text="WS-FLAG-A == 'Y'",
+        left="WS-FLAG-A",
+        op="==",
+        right="'Y'",
+        plain=True,
     )
 
 
@@ -53,7 +57,11 @@ def test_a_field_on_both_sides_keeps_both_names() -> None:
     }
 
     assert read_condition(raw) == Atom(
-        text="WS-FLAG-A == WS-FLAG-B", left="WS-FLAG-A", op="==", right="WS-FLAG-B"
+        text="WS-FLAG-A == WS-FLAG-B",
+        left="WS-FLAG-A",
+        op="==",
+        right="WS-FLAG-B",
+        plain=True,
     )
 
 
@@ -62,7 +70,9 @@ def test_a_negated_relation_becomes_a_not_around_the_atom() -> None:
     implements it by swapping edges, and an operator flip would be wrong for a
     class test or an 88 name where there is no operator to flip."""
     assert read_condition(_rel("WS-FLAG-A", "==", "'Y'", negated=True)) == Not(
-        inner=Atom(text="WS-FLAG-A == 'Y'", left="WS-FLAG-A", op="==", right="'Y'")
+        inner=Atom(
+            text="WS-FLAG-A == 'Y'", left="WS-FLAG-A", op="==", right="'Y'", plain=True
+        )
     )
 
 
@@ -78,10 +88,24 @@ def test_and_and_or_nest_left_and_right() -> None:
     }
 
     assert read_condition(raw) == Or(
-        left=Atom(text="WS-FLAG-A == 'Y'", left="WS-FLAG-A", op="==", right="'Y'"),
+        left=Atom(
+            text="WS-FLAG-A == 'Y'", left="WS-FLAG-A", op="==", right="'Y'", plain=True
+        ),
         right=And(
-            left=Atom(text="WS-FLAG-B == 'N'", left="WS-FLAG-B", op="==", right="'N'"),
-            right=Atom(text="WS-TYPE-C == 'G'", left="WS-TYPE-C", op="==", right="'G'"),
+            left=Atom(
+                text="WS-FLAG-B == 'N'",
+                left="WS-FLAG-B",
+                op="==",
+                right="'N'",
+                plain=True,
+            ),
+            right=Atom(
+                text="WS-TYPE-C == 'G'",
+                left="WS-TYPE-C",
+                op="==",
+                right="'G'",
+                plain=True,
+            ),
         ),
     )
 
@@ -90,7 +114,11 @@ def test_a_parenthesised_subcondition_is_read_through() -> None:
     raw = {"not": False, "condition": _rel("WS-FLAG-A", "==", "'Y'")}
 
     assert read_condition(raw) == Atom(
-        text="WS-FLAG-A == 'Y'", left="WS-FLAG-A", op="==", right="'Y'"
+        text="WS-FLAG-A == 'Y'",
+        left="WS-FLAG-A",
+        op="==",
+        right="'Y'",
+        plain=True,
     )
 
 
@@ -117,7 +145,11 @@ def test_a_condition_name_becomes_an_atom_naming_the_88() -> None:
     raw = {"not": False, "condition_name": "WS-FLAG-A-SET"}
 
     assert read_condition(raw) == Atom(
-        text="WS-FLAG-A-SET", left="WS-FLAG-A-SET", op=EIGHTY_EIGHT, right=""
+        text="WS-FLAG-A-SET",
+        left="WS-FLAG-A-SET",
+        op=EIGHTY_EIGHT,
+        right="",
+        plain=True,
     )
 
 
@@ -150,6 +182,7 @@ def test_a_dfhresp_operand_reads_as_the_condition_it_names() -> None:
         left="WS-RESP",
         op="==",
         right="DFHRESP(NORMAL)",
+        plain=True,
     )
 
 
@@ -157,7 +190,11 @@ def test_a_bare_string_condition_is_an_atom_of_that_text() -> None:
     """EVALUATE WHEN gives its subject as plain text when it is an 88 name or a
     literal, and SEARCH WHEN gives the whole predicate that way."""
     assert read_condition("WS-FLAG-A-SET") == Atom(
-        text="WS-FLAG-A-SET", left="WS-FLAG-A-SET", op=EIGHTY_EIGHT, right=""
+        text="WS-FLAG-A-SET",
+        left="WS-FLAG-A-SET",
+        op=EIGHTY_EIGHT,
+        right="",
+        plain=True,
     )
 
 
@@ -217,6 +254,7 @@ def test_a_figurative_constant_is_kept_as_the_right_operand() -> None:
         left="IRRA-ERR-CDE",
         op="==",
         right="SPACES",
+        plain=True,
     )
 
 
@@ -235,13 +273,18 @@ def test_two_figurative_constants_in_one_condition_stay_distinct() -> None:
 
     assert both == Or(
         left=Atom(
-            text="IRRA-ERR-CDE == SPACES", left="IRRA-ERR-CDE", op="==", right="SPACES"
+            text="IRRA-ERR-CDE == SPACES",
+            left="IRRA-ERR-CDE",
+            op="==",
+            right="SPACES",
+            plain=True,
         ),
         right=Atom(
             text="IRRA-ERR-CDE == LOW-VALUES",
             left="IRRA-ERR-CDE",
             op="==",
             right="LOW-VALUES",
+            plain=True,
         ),
     )
 
@@ -263,7 +306,7 @@ def test_under_evaluate_false_a_when_is_reached_when_its_condition_fails() -> No
     named = SelectionCondition(
         condition={"not": False, "condition_name": "INPUT-ERROR"}
     )
-    tested = Atom(text="INPUT-ERROR", left="INPUT-ERROR", op=EIGHTY_EIGHT)
+    tested = Atom(text="INPUT-ERROR", left="INPUT-ERROR", op=EIGHTY_EIGHT, plain=True)
 
     assert (
         read_when_object(named, TruthValue(value=True)),
@@ -273,3 +316,52 @@ def test_under_evaluate_false_a_when_is_reached_when_its_condition_fails() -> No
 
 def test_under_evaluate_false_when_any_still_always_matches() -> None:
     assert read_when_object(AnyObject(), TruthValue(value=False)) == ALWAYS
+
+
+def test_an_atom_is_plain_only_when_neither_operand_selects_part_of_a_field() -> None:
+    """A test on F(1:1) or T(I) reads bytes the field's name does not say, so the
+    atom is marked not plain; an analysis that follows bytes must not read it as a
+    comparison of the whole field. A condition name with a subscript likewise."""
+
+    def relation(left: dict) -> dict:
+        return {
+            "not": False,
+            "relation": {
+                "left": left,
+                "op": "==",
+                "right": {"kind": "lit", "value": "'Y'"},
+            },
+        }
+
+    whole = relation({"kind": "ref", "name": "F"})
+    part = relation(
+        {
+            "kind": "ref",
+            "name": "F",
+            "ref_mod_start": {"kind": "lit", "value": "1"},
+            "ref_mod_length": {"kind": "lit", "value": "1"},
+        }
+    )
+    row = relation(
+        {"kind": "ref", "name": "T", "subscripts": [{"kind": "ref", "name": "I"}]}
+    )
+    flag = {"condition_name": "F-ON"}
+    flag_row = {
+        "condition_name": "T-ON",
+        "condition_subscripts": [{"kind": "ref", "name": "I"}],
+    }
+
+    whole_atom = Atom(text="F == 'Y'", left="F", op="==", right="'Y'", plain=True)
+    part_atom = Atom(text="F == 'Y'", left="F", op="==", right="'Y'", plain=False)
+
+    assert [read_condition(raw) for raw in (whole, part, row, flag, flag_row)] == [
+        whole_atom,
+        part_atom,
+        Atom(text="T == 'Y'", left="T", op="==", right="'Y'", plain=False),
+        Atom(text="F-ON", left="F-ON", op=EIGHTY_EIGHT, plain=True),
+        Atom(text="T-ON", left="T-ON", op=EIGHTY_EIGHT, plain=False),
+    ]
+    assert (negate_atom(whole_atom).plain, negate_atom(part_atom).plain) == (
+        True,
+        False,
+    )

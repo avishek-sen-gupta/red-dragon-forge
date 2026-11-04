@@ -13,7 +13,7 @@ that loss is visible in every report because ``resolved`` is False.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import reduce
 from itertools import accumulate, repeat, takewhile
 
@@ -22,6 +22,12 @@ from cobble.dataflow.srccfg.declared_condition import DeclaredCondition
 from cobble.dataflow.srccfg.expression_text import expression_text
 from cobble.dataflow.srccfg.synthetic import dfhresp_operand
 from cobol_asg.any_object import AnyObject
+from cobol_asg.cobol_expression import (
+    ExprNode,
+    FieldRefNode,
+    FigurativeNode,
+    LiteralNode,
+)
 from cobol_asg.condition_name import ConditionValue
 from cobol_asg.evaluate_selection import SelectionObject, SelectionSubject
 from cobol_asg.expression_subject import ExpressionSubject
@@ -68,7 +74,7 @@ missing key reads as None."""
 def read_condition(raw: ConditionData) -> Cond:
     match raw:
         case str():
-            return _named(raw)
+            return _named(raw, True)
         case Mapping():
             return _read_mapping(raw)
         case _:
@@ -101,7 +107,9 @@ _BODY_SHAPES = (
     (lambda raw: "condition" in raw, lambda raw: read_condition(raw["condition"])),
     (
         lambda raw: "condition_name" in raw,
-        lambda raw: _named(str(raw["condition_name"])),
+        lambda raw: _named(
+            str(raw["condition_name"]), not raw.get("condition_subscripts")
+        ),
     ),
     (lambda raw: "class" in raw, lambda raw: _class_test(raw)),
 )
@@ -145,7 +153,27 @@ def _relation(raw: ConditionData) -> Cond:
     op = str(raw.get("op", ""))
     if not op or not left:
         return UNRESOLVED
-    return Atom(text=f"{left} {op} {right}", left=left, op=op, right=right)
+    return Atom(
+        text=f"{left} {op} {right}",
+        left=left,
+        op=op,
+        right=right,
+        plain=_whole(raw.get("left")) and _whole(raw.get("right")),
+    )
+
+
+SELECTORS = ("ref_mod_start", "ref_mod_length", "subscripts")
+
+
+def _whole(raw: ConditionData) -> bool:
+    """A relation operand that names all of its field, or a literal."""
+    match raw:
+        case str():
+            return True
+        case Mapping():
+            return not any(raw.get(key) for key in SELECTORS)
+        case _:
+            return False
 
 
 def _operand(raw: ConditionData) -> str:
@@ -175,8 +203,10 @@ _OPERAND_KINDS = {
 }
 
 
-def _named(name: str) -> Cond:
-    return Atom(text=name, left=name, op=EIGHTY_EIGHT) if name else UNRESOLVED
+def _named(name: str, plain: bool) -> Cond:
+    if not name:
+        return UNRESOLVED
+    return Atom(text=name, left=name, op=EIGHTY_EIGHT, plain=plain)
 
 
 def _class_test(raw: Mapping) -> Cond:
@@ -204,15 +234,8 @@ def negate_atom(atom: Atom) -> Atom:
         return atom
     flipped = _OPPOSITE.get(atom.op, "")
     if not flipped:
-        return Atom(
-            text=f"NOT {atom.text}", left=atom.left, op=atom.op, right=atom.right
-        )
-    return Atom(
-        text=f"{atom.left} {flipped} {atom.right}",
-        left=atom.left,
-        op=flipped,
-        right=atom.right,
-    )
+        return replace(atom, text=f"NOT {atom.text}")
+    return replace(atom, text=f"{atom.left} {flipped} {atom.right}", op=flipped)
 
 
 IN = "IN"
@@ -381,18 +404,19 @@ def resolve_atom(atom: Atom, index: Mapping[str, EightyEight]) -> Atom:
     entry = index.get(atom.left.upper())
     if not entry:
         return atom
-    return _from_entry(atom.text, entry)
+    return _from_entry(atom.text, entry, atom.plain)
 
 
-def _from_entry(name: str, entry: EightyEight) -> Atom:
+def _from_entry(name: str, entry: EightyEight, plain: bool) -> Atom:
     op, right = _op_and_right(entry)
     if not op:
-        return Atom(text=name, left=entry.parent, op=EIGHTY_EIGHT)
+        return Atom(text=name, left=entry.parent, op=EIGHTY_EIGHT, plain=plain)
     return Atom(
         text=f"{name} ({entry.parent} {op} {right})",
         left=entry.parent,
         op=op,
         right=right,
+        plain=plain,
     )
 
 
@@ -457,7 +481,11 @@ def _valued(selection: ValueObject | RangeObject, subject: SelectionSubject) -> 
     not resolve -- one declared in a copybook the parse did not have."""
     match subject:
         case ExpressionSubject(expr=expr):
-            return _compared(expression_text(expr), *_bounds(selection))
+            return _compared(
+                expression_text(expr),
+                *_bounds(selection),
+                _whole_expression(expr) and _whole_bounds(selection),
+            )
         case TruthValue(value=truth):
             return _against_truth(truth, _unresolved_name(selection))
         case _:
@@ -472,10 +500,28 @@ def _bounds(selection: ValueObject | RangeObject) -> tuple[str, str]:
             return (expression_text(value), "")
 
 
+def _whole_expression(node: ExprNode) -> bool:
+    match node:
+        case FieldRefNode(subscripts=subscripts):
+            return not subscripts
+        case LiteralNode() | FigurativeNode():
+            return True
+        case _:
+            return False
+
+
+def _whole_bounds(selection: ValueObject | RangeObject) -> bool:
+    match selection:
+        case RangeObject(low=low, high=high):
+            return _whole_expression(low) and _whole_expression(high)
+        case ValueObject(value=value):
+            return _whole_expression(value)
+
+
 def _unresolved_name(selection: ValueObject | RangeObject) -> Cond:
     match selection:
         case ValueObject(value=value):
-            return _named(expression_text(value))
+            return _named(expression_text(value), False)
         case RangeObject():
             return UNRESOLVED
 
@@ -510,12 +556,15 @@ def _truth_answering(truth: bool, subject: SelectionSubject) -> Cond:
             return UNRESOLVED
 
 
-def _compared(subject: str, value: str, thru: str) -> Atom:
+def _compared(subject: str, value: str, thru: str, plain: bool) -> Atom:
     if thru:
         return Atom(
             text=f"{subject} = {value} THRU {thru}",
             left=subject,
             op=RANGE,
             right=f"{value} THRU {thru}",
+            plain=plain,
         )
-    return Atom(text=f"{subject} == {value}", left=subject, op="==", right=value)
+    return Atom(
+        text=f"{subject} == {value}", left=subject, op="==", right=value, plain=plain
+    )

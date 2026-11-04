@@ -60,6 +60,11 @@ class Atom:
     ``resolved`` False means the ASG gave text this pass could not decompose, and
     the parts are empty. Such an atom still gets a TEST node, because a path
     through an unreadable predicate is a real path.
+
+    ``plain`` True means each operand is a whole field, a literal or a condition
+    name as written: no reference modification and no subscript. Only then do
+    ``left`` and ``right`` name the bytes the test reads. It is False unless the
+    reader that built the atom checked.
     """
 
     text: str
@@ -67,6 +72,7 @@ class Atom:
     op: str = ""
     right: str = ""
     resolved: bool = True
+    plain: bool = False
 
 
 UNRESOLVED = Atom(text="UNRESOLVED", resolved=False)
