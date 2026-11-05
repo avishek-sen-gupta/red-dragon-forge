@@ -737,6 +737,8 @@ def test_an_unsubscripted_cics_commarea_is_written_exactly_as_before(
 def test_a_literal_move_carries_its_text_fitted_to_the_target(
     index_of, program_of, field
 ):
+    """Left-aligned and space-filled; a JUSTIFIED RIGHT receiver takes it
+    right-aligned, losing excess bytes on the left, from a literal or a field."""
     asg = program_of(
         [],
         paragraphs=[
@@ -746,18 +748,43 @@ def test_a_literal_move_carries_its_text_fitted_to_the_target(
                     {
                         "type": "MOVE",
                         "operands": [{"name": "'COSGN00C'"}, {"name": "WS-PGM"}],
-                    }
+                    },
+                    {
+                        "type": "MOVE",
+                        "operands": [{"name": "'Y'"}, {"name": "WS-R"}],
+                    },
+                    {
+                        "type": "MOVE",
+                        "operands": [{"name": "'ABCDE'"}, {"name": "WS-R"}],
+                    },
+                    {
+                        "type": "MOVE",
+                        "operands": [{"name": "WS-PGM"}, {"name": "WS-R"}],
+                    },
                 ],
             }
         ],
-        data_fields=[field(1, "WS-PGM", "X(8)")],
+        data_fields=[
+            field(1, "WS-PGM", "X(8)"),
+            field(1, "WS-R", "X(3)", justified_right=True),
+        ],
     )
     index = index_of(asg)
-    statement = statement_index(asg)[next(iter(statement_index(asg)))]
-    after = transfer(statement, "n1", EMPTY, index)
+    statements = tuple(statement_index(asg).values())
     target = index.extent_of(index.cells_named("WS-PGM", (), 0)[0])
+    right = index.extent_of(index.cells_named("WS-R", (), 0)[0])
+    after = transfer(statements[0], "n1", EMPTY, index)
 
     assert values_at(after, target) == of_value(b"COSGN00C")
+    assert values_at(transfer(statements[1], "n2", EMPTY, index), right) == of_value(
+        b"  Y"
+    )
+    assert values_at(transfer(statements[2], "n3", EMPTY, index), right) == of_value(
+        b"CDE"
+    )
+    assert values_at(transfer(statements[3], "n4", after, index), right) == of_value(
+        b"00C"
+    )
 
 
 def test_a_move_from_a_function_reads_the_fields_its_arguments_name(

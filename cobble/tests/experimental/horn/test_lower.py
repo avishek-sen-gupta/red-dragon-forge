@@ -471,11 +471,12 @@ def test_a_file_statement_frees_the_file_status_field() -> None:
     )
 
 
-def test_a_justified_receiver_is_not_given_the_left_aligned_literal() -> None:
+def test_a_justified_receiver_holds_the_literal_right_aligned() -> None:
     data = (_x("F3", "X(3)", justified_right=True), *FIELDS)
     program = [("MAIN", [_move_literal("'Y'", "F3"), _test("F3", "'Q'"), X_OUT])]
 
     assert _ask(program, data, "X-OUT", [Condition("F3", Op.EQ, "'  Y'")]) == Answer.SAT
+    assert _ask(program, data, "X-OUT", [Condition("F3", Op.EQ, "'Y'")]) == Answer.UNSAT
 
 
 def test_a_name_the_program_never_declares_is_not_tracked() -> None:

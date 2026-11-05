@@ -57,6 +57,7 @@ from cobble.dataflow.fields.values import (
     ValueSet,
     because,
     fitted,
+    fitted_right,
     merged,
     of_value,
     refitted,
@@ -176,22 +177,30 @@ def _unresolved_origin(operand: RefModOperand, reason: str) -> Origin:
     return Origin(kind, "")
 
 
-def _literal_value(operand: RefModOperand, width: int) -> ValueSet:
+def _literal_value(
+    operand: RefModOperand, width: int, fit: Callable[[bytes, int], bytes]
+) -> ValueSet:
     """A quoted literal's own bytes; anything else is not a literal."""
     if not is_literal(operand.name):
         return because(UnresolvedReason.NOT_A_LITERAL)
     text = operand.name.strip()
     if not (text[:1] in "'\"" and text[-1:] == text[:1]):
         return because(UnresolvedReason.NOT_A_LITERAL)
-    return of_value(fitted(text[1:-1].encode("utf-8", errors="replace"), width))
+    return of_value(fit(text[1:-1].encode("utf-8", errors="replace"), width))
 
 
-def _carried(state: State, extents: tuple[FieldExtent, ...], width: int) -> ValueSet:
+def _carried(
+    state: State,
+    extents: tuple[FieldExtent, ...],
+    width: int,
+    fit: Callable[[bytes, int], bytes],
+) -> ValueSet:
     return refitted(
         reduce(
             merged, (exact_values(state, extent) for extent in extents), VALUES_EMPTY
         ),
         width,
+        fit,
     )
 
 
@@ -202,6 +211,7 @@ def _one_move(
     node: str,
     state: State,
     copy_start: tuple[int, ...],
+    fit: Callable[[bytes, int], bytes],
 ) -> Iterator[Write]:
     """The whole target from the whole source, or from a named origin.
 
@@ -216,7 +226,7 @@ def _one_move(
                 Write(
                     target,
                     _unresolved(operand, sources.reason, node),
-                    values=_literal_value(operand, target.length),
+                    values=_literal_value(operand, target.length, fit),
                 ),
             )
         )
@@ -225,7 +235,7 @@ def _one_move(
             Write(
                 target,
                 _from_extents(sources.extents, node),
-                values=_carried(state, sources.extents, target.length),
+                values=_carried(state, sources.extents, target.length, fit),
                 copy_start=copy_start,
             ),
         )
@@ -279,8 +289,20 @@ def _move_writes(
         for target_operand in _move_targets(statement)
         for copy_start in (_copy_start(operand, target_operand, index),)
         for target in operand_extents(target_operand, index).extents
-        for entry in _one_move(operand, sources, target, node, state, copy_start)
+        for fit in (_fit(target_operand, index),)
+        for entry in _one_move(operand, sources, target, node, state, copy_start, fit)
     )
+
+
+def _fit(target: RefModOperand, index: CellIndex) -> Callable[[bytes, int], bytes]:
+    """How a value lands in the target: right-aligned only in a whole JUSTIFIED
+    RIGHT field, as ``_text_into_text`` aligns its bytes."""
+    if (
+        isinstance(target.ref_mod_start, _REF_MODS)
+        or not _first_cell(target, index).justified
+    ):
+        return fitted
+    return fitted_right
 
 
 _REF_MODS = (

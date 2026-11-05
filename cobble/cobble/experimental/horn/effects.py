@@ -115,11 +115,7 @@ def effect_of(program: Program, storage: Storage, node: str) -> Effect:
 
 def _definite(write: Write, storage: Storage) -> tuple[bytes, ...]:
     target = write.target
-    if (
-        write.weak
-        or target.precision is not Precision.EXACT
-        or _justified(storage, target)
-    ):
+    if write.weak or target.precision is not Precision.EXACT:
         return ()
     values = write.values
     if values.complete and len(values.values) == 1:
@@ -134,10 +130,6 @@ def _figurative(write: Write) -> tuple[bytes, ...]:
         return ()
     fill = FIGURATIVES.get(origins[0].name.strip().upper(), b"")
     return (fill * write.target.length,) if fill else ()
-
-
-def _justified(storage: Storage, target: FieldExtent) -> bool:
-    return any(cell.justified for cell in storage.index.containing(target))
 
 
 def _applied(done: Effect, storage: Storage, write: Write, n: int) -> Effect:

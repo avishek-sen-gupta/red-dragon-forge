@@ -35,8 +35,7 @@ soundness.
   - a definite write whose value is one known byte string, or a figurative literal, sets those
     bytes;
   - any other write frees the bytes it overlaps: weak, at a computed subscript, a copy from a
-    field, an unknown value, or a definite write into a `JUSTIFIED` cell (whose literal value
-    the fixpoint does not right-align, red-dragon-forge-r676);
+    field, or an unknown value;
   - every name the CFG node lists as written frees the bytes of its extents that no write above
     covered, which catches a statement the transfer misses (`EXEC CICS FORMATTIME`);
   - a file statement (OPEN, CLOSE, READ, WRITE, REWRITE, START, DELETE, RETURN, RELEASE, SORT,

@@ -231,7 +231,9 @@ A site gets a `targets.jsonl` row when its transfer is `CALL`, `EXEC CICS XCTL` 
 | `USING`, `RETURNING`, `ON EXCEPTION` phrases | as the bare form |
 | `XCTL`/`LINK PROGRAM(WS-PGM)` | as `CALL WS-PGM` |
 
-A value is trimmed of trailing spaces. A candidate is any printable value; it is not checked
+A value is the bytes a `MOVE` leaves in the target: a literal or a copied value is
+space-filled on the right and truncated on the right, or, into a whole `JUSTIFIED RIGHT` field,
+space-filled and truncated on the left. A value is trimmed of trailing spaces. A candidate is any printable value; it is not checked
 against the corpus's program names.
 
 | Reason | Raised when |

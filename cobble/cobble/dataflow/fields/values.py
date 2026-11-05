@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 
@@ -85,7 +86,15 @@ def fitted(value: bytes, width: int) -> bytes:
     return value[:width].ljust(width, b" ")
 
 
-def refitted(source: ValueSet, width: int) -> ValueSet:
+def fitted_right(value: bytes, width: int) -> bytes:
+    """One value as it lands in a ``width``-byte JUSTIFIED RIGHT field: truncated
+    on the left when longer and space-filled on the left when shorter."""
+    return value[max(len(value) - width, 0) :].rjust(width, b" ")
+
+
+def refitted(
+    source: ValueSet, width: int, fit: Callable[[bytes, int], bytes] = fitted
+) -> ValueSet:
     return bounded(
-        frozenset(fitted(value, width) for value in source.values), source.reasons
+        frozenset(fit(value, width) for value in source.values), source.reasons
     )
