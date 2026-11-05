@@ -65,10 +65,12 @@ cobble-extents --asg-dir ASG_DIR --out OUT [--max-workers N] [--synthesize-undec
 One row per declared name: `id`, `level`, `usage`, `extents` (one per occurrence, so `OCCURS`
 gives several), `program`, then arrays parallel to `extents` holding each occurrence's record,
 qualification, start, length, level, PIC, usage, `REDEFINES`, `OCCURS`, subscripts, `VALUE`,
-`JUSTIFIED RIGHT`, whether it is a `FILLER` (`fillers`) and parent, plus the record's origin and
+`JUSTIFIED RIGHT`, `SIGN LEADING` and `SIGN SEPARATE` (`sign_leading`, `sign_separate`), whether it
+is a `FILLER` (`fillers`) and parent, plus the record's origin and
 size. The fixpoint and the queries read their layout from this table;
 `cobble.dataflow.fields.extents_input` is its reader. Run it again whenever the ASG cache changes;
-a table written before the `justified` or `fillers` column is refused with a message to rerun
+a table written before the `justified`, `fillers`, `sign_leading` or `sign_separate` column is
+refused with a message to rerun
 `cobble-extents`.
 
 With `--synthesize-undeclared`, a field reference in the procedure division, or a write target the

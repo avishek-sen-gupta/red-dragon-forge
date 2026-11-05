@@ -183,6 +183,8 @@ _CELL_COLUMNS: Mapping[str, Callable[[DeclaredCell], _Column]] = MappingProxyTyp
         "values": lambda one: one.cell.value,
         "figurative": lambda one: one.cell.value_is_figurative,
         "justified": lambda one: one.cell.justified,
+        "sign_leading": lambda one: one.cell.sign_leading,
+        "sign_separate": lambda one: one.cell.sign_separate,
         "fillers": lambda one: one.cell.filler,
         "indexes": lambda one: one.cell.index,
         "decls": lambda one: one.cell.decl,

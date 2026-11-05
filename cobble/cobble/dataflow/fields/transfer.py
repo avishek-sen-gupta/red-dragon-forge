@@ -88,6 +88,7 @@ from cobol_asg.cobol_statements import (
     WriteStatement,
 )
 from cobol_asg.cobol_types import CobolDataCategory, CobolTypeDescriptor
+from cobol_asg.item_clauses import ItemClauses
 from cobol_asg.pic_parser import parse_pic
 from cobol_asg.ref_mod import (
     FunctionCallOperand,
@@ -336,7 +337,12 @@ def _elementary_kind(kind: CobolTypeDescriptor) -> MoveKind:
 
 
 def _described(cell: Cell) -> CobolTypeDescriptor:
-    return parse_pic(cell.pic, cell.usage)
+    clauses = ItemClauses(
+        sign_leading=cell.sign_leading,
+        sign_separate=cell.sign_separate,
+        justified_right=cell.justified,
+    )
+    return parse_pic(cell.pic, cell.usage, clauses)
 
 
 def _zoned(kind: CobolTypeDescriptor) -> bool:
@@ -438,7 +444,11 @@ def _number_into_number(
         _described(_first_cell(target, index)),
     )
     if sent.signed != received.signed or (
-        sent.signed and sent.decimal_digits != received.decimal_digits
+        sent.signed
+        and (
+            sent.decimal_digits != received.decimal_digits
+            or sent.sign_leading != received.sign_leading
+        )
     ):
         return ()
     return (_whole(sent) - _whole(received),)

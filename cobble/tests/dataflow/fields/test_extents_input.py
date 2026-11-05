@@ -123,7 +123,9 @@ def test_the_rows_rebuild_the_records_they_were_written_from(tmp_path: Path):
     assert (menu.origin, menu.size, len(menu.cells)) == ("WORKING-STORAGE", 554, 108)
 
 
-@pytest.mark.parametrize("missing", ["justified", "fillers"])
+@pytest.mark.parametrize(
+    "missing", ["justified", "fillers", "sign_leading", "sign_separate"]
+)
 def test_rows_written_before_a_column_existed_are_refused_not_read_as_its_default(
     tmp_path: Path, missing: str
 ):

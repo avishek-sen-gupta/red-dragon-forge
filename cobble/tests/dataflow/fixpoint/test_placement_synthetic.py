@@ -33,6 +33,10 @@ SOURCE = """\
        01  WS-S2                PIC S9(5)V9.
        01  WS-OUT               PIC X(12).
        01  WS-RJ                PIC X(6) JUSTIFIED RIGHT.
+       01  WS-SEP               PIC S9(4) SIGN LEADING SEPARATE.
+       01  WS-LEAD              PIC S9(4) SIGN LEADING.
+       01  WS-TRAIL             PIC S9(4).
+       01  WS-LEAD2             PIC S9(4) SIGN LEADING.
        PROCEDURE DIVISION.
        MAIN-PARA.
            MOVE WS-A(4:3) TO WS-B.
@@ -49,6 +53,9 @@ SOURCE = """\
            MOVE WS-CODE TO WS-RJ.
            MOVE WS-S1 TO WS-B.
            ADD WS-SMALL TO WS-BIG.
+           MOVE WS-SEP TO WS-NUM.
+           MOVE WS-LEAD TO WS-TRAIL.
+           MOVE WS-LEAD TO WS-LEAD2.
            STOP RUN.
 """
 
@@ -59,7 +66,8 @@ def test_a_move_says_where_its_source_bytes_land_only_when_it_copies_them(
     """An alphanumeric or group copy lands left-aligned from the bytes actually read;
     display numerics line up on the decimal point, text into an unsigned display number
     on its units digit, and text into a JUSTIFIED RIGHT receiver on its right. Binary to
-    display, numeric to edited, a change of scale under a sign, a signed number into text,
+    display, numeric to edited, a change of scale or of sign position under a sign, a separate sign, a signed
+    number into text,
     STRING and COMPUTE rewrite the bytes, so they say nowhere; STRING, COMPUTE and ADD are
     marked rebuilt: they build the target's value in place."""
     landed = {
@@ -87,4 +95,7 @@ def test_a_move_says_where_its_source_bytes_land_only_when_it_copies_them(
         ("12", "WS-S1", "WS-B"): ((), False),
         ("13", "WS-SMALL", "WS-BIG"): ((), True),
         ("13", "WS-BIG", "WS-BIG"): ((), True),
+        ("14", "WS-SEP", "WS-NUM"): ((), False),
+        ("15", "WS-LEAD", "WS-TRAIL"): ((), False),
+        ("16", "WS-LEAD", "WS-LEAD2"): ((0,), False),
     }
