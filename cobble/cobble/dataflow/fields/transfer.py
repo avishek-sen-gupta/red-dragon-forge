@@ -121,13 +121,16 @@ _MAP_INPUT_SUFFIX = "I"
 
 @dataclass(frozen=True)
 class Write:
-    """One extent, and everything reaching it after this statement."""
+    """One extent, and everything reaching it after this statement. ``digits``: the
+    target is a number taking the source's digits, so its zones and sign are the
+    compiler's rather than the source's bytes."""
 
     target: FieldExtent
     sources: frozenset[Source]
     values: ValueSet
     weak: bool = False
     copy_start: tuple[int, ...] = ()
+    digits: bool = False
 
 
 def _applied(state: State, writes: Iterator[Write]) -> State:
@@ -286,12 +289,21 @@ def _move_writes(
     sources = operand_extents(statement.source, index)
     operand = _source_operand(statement)
     return (
-        entry
+        replace(entry, digits=digits)
         for target_operand in _move_targets(statement)
         for copy_start in (_copy_start(operand, target_operand, index),)
+        for digits in (_takes_digits(operand, target_operand, index),)
         for target in operand_extents(target_operand, index).extents
         for fit in (_fit(target_operand, index),)
         for entry in _one_move(operand, sources, target, node, state, copy_start, fit)
+    )
+
+
+def _takes_digits(
+    source: RefModOperand, target: RefModOperand, index: CellIndex
+) -> bool:
+    return _kind(target, index) is MoveKind.NUMERIC and (
+        _kind(source, index) is not MoveKind.GROUP
     )
 
 

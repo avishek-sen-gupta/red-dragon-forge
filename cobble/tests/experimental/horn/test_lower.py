@@ -4,7 +4,7 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 import pytest
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.experimental.horn.answer import Answer
-from cobble.experimental.horn.condition import Condition, Op
+from cobble.experimental.horn.condition import Condition, Digits, Op, Part
 from cobble.experimental.horn.lower import lower
 from cobble.experimental.horn.point import Point
 from cobble.experimental.horn.program import program_of
@@ -118,11 +118,13 @@ def _ask(
     data: Sequence[Statement],
     writer: str,
     conditions: Sequence[Condition] = (),
+    watched: Sequence[str] = (),
     **extra: object,
 ) -> Answer:
     program = program_of(_asg(paragraphs, data, **extra))
     node = next(node.id for node in program.cfg.nodes if writer in node.writes)
-    return reaches(lower(program), Point("PROGA", node), conditions, _clock()).answer
+    system = lower(program, watched)
+    return reaches(system, Point("PROGA", node), conditions, _clock()).answer
 
 
 def _f(op: Op, value: str) -> Condition:
@@ -502,4 +504,175 @@ def test_a_write_the_cfg_lists_but_the_transfer_misses_frees_the_field() -> None
 
     assert _ask(program, data, "X-OUT", [Condition("D8", Op.EQ, "'01022026'")]) == (
         Answer.SAT
+    )
+
+
+def _group(name: str, *children: tuple[str, str, int]) -> Statement:
+    return {
+        "name": name,
+        "level": 1,
+        "children": [
+            {"name": child, "level": 5, "pic": pic, "offset": offset}
+            for child, pic, offset in children
+        ],
+    }
+
+
+def test_a_copy_carries_the_source_bytes_along_a_chain() -> None:
+    """MOVE 'AB' TO A; MOVE A TO B; MOVE B TO C; MOVE 'CD' TO A. Only C is watched:
+    the closure tracks A and B, and the later write to A leaves C alone."""
+    data = (_x("A", "X(2)"), _x("B", "X(2)"), _x("C", "X(2)"), *FIELDS)
+    moves = [_move_literal("'AB'", "A"), _move("A", "B"), _move("B", "C")]
+    program = [("MAIN", [*moves, _move_literal("'CD'", "A"), X_OUT])]
+
+    def ask(condition: Condition, watched: Sequence[str]) -> Answer:
+        return _ask(program, data, "X-OUT", [condition], watched)
+
+    assert ask(Condition("C", Op.NE, "'AB'"), ("C",)) == Answer.UNSAT
+    assert ask(Condition("C", Op.EQ, "'AB'"), ("C",)) == Answer.SAT
+    assert ask(Condition("C", Op.NE, "A"), ("C", "A")) == Answer.SAT
+    assert ask(Condition("C", Op.EQ, "A"), ("C", "A")) == Answer.UNSAT
+
+
+def test_a_numeric_receiver_takes_the_senders_digits_not_its_zones() -> None:
+    """MOVE N3 TO N2, PIC 9(3) into 9(2): N2's digits are N3's last two, while
+    N2's zones are whatever the compiler writes, so N2's bytes need not equal any
+    of N3's. MOVE G2 TO N4, G2 a group of two bytes, N4 PIC 9(2): a group move
+    copies bytes, zones included."""
+    data = (
+        _x("N3", "9(3)"),
+        _x("N2", "9(2)"),
+        _group("G2", ("A2", "X(2)", 0)),
+        _x("N4", "9(2)"),
+        *FIELDS,
+    )
+    program = [("MAIN", [_move("N3", "N2"), _move("G2", "N4"), X_OUT])]
+    watched = ("N2", "N3", "N4", "G2")
+
+    def ask(condition: Condition) -> Answer:
+        return _ask(program, data, "X-OUT", [condition], watched)
+
+    assert ask(Condition(Digits("N2", 1, 2), Op.NE, Digits("N3", 2, 2))) == (
+        Answer.UNSAT
+    )
+    assert ask(Condition(Digits("N2", 1, 2), Op.NE, Digits("N3", 1, 2))) == (Answer.SAT)
+    assert ask(Condition("N2", Op.NE, Part("N3", 2, 2))) == Answer.SAT
+    assert ask(Condition(Digits("N3", 1, 1), Op.NE, "'0'")) == Answer.SAT
+    assert ask(Condition("N4", Op.NE, "G2")) == Answer.UNSAT
+
+
+def test_every_target_of_one_move_takes_the_source_as_it_was() -> None:
+    """MOVE A TO A2 B, where A2 is bytes 2-3 of A: B takes A as it was before the
+    statement, not after A2 changed it."""
+    data = (_group("A", ("A1", "X", 0), ("A2", "X(2)", 1)), _x("B", "X(3)"), *FIELDS)
+    move = {
+        "type": "MOVE",
+        "operands": [{"name": "A"}, {"name": "A2"}, {"name": "B"}],
+    }
+    program = [("MAIN", [_move_literal("'ABC'", "A"), move, X_OUT])]
+
+    def ask(condition: Condition) -> Answer:
+        return _ask(program, data, "X-OUT", [condition], ("B",))
+
+    assert ask(Condition("B", Op.NE, "'ABC'")) == Answer.UNSAT
+    assert ask(Condition("B", Op.EQ, "'ABC'")) == Answer.SAT
+
+
+def test_a_justified_receiver_longer_than_its_sender_frees_its_leading_bytes() -> None:
+    """MOVE S TO R, S PIC X(1) just after P, R PIC X(3) JUSTIFIED RIGHT: R's last
+    byte is S; its first two have no source byte, and are not P's bytes."""
+    data = (
+        _group("REC", ("P", "X(2)", 0), ("S", "X", 2)),
+        _x("R", "X(3)", justified_right=True),
+        *FIELDS,
+    )
+    moves = [_move_literal("'PP'", "P"), _move_literal("'Y'", "S"), _move("S", "R")]
+    program = [("MAIN", [*moves, X_OUT])]
+
+    def ask(condition: Condition) -> Answer:
+        return _ask(program, data, "X-OUT", [condition], ("R", "S", "P"))
+
+    assert ask(Condition("S", Op.NE, Part("R", 3, 1))) == Answer.UNSAT
+    assert ask(Condition("R", Op.EQ, "'QQY'")) == Answer.SAT
+
+
+def test_a_copy_from_a_computed_subscript_frees_the_target() -> None:
+    data = (
+        {
+            "name": "TAB",
+            "level": 1,
+            "children": [
+                {"name": "T", "level": 5, "pic": "X(2)", "offset": 0, "occurs": 3},
+                {"name": "I", "level": 5, "pic": "9", "offset": 6},
+            ],
+        },
+        _x("B", "X(2)"),
+        *FIELDS,
+    )
+    move = {
+        "type": "MOVE",
+        "operands": [
+            {"name": "T", "subscripts": [{"kind": "ref", "name": "I"}]},
+            {"name": "B"},
+        ],
+    }
+    program = [("MAIN", [_move_literal("'AB'", "B"), move, X_OUT])]
+
+    assert (
+        _ask(program, data, "X-OUT", [Condition("B", Op.NE, "'AB'")], ("B",))
+        == Answer.SAT
+    )
+
+
+def test_a_copy_onto_its_own_bytes_frees_the_target() -> None:
+    """MOVE 'ABC' TO A; MOVE A(1:2) TO A2, A2 bytes 2-3 of A. Sender and receiver
+    share A's second byte, and COBOL leaves such a move's result undefined: a
+    byte-at-a-time copy gives 'AAA', a copy from the bytes as found 'AAB'."""
+    data = (_group("A", ("A1", "X", 0), ("A2", "X(2)", 1)), *FIELDS)
+    move = {
+        "type": "MOVE",
+        "operands": [
+            {
+                "name": "A",
+                "ref_mod_start": {"kind": "lit", "value": "1"},
+                "ref_mod_length": {"kind": "lit", "value": "2"},
+            },
+            {"name": "A2"},
+        ],
+    }
+    program = [("MAIN", [_move_literal("'ABC'", "A"), move, X_OUT])]
+
+    assert (
+        _ask(program, data, "X-OUT", [Condition("A", Op.NE, "'AAB'")], ("A",))
+        == Answer.SAT
+    )
+
+
+def test_a_watched_name_that_is_not_one_field_is_refused() -> None:
+    program = program_of(_asg([("MAIN", [X_OUT])], FIELDS))
+
+    with pytest.raises(ValueError, match="^NOPE is not one field$"):
+        lower(program, ("NOPE",))
+
+
+def test_a_copy_from_a_variable_length_part_frees_the_target() -> None:
+    """MOVE A(1:N) TO B: the start is known, the length is not, so the source is
+    not A's whole extent and B is free."""
+    data = (_x("A", "X(4)"), _x("N", "9"), _x("B", "X(3)"), *FIELDS)
+    move = {
+        "type": "MOVE",
+        "operands": [
+            {
+                "name": "A",
+                "ref_mod_start": {"kind": "lit", "value": "1"},
+                "ref_mod_length": {"kind": "ref", "name": "N"},
+            },
+            {"name": "B"},
+        ],
+    }
+    program = [("MAIN", [_move_literal("'WXYZ'", "A"), move, X_OUT])]
+
+    assert (
+        _ask(program, data, "X-OUT", [Condition("B", Op.EQ, "'W  '")], ("B",))
+        == Answer.SAT
     )

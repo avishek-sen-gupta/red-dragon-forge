@@ -552,11 +552,13 @@ fileignoreconfig:
 - filename: docs/superpowers/plans/2026-11-05-horn-clause-lowering-stages-0-1.md
   checksum: eff6e5a5cb9092973a585978b702f0ce5de89350ba8298d37d5e283cc037bb98
 - filename: cobble/tests/carddemo/test_horn.py
-  checksum: f29b0c3efe6a3e6d18b1056f83ae15f3e34186183669f1f1eb61a7c5036875e0
+  checksum: dfcdb00412bd5d33e8535d7f1e8fc4b5e0f6bc0db0ddd718b3d1575a7d41a61b
 - filename: cobble/tests/dataflow/srccfg/test_desugar_perform.py
   checksum: 58c3933d8719ceb42290eb397ee659688e5e426b6d24279fe7f2d4697a3f16dd
 - filename: cobble/cobble/experimental/horn/storage.py
-  checksum: 950927515908a0ecc9156a051ce9325a619a72b0bbafd624f8070de2b180c0f9
+  checksum: 76b905e4395119f4b5d59a65efe4eba2900277821e77225e480b5dee5ec6dcd9
 - filename: cobble/cobble/experimental/horn/lower.py
-  checksum: af7709433d1ab010f323a0e5ecef2e5ec0d1c283fbb175278a7ee6f6d629111a
+  checksum: 95e8a97a9964729d4d4aa65eb96f47fd43c76cada9e24176af8b82b43acca522
+- filename: docs/superpowers/plans/2026-11-05-horn-stage-2a-copies.md
+  checksum: fed19850d8d45fec574a6ef6dda8d5d76f2a90d11c59fc955afc58933a6c437f
 version: "1.0"

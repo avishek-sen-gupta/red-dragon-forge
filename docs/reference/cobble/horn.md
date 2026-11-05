@@ -23,7 +23,9 @@ soundness.
 
 - **Tracked bytes.** Each operand of a test the CFG marks plain (`Atom.plain`: no reference
   modification, no subscript), with `==` or `!=`, whose name denotes exactly one alphanumeric
-  `DISPLAY` cell, written without a subscript. Overlapping and touching extents merge into one
+  `DISPLAY` cell, written without a subscript; each field the question will ask about
+  (`watched`), of any picture; and the source bytes of every exact copy into a tracked byte,
+  followed until no copy adds a byte. Overlapping and touching extents merge into one
   segment per region, and each segment is one bit-vector, 8 bits per byte, its first byte most
   significant. A name the program does not declare has no cell, so it is never tracked. With z3
   strings in place of bit-vectors, sign-on's blank-input questions ran past 60 s.
@@ -34,8 +36,16 @@ soundness.
 - **Writes**, in the order the fixpoint's transfer lists them for the node:
   - a definite write whose value is one known byte string, or a figurative literal, sets those
     bytes;
-  - any other write frees the bytes it overlaps: weak, at a computed subscript, a copy from a
-    field, or an unknown value;
+  - an exact copy sets each target byte equal to its source byte as it was before the statement.
+    A copy is exact when the write is not weak, its target is exact, and it has one storage
+    source and the fixpoint's `copy_start` (the source byte landing on the target's first byte,
+    which accounts for truncation, decimal alignment and `JUSTIFIED RIGHT`), and its source does
+    not share a byte with its target (COBOL leaves such a move undefined). A target byte with
+    no source byte, past the sender or before it, is freed. Into a number, unless a group sends
+    it, only each byte's digit half is the source's: the zone half, and so the sign, is free,
+    since compilers differ in how they repair zones and signs (red-dragon rewrites them all);
+  - any other write frees the bytes it overlaps: weak, at a computed subscript, an unknown
+    value, or a copy that is not exact;
   - every name the CFG node lists as written frees the bytes of its extents that no write above
     covered, which catches a statement the transfer misses (`EXEC CICS FORMATTIME`);
   - a file statement (OPEN, CLOSE, READ, WRITE, REWRITE, START, DELETE, RETURN, RELEASE, SORT,
@@ -59,13 +69,22 @@ soundness.
 ## Asking
 
 ```python
-system = lower(program_of(asg))
+system = lower(program_of(asg), watched=("AMT", "BAL"))
 verdict = reaches(system, Point("PROG", node_id), (Condition("FLD", Op.EQ, "'A'"),), clock)
+same = Condition(Digits("AMT", 1, 11), Op.NE, Digits("BAL", 2, 11))
 ```
 
+A condition compares a field, or a `Part` of one (start counted from 1, as a reference
+modification counts), with a literal, another field or a `Part`, by bytes. `Digits` names the
+same bytes as a `Part` but compares only their digit halves, which is all a move into a number
+keeps of its sender; a literal compared with `Digits` gives its bytes' digit halves. Both sides
+must have the same length. A literal is compared only with an alphanumeric field or a `Part`: a numeric
+literal compares by value, which bytes do not encode.
+
 `reaches` asks whether some run arrives at the node, in any context, with the conditions true
-there, before the node's own statement runs. A condition on an untracked field raises
-`ValueError`. The answer is one of:
+there, before the node's own statement runs. A condition on an untracked field, a `Part`
+outside its field, or sides of different lengths raises `ValueError`; so does `lower` for a
+watched name that is not exactly one field. The answer is one of:
 
 - `UNSAT`: no run does;
 - `SAT`: some run of the encoding does, which is a real run only as far as the encoding is exact;

@@ -63,3 +63,10 @@ def bits(name: str, length: int) -> z3.BitVecRef:
     if isinstance(term, z3.BitVecRef):
         return term
     raise TypeError(f"{name} is not a bit-vector term")
+
+
+def nibble(name: str) -> z3.BitVecRef:
+    term = z3.BitVec(name, 4)
+    if isinstance(term, z3.BitVecRef):
+        return term
+    raise TypeError(f"{name} is not a bit-vector term")

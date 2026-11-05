@@ -1,8 +1,8 @@
-"""What one node does to each tracked byte: keeps it, sets it to a known byte, or frees it."""
+"""What one node does to each tracked byte: keeps it, sets it to a known byte, copies another tracked byte or its digit, or frees it."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from functools import reduce
 
@@ -11,11 +11,13 @@ from cobble.dataflow.fields.origin_kind import OriginKind
 from cobble.dataflow.fields.state import EMPTY
 from cobble.dataflow.fields.transfer import HANDLED, Write, writes_of
 from cobble.experimental.horn.atoms import FIGURATIVES
+from cobble.experimental.horn.copies import Copy, copy_of
 from cobble.experimental.horn.program import Program
 from cobble.experimental.horn.segment import Segment
 from cobble.experimental.horn.storage import Storage
 from cobol_asg.ref_mod import RefModOperand
 from cobol_memory.field_extent import FieldExtent, Precision
+from cobol_memory.region_id import RegionId
 
 NO_WRITES = frozenset(
     {
@@ -73,7 +75,24 @@ class Freed:
     write: int
 
 
-Byte = Kept | Freed | int
+@dataclass(frozen=True)
+class Copied:
+    """The byte at ``offset`` of ``region`` as the node found it."""
+
+    region: RegionId
+    offset: int
+
+
+@dataclass(frozen=True)
+class Digit:
+    """The digit half of the byte at ``offset`` of ``region`` as the node found
+    it, under a zone the node may have set to anything."""
+
+    region: RegionId
+    offset: int
+
+
+Byte = Kept | Freed | Copied | Digit | int
 KEPT = Kept()
 
 
@@ -136,35 +155,54 @@ def _applied(done: Effect, storage: Storage, write: Write, n: int) -> Effect:
     value = _definite(write, storage)
     return Effect(
         tuple(
-            _laid(bytes_, segment, write.target, value, n)
+            _laid(bytes_, segment, write.target, _source(storage, write, value, n))
             for segment, bytes_ in zip(storage.segments, done.bytes, strict=True)
         )
     )
+
+
+def _source(
+    storage: Storage, write: Write, value: tuple[bytes, ...], n: int
+) -> Callable[[int], Byte]:
+    """What a written byte at an offset becomes: the value's byte, the copy's
+    source byte when the state holds it, or free."""
+    if value:
+        return lambda offset: value[0][offset - write.target.start]
+    copy = copy_of(write)
+    return lambda offset: _copied(storage, copy, offset, n)
+
+
+def _copied(storage: Storage, copy: tuple[Copy, ...], offset: int, n: int) -> Byte:
+    if not copy:
+        return Freed(n)
+    byte = copy[0].source_of(offset)
+    if byte < 0 or storage.placed(copy[0].source.region, byte) < 0:
+        return Freed(n)
+    return _landed(copy[0], byte)
+
+
+def _landed(copy: Copy, byte: int) -> Byte:
+    if copy.digits:
+        return Digit(copy.source.region, byte)
+    return Copied(copy.source.region, byte)
 
 
 def _laid(
     bytes_: tuple[Byte, ...],
     segment: Segment,
     target: FieldExtent,
-    value: tuple[bytes, ...],
-    n: int,
+    written: Callable[[int], Byte],
 ) -> tuple[Byte, ...]:
     if not segment.overlaps(target):
         return bytes_
     return tuple(
-        _byte_at(old, segment.start + i, target, value, n)
+        (
+            written(segment.start + i)
+            if target.start <= segment.start + i < target.end
+            else old
+        )
         for i, old in enumerate(bytes_)
     )
-
-
-def _byte_at(
-    old: Byte, offset: int, target: FieldExtent, value: tuple[bytes, ...], n: int
-) -> Byte:
-    if not target.start <= offset < target.end:
-        return old
-    if value:
-        return value[0][offset - target.start]
-    return Freed(n)
 
 
 def _statuses(program: Program, storage: Storage, kind: str, done: Effect) -> Effect:

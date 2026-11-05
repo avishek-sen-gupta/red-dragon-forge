@@ -9,7 +9,7 @@ from collections.abc import Sequence
 import pytest
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.experimental.horn.answer import Answer
-from cobble.experimental.horn.condition import Condition, Op
+from cobble.experimental.horn.condition import Condition, Digits, Op, Part
 from cobble.experimental.horn.lower import HornSystem, lower
 from cobble.experimental.horn.point import Point
 from cobble.experimental.horn.program import program_of
@@ -26,12 +26,15 @@ ADMIN_MENU = Point(SIGNON, "READ-USER-SEC-FILE/1.when.0.0.then.5.then.0")
 BILLPAY = "COBIL00C"
 CONFIRMED = Point(BILLPAY, "PROCESS-ENTER-KEY/4.then.0.then.0")
 REWRITE = Point(BILLPAY, "UPDATE-ACCTDAT-FILE/0")
+WRITE_TRANSACT = Point(BILLPAY, "WRITE-TRANSACT-FILE/0")
+READ_ACCOUNT = Point(BILLPAY, "READ-ACCTDAT-FILE/0")
+BILLPAY_WATCHED = ("TRAN-AMT", "ACCT-CURR-BAL", "ACCT-ID", "ACTIDINI")
 
 
-def _lowered(run: CardDemoRun, program: str) -> HornSystem:
+def _lowered(run: CardDemoRun, program: str, watched: Sequence[str] = ()) -> HornSystem:
     with cached_asg_dialect_parsers_registered():
         asg = first_program_at(cache_path(run.asg, run.cobol / f"{program}.cbl"))
-        return lower(program_of(asg))
+        return lower(program_of(asg), watched)
 
 
 @pytest.fixture(scope="module")
@@ -41,7 +44,7 @@ def signon(carddemo: CardDemoRun) -> HornSystem:
 
 @pytest.fixture(scope="module")
 def billpay(carddemo: CardDemoRun) -> HornSystem:
-    return _lowered(carddemo, BILLPAY)
+    return _lowered(carddemo, BILLPAY, BILLPAY_WATCHED)
 
 
 def _ask(system: HornSystem, point: Point, conditions: Sequence[Condition]) -> Answer:
@@ -149,4 +152,46 @@ def test_billpay_rewrites_the_balance_after_a_failed_transaction_write(
     assert (
         _ask(billpay, REWRITE, (confirmed, Condition("WS-ERR-FLG", Op.EQ, "'N'"))),
         _ask(billpay, REWRITE, (confirmed, Condition("WS-ERR-FLG", Op.EQ, "'Y'"))),
+    ) == (Answer.UNSAT, Answer.SAT)
+
+
+def test_billpay_writes_the_balance_it_read_less_its_leading_digit(
+    billpay: HornSystem,
+) -> None:
+    """COBIL00C.cbl:224 MOVE ACCT-CURR-BAL (S9(10)V99) TO TRAN-AMT (S9(9)V99), then
+    :233 PERFORM WRITE-TRANSACT-FILE before :234 COMPUTE ACCT-CURR-BAL. The move
+    lines the two up on the decimal point, so TRAN-AMT's digits are digits 2-12 of
+    the balance as read, and the balance's leading digit may be non-zero there: the
+    amount equals the balance except its top digit, and differs from it for a
+    balance of 1,000,000,000.00 or more. The zones and sign are the compiler's, so
+    the bytes themselves may differ."""
+    amount, low = Digits("TRAN-AMT", 1, 11), Digits("ACCT-CURR-BAL", 2, 11)
+    assert (
+        _ask(billpay, WRITE_TRANSACT, (Condition(amount, Op.NE, low),)),
+        _ask(billpay, WRITE_TRANSACT, (Condition(amount, Op.EQ, low),)),
+        _ask(
+            billpay,
+            WRITE_TRANSACT,
+            (Condition(Digits("ACCT-CURR-BAL", 1, 1), Op.NE, "'0'"),),
+        ),
+        _ask(
+            billpay,
+            WRITE_TRANSACT,
+            (Condition("TRAN-AMT", Op.NE, Part("ACCT-CURR-BAL", 2, 11)),),
+        ),
+    ) == (Answer.UNSAT, Answer.SAT, Answer.SAT, Answer.SAT)
+
+
+def test_billpay_reads_for_update_the_account_the_user_typed(
+    billpay: HornSystem,
+) -> None:
+    """COBIL00C.cbl:170 MOVE ACTIDINI OF COBIL0AI TO ACCT-ID XREF-ACCT-ID; both
+    PERFORMs of READ-ACCTDAT-FILE (:177, :184) follow it, and nothing between
+    writes either field; :345-351 EXEC CICS READ INTO(ACCOUNT-RECORD) RIDFLD(ACCT-ID)
+    UPDATE, the read whose record the REWRITE at :379 replaces. ACCT-ID is a
+    number, so it holds the typed digits under the compiler's zones."""
+    key, typed = Digits("ACCT-ID", 1, 11), Digits("ACTIDINI", 1, 11)
+    assert (
+        _ask(billpay, READ_ACCOUNT, (Condition(key, Op.NE, typed),)),
+        _ask(billpay, READ_ACCOUNT, (Condition(key, Op.EQ, typed),)),
     ) == (Answer.UNSAT, Answer.SAT)
