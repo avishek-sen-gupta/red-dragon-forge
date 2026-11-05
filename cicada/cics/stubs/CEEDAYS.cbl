@@ -11,6 +11,10 @@
        01 WS-R4          PIC 9(4) VALUE 0.
        01 WS-R100        PIC 9(4) VALUE 0.
        01 WS-R400        PIC 9(4) VALUE 0.
+       01 WS-I           PIC 9(4) VALUE 0.
+       01 WS-Y-POS       PIC 9(4) VALUE 0.
+       01 WS-M-POS       PIC 9(4) VALUE 0.
+       01 WS-D-POS       PIC 9(4) VALUE 0.
        LINKAGE SECTION.
        01 LS-DATE-VS.
           05 LS-DATE-LEN   PIC S9(4) BINARY.
@@ -30,21 +34,37 @@
            MOVE 0   TO LS-FB-MSG
            MOVE 0   TO LS-LILIAN
 
-      *    Expect the YYYY-MM-DD picture string (the only form CardDemo uses).
-           IF LS-DATE-TXT(1:4) IS NOT NUMERIC
-               MOVE 'N' TO WS-VALID
-           END-IF
-           IF LS-DATE-TXT(6:2) IS NOT NUMERIC
-               MOVE 'N' TO WS-VALID
-           END-IF
-           IF LS-DATE-TXT(9:2) IS NOT NUMERIC
+      *    The picture string says where YYYY, MM and DD sit in the date.
+      *    CardDemo passes YYYYMMDD (CSUTLDPY) and YYYY-MM-DD (COTRN02C).
+           MOVE 0 TO WS-Y-POS WS-M-POS WS-D-POS
+           PERFORM VARYING WS-I FROM 1 BY 1
+               UNTIL WS-I > LS-FMT-LEN OR WS-I > 253
+               IF LS-FMT-TXT(WS-I:4) = 'YYYY'
+                   MOVE WS-I TO WS-Y-POS
+               END-IF
+               IF LS-FMT-TXT(WS-I:2) = 'MM'
+                   MOVE WS-I TO WS-M-POS
+               END-IF
+               IF LS-FMT-TXT(WS-I:2) = 'DD'
+                   MOVE WS-I TO WS-D-POS
+               END-IF
+           END-PERFORM
+           IF WS-Y-POS = 0 OR WS-M-POS = 0 OR WS-D-POS = 0
                MOVE 'N' TO WS-VALID
            END-IF
 
            IF WS-VALID = 'Y'
-               MOVE LS-DATE-TXT(1:4) TO WS-YYYY
-               MOVE LS-DATE-TXT(6:2) TO WS-MM
-               MOVE LS-DATE-TXT(9:2) TO WS-DD
+               IF LS-DATE-TXT(WS-Y-POS:4) IS NOT NUMERIC
+               OR LS-DATE-TXT(WS-M-POS:2) IS NOT NUMERIC
+               OR LS-DATE-TXT(WS-D-POS:2) IS NOT NUMERIC
+                   MOVE 'N' TO WS-VALID
+               END-IF
+           END-IF
+
+           IF WS-VALID = 'Y'
+               MOVE LS-DATE-TXT(WS-Y-POS:4) TO WS-YYYY
+               MOVE LS-DATE-TXT(WS-M-POS:2) TO WS-MM
+               MOVE LS-DATE-TXT(WS-D-POS:2) TO WS-DD
 
                IF WS-MM < 1 OR WS-MM > 12
                    MOVE 'N' TO WS-VALID

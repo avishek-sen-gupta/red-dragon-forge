@@ -1,4 +1,6 @@
 fileignoreconfig:
+- filename: cicada/tests/integration/cics/test_ceedays_stub.py
+  checksum: 94f92b5b4bc662318dd0c912d0c8b98d7610e15d93f5320b3bc69f9e765b2d18
 - filename: docs/reference/cobble/field-dataflow.md
   checksum: 89d79cd95278b14a2a544d97666fafd4dad8bc0c62671fc3f4724836a6501a65
 - filename: cobble/cobble/dataflow/fixpoint/build_corpus.py
@@ -416,7 +418,7 @@ fileignoreconfig:
 - filename: config/carddemo/env.toml
   checksum: d13387ea64865fa9290a6d04c8448e51f12405877eb992689c001dfa38b7a282
 - filename: tests/integration/test_carddemo_forge.py
-  checksum: 3b211af033063c0c9673ab71135f639466001ccd5adc1357aabf1de88ba28d08
+  checksum: 2eec969a08304b7ec7318616a3ccca779b009a1e18f7be8ac3d35624746a119c
 - filename: docs/how-to/run-your-application.md
   checksum: 6d5d5f0273a0a960819cae601d400e61fe6ed8da9372b6f99e25bba55b619bfa
 - filename: .github/workflows/ci.yml

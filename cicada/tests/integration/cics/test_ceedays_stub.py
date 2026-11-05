@@ -29,7 +29,7 @@ from tests.covers import covers
 # text) and a feedback token. After the CALL it copies the severity halfword
 # into a plain PIC 9(4) field WS-SEV (exactly as CSUTLDTC does), so the test can
 # read back '0000' for valid / nonzero for invalid from the WS region.
-def _caller_src(date_text: str) -> str:
+def _caller_src(date_text: str, picture: str = "YYYY-MM-DD") -> str:
     return f"""\
        IDENTIFICATION DIVISION.
        PROGRAM-ID. DRIVER.
@@ -49,7 +49,7 @@ def _caller_src(date_text: str) -> str:
           05 FILLER        PIC X(8).
        PROCEDURE DIVISION.
            MOVE '{date_text}' TO WS-DATE-TXT.
-           MOVE 'YYYY-MM-DD' TO WS-FMT-TXT.
+           MOVE '{picture}' TO WS-FMT-TXT.
            CALL 'CEEDAYS' USING WS-DATE-VS WS-FMT-VS
                                 WS-LILIAN WS-FEEDBACK.
            MOVE WS-FB-SEV TO WS-SEV.
@@ -57,11 +57,13 @@ def _caller_src(date_text: str) -> str:
 """
 
 
-def _run_and_read_sev(tmp_path: Path, date_text: str) -> int:
+def _run_and_read_sev(
+    tmp_path: Path, date_text: str, picture: str = "YYYY-MM-DD"
+) -> int:
     """Compile DRIVER + the CEEDAYS stub, run, and return WS-SEV (the severity)."""
     stub = LE_STUBS_DIR / "CEEDAYS.cbl"
     linked = compile_cobol(
-        _caller_src(date_text).encode(),
+        _caller_src(date_text, picture).encode(),
         parser=make_cobol_parser(),
         programs=(SourceFile(stub, stub.read_bytes()),),
     )
@@ -113,3 +115,15 @@ def test_ceedays_non_leap_day_invalid(tmp_path):
 def test_ceedays_non_numeric_date_invalid(tmp_path):
     """A non-numeric date component → nonzero severity."""
     assert _run_and_read_sev(tmp_path, "20XX-01-15") != 0
+
+
+@covers(CobolFeature.CALL_USING, CobolFeature.INTRINSIC_FUNCTION)
+def test_ceedays_yyyymmdd_picture_valid(tmp_path):
+    """CSUTLDPY (the account screens) passes the YYYYMMDD picture: 20141120 is valid."""
+    assert _run_and_read_sev(tmp_path, "20141120", "YYYYMMDD") == 0
+
+
+@covers(CobolFeature.CALL_USING, CobolFeature.INTRINSIC_FUNCTION)
+def test_ceedays_yyyymmdd_picture_invalid_month(tmp_path):
+    """Under the YYYYMMDD picture, month 13 is still rejected."""
+    assert _run_and_read_sev(tmp_path, "20141320", "YYYYMMDD") != 0
