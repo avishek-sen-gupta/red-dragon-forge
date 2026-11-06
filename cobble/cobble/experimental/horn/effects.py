@@ -1,4 +1,4 @@
-"""What one node does to each tracked byte: keeps it, sets it to a known byte, copies another tracked byte or its digit, or frees it."""
+"""What one node does to each tracked byte: keeps it, sets it to a known byte, copies another tracked byte or its digit, copies it while EIBCALEN reaches it, or frees it."""
 
 from __future__ import annotations
 
@@ -12,10 +12,11 @@ from cobble.dataflow.fields.state import EMPTY
 from cobble.dataflow.fields.transfer import HANDLED, Statement, Write, writes_of
 from cobble.dataflow.fields.unmodelled_write import UnmodelledWrite
 from cobble.experimental.horn.atoms import FIGURATIVES
-from cobble.experimental.horn.copies import Copy, copy_of
+from cobble.experimental.horn.copies import Copy, copies_of
 from cobble.experimental.horn.program import Program
 from cobble.experimental.horn.segment import Segment
 from cobble.experimental.horn.storage import Storage, integer, unsigned_integer
+from cobol_asg.cobol_statements import MoveStatement
 from cobol_asg.ref_mod import RefModOperand
 from cobol_memory.field_extent import FieldExtent, Precision
 from cobol_memory.region_id import RegionId
@@ -95,7 +96,17 @@ class Digit:
     offset: int
 
 
-Byte = Kept | Freed | Copied | Digit | int
+@dataclass(frozen=True)
+class Within:
+    """The byte at ``offset`` of ``region`` as the node found it while EIBCALEN
+    exceeds ``position``, else a space: a MOVE from a shorter sender pads."""
+
+    region: RegionId
+    offset: int
+    position: int
+
+
+Byte = Kept | Freed | Copied | Digit | Within | int
 KEPT = Kept()
 
 
@@ -136,7 +147,7 @@ def _written(
         else ()
     )
     written = reduce(
-        lambda done, n: _applied(done, storage, writes[n], n),
+        lambda done, n: _applied(done, storage, statement, writes[n], n),
         range(len(writes)),
         nothing(storage),
     )
@@ -190,25 +201,44 @@ def _figurative(write: Write) -> tuple[bytes, ...]:
     return (fill * write.target.length,) if fill else ()
 
 
-def _applied(done: Effect, storage: Storage, write: Write, n: int) -> Effect:
+def _applied(
+    done: Effect, storage: Storage, statement: Statement, write: Write, n: int
+) -> Effect:
     value = _definite(write, storage)
+    written = _source(storage, statement, write, value, n)
     return Effect(
         tuple(
-            _laid(bytes_, segment, write.target, _source(storage, write, value, n))
+            _laid(bytes_, segment, write.target, written)
             for segment, bytes_ in zip(storage.segments, done.bytes, strict=True)
         )
     )
 
 
 def _source(
-    storage: Storage, write: Write, value: tuple[bytes, ...], n: int
+    storage: Storage,
+    statement: Statement,
+    write: Write,
+    value: tuple[bytes, ...],
+    n: int,
 ) -> Callable[[int], Byte]:
     """What a written byte at an offset becomes: the value's byte, the copy's
     source byte when the state holds it, or free."""
     if value:
         return lambda offset: value[0][offset - write.target.start]
-    copy = copy_of(write)
+    copy = tuple(
+        c
+        for c in copies_of(statement, write)
+        if not c.within or _padded(storage, statement, write)
+    )
     return lambda offset: _copied(storage, copy, offset, n)
+
+
+def _padded(storage: Storage, statement: Statement, write: Write) -> bool:
+    """A sender cut short by EIBCALEN pads an alphanumeric receiver with spaces;
+    the state must hold EIBCALEN to say where."""
+    targets = statement.targets if isinstance(statement, MoveStatement) else []
+    whole = any(storage.field(t.name) == (write.target,) for t in targets)
+    return storage.eib and whole
 
 
 def _copied(storage: Storage, copy: tuple[Copy, ...], offset: int, n: int) -> Byte:
@@ -217,10 +247,12 @@ def _copied(storage: Storage, copy: tuple[Copy, ...], offset: int, n: int) -> By
     byte = copy[0].source_of(offset)
     if byte < 0 or storage.placed(copy[0].source.region, byte) < 0:
         return Freed(n)
-    return _landed(copy[0], byte)
+    return _landed(copy[0], byte, offset)
 
 
-def _landed(copy: Copy, byte: int) -> Byte:
+def _landed(copy: Copy, byte: int, offset: int) -> Byte:
+    if copy.within:
+        return Within(copy.source.region, byte, offset - copy.target.start)
     if copy.digits:
         return Digit(copy.source.region, byte)
     return Copied(copy.source.region, byte)

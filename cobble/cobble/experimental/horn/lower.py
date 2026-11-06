@@ -24,6 +24,7 @@ from cobble.experimental.horn.effects import (
     Digit,
     Effect,
     Kept,
+    Within,
     effect_of,
     everything,
 )
@@ -35,7 +36,9 @@ from cobble.experimental.horn.segment import Segment
 from cobble.experimental.horn.storage import EIBCALEN, Storage, storage_of
 from cobble.experimental.horn.terms import (
     RAN,
+    above,
     bits,
+    chosen,
     concat,
     conjunction,
     constant,
@@ -48,6 +51,8 @@ from cobble.experimental.horn.terms import (
 from cobol_memory.region_id import RegionId
 
 logger = logging.getLogger(__name__)
+
+PAD = b" "
 
 
 @dataclass(frozen=True)
@@ -175,7 +180,7 @@ def _piece(
 ) -> tuple[z3.BitVecRef, tuple[z3.BitVecRef, ...]]:
     """One run's bytes, and the fresh variables they introduce."""
     mark, start, end = run
-    if isinstance(mark, Kept | Copied | Digit):
+    if isinstance(mark, Kept | Copied | Digit | Within):
         return _held(lowering, tag, segment, mark, (start, end), now)
     if isinstance(mark, int):
         return (constant(bytes(_known(b) for b in bytes_[start:end])), ())
@@ -187,11 +192,13 @@ def _held(
     lowering: Lowering,
     tag: str,
     segment: Segment,
-    mark: Kept | Copied | Digit,
+    mark: Kept | Copied | Digit | Within,
     run: tuple[int, int],
     now: z3.BitVecRef,
 ) -> tuple[z3.BitVecRef, tuple[z3.BitVecRef, ...]]:
     start, end = run
+    if isinstance(mark, Within):
+        return (_within(lowering, mark), ())
     if isinstance(mark, Digit):
         return _digits(lowering, mark, end - start, f"{tag}!{segment.start + start}")
     return (_found(lowering, segment, mark, run, now), ())
@@ -217,6 +224,12 @@ def _copied(
     n = lowering.storage.placed(region, offset)
     source = lowering.storage.segments[n]
     return source.slice(offset, offset + length, lowering.vars.now[n])
+
+
+def _within(lowering: Lowering, byte: Within) -> z3.BitVecRef:
+    calen = lowering.storage.calen(lowering.vars.now)
+    source = _copied(lowering, byte.region, byte.offset, 1)
+    return chosen(above(calen, byte.position), source, constant(PAD))
 
 
 def _digits(

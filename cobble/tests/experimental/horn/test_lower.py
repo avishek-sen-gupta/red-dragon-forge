@@ -796,3 +796,29 @@ def test_a_test_on_a_field_not_tracked_can_go_either_way() -> None:
         _ask(program, FIELDS, "X-OUT", kept=NamedFields(frozenset({"F"}))),
         _ask(program, FIELDS, "X-OUT", [], ("G",), NamedFields(frozenset({"F"}))),
     ) == (Answer.UNSAT, Answer.UNSAT, Answer.SAT, Answer.SAT)
+
+
+def test_a_copy_of_eibcalen_bytes_takes_that_many_and_pads_with_spaces() -> None:
+    """MOVE A(1:EIBCALEN) TO B, the way a program copies in its commarea: with
+    EIBCALEN 2 and A 'WXYZ', B gets 'WX' padded to 'WX ', an alphanumeric MOVE
+    from a shorter sender."""
+    data = (_x("A", "X(4)"), _x("B", "X(3)"), *FIELDS)
+    move = {
+        "type": "MOVE",
+        "operands": [
+            {
+                "name": "A",
+                "ref_mod_start": {"kind": "lit", "value": "1"},
+                "ref_mod_length": {"kind": "ref", "name": "EIBCALEN"},
+            },
+            {"name": "B"},
+        ],
+    }
+    program = [
+        ("MAIN", [_move_literal("'WXYZ'", "A"), _test("EIBCALEN", "2", [move, X_OUT])])
+    ]
+
+    assert (
+        _ask(program, data, "X-OUT", [Condition("B", Op.NE, "'WX '")], ("B",)),
+        _ask(program, data, "X-OUT", [Condition("B", Op.EQ, "'WX '")], ("B",)),
+    ) == (Answer.UNSAT, Answer.SAT)

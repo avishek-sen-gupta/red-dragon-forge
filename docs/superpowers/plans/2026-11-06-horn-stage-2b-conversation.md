@@ -89,3 +89,23 @@ not shrink the state; keeping the right few tests does.
     the round-5 counterexample did not finish in 30 minutes.
   - The replay itself took about 10 s a round and accepted real runs (`2000-DECIDE-ACTION`
     reached after three rounds).
+
+## After the gate: three more questions
+
+Asked on the same encoding, with the fields to keep picked by hand.
+
+- **Account update's REWRITE** (`COACTUPC.cbl`, `9600-WRITE-PROCESSING`) never runs in a chain
+  where neither change check ran: `unsat` in 52 s over account update and the menu, keeping
+  seven fields; `sat` in 1.8 s once both checks ran.
+- **Card update rewrites the card it showed?** `sat`. On the confirm press the key comes from
+  the screen again (`COCRDUPC.cbl:603`, `:1425`), never compared with `CCUP-OLD-CARDID`; the
+  record check (`:1503-1508`) compares the card's data, not its number. The program relies on
+  the field being protected (`:1183`). Read from the code; the run was not replayed.
+- **A user deleted without an admin sign-on?** `sat`. Thirteen programs take in their commarea
+  with `MOVE DFHCOMMAREA(1:EIBCALEN)`, which the encoding used to free, so this question could not
+  be asked until that move was encoded (above). The commarea's user type is no witness: the
+  transaction type list sets it to `U` during an admin session (`COTRTLIC.cbl:634`). Asked with
+  a mark on sign-on's XCTL to the admin menu instead, the answer is `sat`: `CTLI`, defined in
+  the CSD, started with no commarea, sets `CDEMO-USRTYP-ADMIN` itself (`COTRTLIC.cbl:115-120`)
+  and its PF3 transfers to the admin menu (`:603`), which leads to the delete. CICS transaction
+  security is outside the encoding. Read from the code; the run was not replayed.

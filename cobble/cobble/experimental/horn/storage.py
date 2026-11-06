@@ -9,7 +9,7 @@ from functools import reduce
 import z3
 from cobble.dataflow.fields.extent import CellIndex
 from cobble.dataflow.srccfg.cfg import Atom, Cfg, NodeKind
-from cobble.experimental.horn.copies import Copy, program_copies
+from cobble.experimental.horn.copies import EIBCALEN, Copy, program_copies
 from cobble.experimental.horn.every_test import EVERY_TEST
 from cobble.experimental.horn.kept_tests import KeptTests
 from cobble.experimental.horn.point import Point
@@ -25,7 +25,6 @@ Place = tuple[RegionId, int]
 COMPARISONS = ("==", "!=")
 ALPHANUMERIC = frozenset("XA")
 DISPLAY = ("", "DISPLAY")
-EIBCALEN = "EIBCALEN"
 CALEN_BYTES = 2
 MARK_BYTES = 1
 

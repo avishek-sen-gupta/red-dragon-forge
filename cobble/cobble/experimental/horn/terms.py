@@ -52,6 +52,15 @@ def constant(value: bytes) -> z3.BitVecRef:
     raise TypeError(f"{value!r} is not a bit-vector term")
 
 
+def chosen(
+    condition: z3.BoolRef, then: z3.BitVecRef, otherwise: z3.BitVecRef
+) -> z3.BitVecRef:
+    term = z3.If(condition, then, otherwise)
+    if isinstance(term, z3.BitVecRef):
+        return term
+    raise TypeError("a choice is not a bit-vector term")
+
+
 def extract(high: int, low: int, value: z3.BitVecRef) -> z3.BitVecRef:
     term = z3.Extract(high, low, value)
     if isinstance(term, z3.BitVecRef):

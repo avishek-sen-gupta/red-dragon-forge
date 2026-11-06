@@ -63,6 +63,10 @@ soundness.
     no source byte, past the sender or before it, is freed. Into a number, unless a group sends
     it, only each byte's digit half is the source's: the zone half, and so the sign, is free,
     since compilers differ in how they repair zones and signs (red-dragon rewrites them all);
+  - `MOVE X(1:EIBCALEN) TO Y`, the way a program takes in its commarea, into an alphanumeric
+    or group `Y`, when the state holds EIBCALEN: each target byte is the source byte at the
+    same position while EIBCALEN exceeds that position, and a space after it, as a shorter
+    sender pads;
   - any other write frees the bytes it overlaps: weak, at a computed subscript, an unknown
     value, or a copy that is not exact;
   - every name the CFG node lists as written frees the bytes of its extents that no write above
