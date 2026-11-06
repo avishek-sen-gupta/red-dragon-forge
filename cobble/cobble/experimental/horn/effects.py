@@ -9,12 +9,13 @@ from functools import reduce
 from cobble.dataflow.fields.extent import operand_extents
 from cobble.dataflow.fields.origin_kind import OriginKind
 from cobble.dataflow.fields.state import EMPTY
-from cobble.dataflow.fields.transfer import HANDLED, Write, writes_of
+from cobble.dataflow.fields.transfer import HANDLED, Statement, Write, writes_of
+from cobble.dataflow.fields.unmodelled_write import UnmodelledWrite
 from cobble.experimental.horn.atoms import FIGURATIVES
 from cobble.experimental.horn.copies import Copy, copy_of
 from cobble.experimental.horn.program import Program
 from cobble.experimental.horn.segment import Segment
-from cobble.experimental.horn.storage import Storage
+from cobble.experimental.horn.storage import Storage, integer, unsigned_integer
 from cobol_asg.ref_mod import RefModOperand
 from cobol_memory.field_extent import FieldExtent, Precision
 from cobol_memory.region_id import RegionId
@@ -44,6 +45,8 @@ NO_WRITES = frozenset(
         "MergeStatement",
     }
 )
+
+LISTED_WRITES = frozenset({"INSPECT"})
 
 FILE_IO = frozenset(
     {
@@ -112,9 +115,18 @@ def everything(storage: Storage) -> Effect:
 
 
 def effect_of(program: Program, storage: Storage, node: str) -> Effect:
-    if node not in program.statements:
+    if node not in program.statements or _listed(program.statements[node]):
         return _named(program, storage, node, nothing(storage), ())
-    statement = program.statements[node]
+    return _written(program, storage, node, program.statements[node])
+
+
+def _listed(statement: Statement) -> bool:
+    return isinstance(statement, UnmodelledWrite) and statement.verb in LISTED_WRITES
+
+
+def _written(
+    program: Program, storage: Storage, node: str, statement: Statement
+) -> Effect:
     kind = type(statement).__name__
     if not isinstance(statement, HANDLED) and kind not in NO_WRITES:
         return everything(storage)
@@ -140,7 +152,34 @@ def _definite(write: Write, storage: Storage) -> tuple[bytes, ...]:
     if values.complete and len(values.values) == 1:
         (value,) = values.values
         return (value,) if len(value) == target.length else ()
-    return _figurative(write)
+    return _figurative(write) or _counted(write, storage)
+
+
+def _counted(write: Write, storage: Storage) -> tuple[bytes, ...]:
+    """An unsigned integer literal into one unsigned integer zoned field: its
+    digits, right-aligned and zero-filled, as the VALUE image writes them."""
+    text = _integer_literal(write)
+    if not text or not _one_unsigned_number(write, storage):
+        return ()
+    digits = text.lstrip("0").rjust(write.target.length, "0")
+    return (digits.encode("ascii"),) if len(digits) == write.target.length else ()
+
+
+def _integer_literal(write: Write) -> str:
+    origins = tuple(source.origin for source in write.sources)
+    if len(origins) != 1 or origins[0].kind is not OriginKind.LITERAL:
+        return ""
+    text = origins[0].name.strip()
+    return text if integer(text) else ""
+
+
+def _one_unsigned_number(write: Write, storage: Storage) -> bool:
+    cells = tuple(
+        cell
+        for cell in storage.index.elementary_within(write.target)
+        if storage.index.extent_of(cell) == write.target
+    )
+    return len(cells) == 1 and unsigned_integer(cells[0].pic, cells[0].usage)
 
 
 def _figurative(write: Write) -> tuple[bytes, ...]:

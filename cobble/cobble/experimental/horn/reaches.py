@@ -4,12 +4,13 @@ from collections.abc import Callable, Sequence
 
 import z3
 from cobble.experimental.horn.atoms import literal_bytes
-from cobble.experimental.horn.condition import Condition, Digits, Op, Part
+from cobble.experimental.horn.condition import Condition, Digits, Op, Part, Visited
 from cobble.experimental.horn.lower import HornSystem, states
 from cobble.experimental.horn.point import Point
 from cobble.experimental.horn.solve import solve
 from cobble.experimental.horn.storage import Storage
 from cobble.experimental.horn.terms import (
+    RAN,
     concat,
     conjunction,
     constant,
@@ -20,6 +21,15 @@ from cobble.experimental.horn.terms import (
     negation,
 )
 from cobble.experimental.horn.verdict import Verdict
+
+
+def _asked(
+    condition: Condition | Visited, storage: Storage, state: Sequence[z3.BitVecRef]
+) -> z3.BoolRef:
+    if isinstance(condition, Visited):
+        ran = equal(storage.mark(condition.point, state), RAN)
+        return ran if condition.value else negation(ran)
+    return _condition(condition, storage, state)
 
 
 def _condition(
@@ -98,11 +108,12 @@ def _arguments(
 def reaches(
     system: HornSystem,
     point: Point,
-    conditions: Sequence[Condition],
+    conditions: Sequence[Condition | Visited],
     clock: Callable[[], float],
 ) -> Verdict:
-    v = states(system.storage)
-    asked = tuple(_condition(c, system.storage, v.now) for c in conditions)
+    storage = system.storages[point.program]
+    v = states(storage)
+    asked = tuple(_asked(c, storage, v.now) for c in conditions)
     goal = z3.Function("goal", z3.BoolSort())
     rules = tuple(
         every(

@@ -112,3 +112,6 @@ dev = [
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
 pythonpath = ["."]
+markers = [
+    "slow: minutes long; the commit hook leaves these out, make test-all runs them",
+]

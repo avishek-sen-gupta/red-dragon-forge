@@ -1,4 +1,4 @@
-"""The bytes the encoding follows: one segment per run of bytes a test, a question or a copy into them reads."""
+"""The state the encoding follows: one segment per run of bytes a test, a question or a copy into them reads, then EIBCALEN and the marks."""
 
 from __future__ import annotations
 
@@ -10,8 +10,13 @@ import z3
 from cobble.dataflow.fields.extent import CellIndex
 from cobble.dataflow.srccfg.cfg import Atom, Cfg, NodeKind
 from cobble.experimental.horn.copies import Copy, program_copies
+from cobble.experimental.horn.every_test import EVERY_TEST
+from cobble.experimental.horn.kept_tests import KeptTests
+from cobble.experimental.horn.point import Point
 from cobble.experimental.horn.program import Program
 from cobble.experimental.horn.segment import Segment
+from cobol_asg.cobol_types import CobolDataCategory
+from cobol_asg.pic_parser import parse_pic
 from cobol_memory.field_extent import FieldExtent
 from cobol_memory.region_id import RegionId
 
@@ -20,20 +25,52 @@ Place = tuple[RegionId, int]
 COMPARISONS = ("==", "!=")
 ALPHANUMERIC = frozenset("XA")
 DISPLAY = ("", "DISPLAY")
+EIBCALEN = "EIBCALEN"
+CALEN_BYTES = 2
+MARK_BYTES = 1
 
 
 @dataclass(frozen=True)
 class Storage:
-    """The program's layout, and the segments of it the state holds."""
+    """The program's layout, and what the state holds: the segments of it, then
+    EIBCALEN when ``eib``, then one byte per mark, 1 once its point has run.
+    ``kept`` says which tests the encoding keeps."""
 
     index: CellIndex
     segments: tuple[Segment, ...]
+    eib: bool = False
+    marks: tuple[Point, ...] = ()
+    kept: KeptTests = EVERY_TEST
+
+    @property
+    def widths(self) -> tuple[int, ...]:
+        return (
+            *(segment.length for segment in self.segments),
+            *((CALEN_BYTES,) if self.eib else ()),
+            *((MARK_BYTES,) * len(self.marks)),
+        )
+
+    def calen(self, state: Sequence[z3.BitVecRef]) -> z3.BitVecRef:
+        return state[len(self.segments)]
+
+    def mark(self, point: Point, state: Sequence[z3.BitVecRef]) -> z3.BitVecRef:
+        if point not in self.marks:
+            raise ValueError(f"{point} is not marked")
+        return state[len(self.segments) + int(self.eib) + self.marks.index(point)]
 
     def field(self, name: str) -> tuple[FieldExtent, ...]:
         """The one alphanumeric extent ``name`` denotes, written whole with no
         subscript, or nothing."""
         cells = self.index.cells_named(name, (), 0)
         if len(cells) != 1 or not _alphanumeric(cells[0].pic, cells[0].usage):
+            return ()
+        return (self.index.extent_of(cells[0]),)
+
+    def numeral(self, name: str) -> tuple[FieldExtent, ...]:
+        """The one unsigned integer zoned extent ``name`` denotes, written whole with
+        no subscript, or nothing."""
+        cells = self.index.cells_named(name, (), 0)
+        if len(cells) != 1 or not unsigned_integer(cells[0].pic, cells[0].usage):
             return ()
         return (self.index.extent_of(cells[0]),)
 
@@ -45,6 +82,11 @@ class Storage:
 
     def tracked(self, name: str) -> tuple[FieldExtent, ...]:
         return tuple(extent for extent in self.field(name) if self.locate(extent) >= 0)
+
+    def counted(self, name: str) -> tuple[FieldExtent, ...]:
+        return tuple(
+            extent for extent in self.numeral(name) if self.locate(extent) >= 0
+        )
 
     def locate(self, extent: FieldExtent) -> int:
         return next(
@@ -67,27 +109,62 @@ class Storage:
 
 
 def _alphanumeric(pic: str, usage: str) -> bool:
+    """A group, or a picture of X and A only: PIC 9 has no letters and is a number."""
     letters = frozenset(c for c in pic.upper() if c.isalpha())
-    return usage.upper() in DISPLAY and letters <= ALPHANUMERIC
+    kind = letters <= ALPHANUMERIC and (bool(letters) or not pic)
+    return usage.upper() in DISPLAY and kind
 
 
-def storage_of(program: Program, watched: Sequence[str]) -> Storage:
-    probe = Storage(program.index, ())
-    tested = tuple(
-        extent
-        for atom in _comparisons(program.cfg)
-        for name in (atom.left, atom.right)
-        for extent in probe.field(name)
+def unsigned_integer(pic: str, usage: str) -> bool:
+    if not pic or usage.upper() not in DISPLAY:
+        return False
+    kind = parse_pic(pic, usage)
+    return (
+        kind.category is CobolDataCategory.ZONED_DECIMAL
+        and not kind.signed
+        and kind.decimal_digits == 0
+        and kind.char_positions == kind.total_digits
     )
+
+
+def integer(text: str) -> bool:
+    """An unsigned integer literal, as the CFG writes one."""
+    return text.isascii() and text.isdigit()
+
+
+def storage_of(
+    program: Program,
+    watched: Sequence[str],
+    marks: Sequence[Point] = (),
+    extra: frozenset[Place] = frozenset(),
+    kept: KeptTests = EVERY_TEST,
+) -> Storage:
+    """``extra`` are bytes to follow beside the ones the program's tests read: a
+    later task's tests, reading what this task hands it."""
+    probe = Storage(program.index, ())
+    comparisons = tuple(a for a in _comparisons(program.cfg) if kept.keeps(a))
+    tested = tuple(extent for atom in comparisons for extent in _tested(probe, atom))
     places = _closed(
-        frozenset(
+        extra
+        | frozenset(
             place
             for extent in (*tested, *_watched(probe, watched))
             for place in _places(extent)
         ),
         program_copies(program),
     )
-    return Storage(program.index, _segments(places))
+    eib = not probe.whole(EIBCALEN) and any(
+        atom.left == EIBCALEN and integer(atom.right) for atom in comparisons
+    )
+    return Storage(program.index, _segments(places), eib, tuple(marks), kept)
+
+
+def _tested(probe: Storage, atom: Atom) -> tuple[FieldExtent, ...]:
+    numbers = probe.numeral(atom.left) if integer(atom.right) else ()
+    return (
+        *numbers,
+        *(e for name in (atom.left, atom.right) for e in probe.field(name)),
+    )
 
 
 def _watched(probe: Storage, names: Sequence[str]) -> tuple[FieldExtent, ...]:

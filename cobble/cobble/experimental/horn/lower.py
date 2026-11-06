@@ -27,11 +27,14 @@ from cobble.experimental.horn.effects import (
     effect_of,
     everything,
 )
+from cobble.experimental.horn.every_test import EVERY_TEST
+from cobble.experimental.horn.kept_tests import KeptTests
 from cobble.experimental.horn.point import Point
 from cobble.experimental.horn.program import Program
 from cobble.experimental.horn.segment import Segment
-from cobble.experimental.horn.storage import Storage, storage_of
+from cobble.experimental.horn.storage import EIBCALEN, Storage, storage_of
 from cobble.experimental.horn.terms import (
+    RAN,
     bits,
     concat,
     conjunction,
@@ -40,7 +43,6 @@ from cobble.experimental.horn.terms import (
     every,
     extract,
     holds,
-    negation,
     nibble,
 )
 from cobol_memory.region_id import RegionId
@@ -50,10 +52,12 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class HornSystem:
+    """``storages`` holds each program's, by name."""
+
     rules: tuple[z3.BoolRef, ...]
     relations: tuple[z3.FuncDeclRef, ...]
     at: Mapping[Point, tuple[z3.FuncDeclRef, ...]]
-    storage: Storage
+    storages: Mapping[str, Storage]
 
 
 @dataclass(frozen=True)
@@ -69,9 +73,9 @@ class States:
 
 def states(storage: Storage) -> States:
     return States(
-        tuple(bits(f"e!{n}", s.length) for n, s in enumerate(storage.segments)),
-        tuple(bits(f"s!{n}", s.length) for n, s in enumerate(storage.segments)),
-        tuple(bits(f"t!{n}", s.length) for n, s in enumerate(storage.segments)),
+        tuple(bits(f"e!{n}", width) for n, width in enumerate(storage.widths)),
+        tuple(bits(f"s!{n}", width) for n, width in enumerate(storage.widths)),
+        tuple(bits(f"t!{n}", width) for n, width in enumerate(storage.widths)),
     )
 
 
@@ -114,14 +118,14 @@ def _rule(
     return every(variables, z3.Implies(conjunction(*body), head))
 
 
-def _sorts(segments: Sequence[Segment]) -> tuple[z3.BitVecSortRef, ...]:
-    return tuple(z3.BitVecSort(8 * segment.length) for segment in segments)
+def sorts(widths: Sequence[int]) -> tuple[z3.BitVecSortRef, ...]:
+    return tuple(z3.BitVecSort(8 * width) for width in widths)
 
 
 def _relation(name: str, context: Context, storage: Storage) -> z3.FuncDeclRef:
-    segments = storage.segments
-    carried = (*segments, *segments) if context.is_range else segments
-    return z3.Function(name, *_sorts(carried), z3.BoolSort())
+    widths = storage.widths
+    carried = (*widths, *widths) if context.is_range else widths
+    return z3.Function(name, *sorts(carried), z3.BoolSort())
 
 
 def _runs(bytes_: Sequence[Byte]) -> tuple[tuple[Byte, int, int], ...]:
@@ -258,12 +262,32 @@ def _guard(lowering: Lowering, edge: Edge) -> tuple[z3.BoolRef, ...]:
     if edge.kind not in (EdgeKind.TRUE, EdgeKind.FALSE):
         return ()
     atom = lowering.program.cfg.node(edge.source).atom
-    if not atom.plain:
+    if not atom.plain or not lowering.storage.kept.keeps(atom):
         return ()
-    terms = comparison(
+    branches = comparison(
         atom.left, atom.op, atom.right, lowering.storage, lowering.vars.now
     )
-    return terms if edge.kind is EdgeKind.TRUE else tuple(negation(t) for t in terms)
+    return branches.true if edge.kind is EdgeKind.TRUE else branches.false
+
+
+def _extras(lowering: Lowering, edge: Edge) -> tuple[z3.BoolRef, ...]:
+    """EIBCALEN as the task found it, unless the node writes it; each mark as it
+    was, or 1 leaving its own point."""
+    storage, v = lowering.storage, lowering.vars
+    base = len(storage.segments)
+    node = lowering.program.cfg.node(edge.source)
+    calen = (
+        (equal(v.after[base], v.now[base]),)
+        if storage.eib and EIBCALEN not in node.writes
+        else ()
+    )
+    here = Point(lowering.program.cfg.program, edge.source)
+    first = base + int(storage.eib)
+    marks = tuple(
+        equal(v.after[first + k], RAN if mark == here else v.now[first + k])
+        for k, mark in enumerate(storage.marks)
+    )
+    return (*calen, *marks)
 
 
 def _edge_rule(lowering: Lowering, context: Context, edge: Edge) -> z3.BoolRef:
@@ -272,6 +296,7 @@ def _edge_rule(lowering: Lowering, context: Context, edge: Edge) -> z3.BoolRef:
     body = (
         lowering.at(context, edge.source, v.entry, v.now),
         *step.terms,
+        *_extras(lowering, edge),
         *_guard(lowering, edge),
     )
     head = lowering.at(context, edge.target, v.entry, v.after)
@@ -336,21 +361,23 @@ def _start(lowering: Lowering) -> z3.BoolRef:
     return _rule(lowering, (), lowering.at(top(cfg), cfg.entry, v.entry, v.now))
 
 
-def _lowering(program: Program, watched: Sequence[str]) -> Lowering:
+def lowering_of(program: Program, storage: Storage) -> Lowering:
     cfg = program.cfg
-    storage = storage_of(program, watched)
+    _check_marks(program, storage)
     reach = {context: members(cfg, context) for context in contexts(cfg)}
     return Lowering(
         program,
         storage,
         reach,
         {
-            (context, node): _relation(f"at[{index}]{node}", context, storage)
+            (context, node): _relation(
+                f"{cfg.program}:at[{index}]{node}", context, storage
+            )
             for index, context in enumerate(reach)
             for node in reach[context]
         },
         {
-            context: _relation(f"sum[{index}]", context, storage)
+            context: _relation(f"{cfg.program}:sum[{index}]", context, storage)
             for index, context in enumerate(reach)
             if context.is_range
         },
@@ -359,7 +386,45 @@ def _lowering(program: Program, watched: Sequence[str]) -> Lowering:
     )
 
 
-def _at(lowering: Lowering) -> Mapping[Point, tuple[z3.FuncDeclRef, ...]]:
+def _check_marks(program: Program, storage: Storage) -> None:
+    """A mark is set leaving its point, so a point left only by a PERFORM, or not
+    left at all, would never be marked."""
+    cfg = program.cfg
+    unmarkable = tuple(
+        mark
+        for mark in storage.marks
+        if mark.program == cfg.program
+        and (mark.node not in cfg.node_ids or not steps(cfg, top(cfg), mark.node))
+    )
+    if unmarkable:
+        raise ValueError(f"{unmarkable[0]} cannot be marked")
+
+
+def relations_of(lowering: Lowering) -> tuple[z3.FuncDeclRef, ...]:
+    return (*lowering.relations.values(), *lowering.summaries.values())
+
+
+def body_rules(lowering: Lowering) -> tuple[z3.BoolRef, ...]:
+    """Every rule but the one that starts the program."""
+    rules = tuple(
+        rule
+        for context in lowering.members
+        for part in (_edge_rules, _call_rules, _summary_rules)
+        for rule in part(lowering, context)
+    )
+    logger.info(
+        "%s: %d segments, %d tracked bytes, %d contexts, %d relations, %d rules",
+        lowering.program.cfg.program,
+        len(lowering.storage.segments),
+        sum(segment.length for segment in lowering.storage.segments),
+        len(lowering.members),
+        len(relations_of(lowering)),
+        len(rules),
+    )
+    return rules
+
+
+def points_of(lowering: Lowering) -> Mapping[Point, tuple[z3.FuncDeclRef, ...]]:
     cfg = lowering.program.cfg
     return {
         Point(cfg.program, node.id): tuple(
@@ -371,27 +436,22 @@ def _at(lowering: Lowering) -> Mapping[Point, tuple[z3.FuncDeclRef, ...]]:
     }
 
 
-def lower(program: Program, watched: Sequence[str] = ()) -> HornSystem:
-    """``watched`` names the fields a question will ask about, beside the ones
-    the program's own tests read."""
-    lowering = _lowering(program, watched)
-    rules = (
-        _start(lowering),
-        *(
-            rule
-            for context in lowering.members
-            for part in (_edge_rules, _call_rules, _summary_rules)
-            for rule in part(lowering, context)
-        ),
+def lower(
+    program: Program,
+    watched: Sequence[str] = (),
+    marks: Sequence[Point] = (),
+    kept: KeptTests = EVERY_TEST,
+) -> HornSystem:
+    """One task of ``program``, entered in any state. ``watched`` names the
+    fields a question will ask about, beside the ones the program's own tests
+    read; ``marks`` the points a question will ask whether the task has passed;
+    ``kept`` the tests to keep."""
+    lowering = lowering_of(
+        program, storage_of(program, watched, marks, frozenset(), kept)
     )
-    relations = (*lowering.relations.values(), *lowering.summaries.values())
-    logger.info(
-        "%s: %d segments, %d tracked bytes, %d contexts, %d relations, %d rules",
-        program.cfg.program,
-        len(lowering.storage.segments),
-        sum(segment.length for segment in lowering.storage.segments),
-        len(lowering.members),
-        len(relations),
-        len(rules),
+    return HornSystem(
+        (_start(lowering), *body_rules(lowering)),
+        relations_of(lowering),
+        points_of(lowering),
+        {program.cfg.program: lowering.storage},
     )
-    return HornSystem(rules, relations, _at(lowering), lowering.storage)

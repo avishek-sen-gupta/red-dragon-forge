@@ -21,6 +21,16 @@ def conjunction(*terms: z3.BoolRef) -> z3.BoolRef:
     return _boolean(z3.And(*terms), "a conjunction")
 
 
+def any_of(*terms: z3.BoolRef) -> z3.BoolRef:
+    if len(terms) == 1:
+        return terms[0]
+    return _boolean(z3.Or(*terms), "a disjunction")
+
+
+def above(value: z3.BitVecRef, bound: int) -> z3.BoolRef:
+    return _boolean(z3.UGT(value, bound), "an unsigned comparison")
+
+
 def negation(term: z3.BoolRef) -> z3.BoolRef:
     return _boolean(z3.Not(term), "a negation")
 
@@ -70,3 +80,13 @@ def nibble(name: str) -> z3.BitVecRef:
     if isinstance(term, z3.BitVecRef):
         return term
     raise TypeError(f"{name} is not a bit-vector term")
+
+
+def nibble_of(value: int) -> z3.BitVecRef:
+    term = z3.BitVecVal(value, 4)
+    if isinstance(term, z3.BitVecRef):
+        return term
+    raise TypeError(f"{value} is not a bit-vector term")
+
+
+RAN = constant(b"\x01")

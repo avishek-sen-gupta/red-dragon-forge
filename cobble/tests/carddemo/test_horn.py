@@ -1,4 +1,4 @@
-"""The Horn lowering's answers on CardDemo sign-on, against answers read from COSGN00C.cbl by hand."""
+"""The Horn lowering's answers on CardDemo, against answers read from the COBOL by hand."""
 
 from __future__ import annotations
 
@@ -7,12 +7,15 @@ import time
 from collections.abc import Sequence
 
 import pytest
+from cobble.dataflow.combine.link_row import LinkRow
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.experimental.horn.answer import Answer
-from cobble.experimental.horn.condition import Condition, Digits, Op, Part
+from cobble.experimental.horn.condition import Condition, Digits, Op, Part, Visited
+from cobble.experimental.horn.conversation import converse
 from cobble.experimental.horn.lower import HornSystem, lower
+from cobble.experimental.horn.named_fields import NamedFields
 from cobble.experimental.horn.point import Point
-from cobble.experimental.horn.program import program_of
+from cobble.experimental.horn.program import Program, program_of
 from cobble.experimental.horn.reaches import reaches
 from cobble.parsing.asg_cache import cache_path, first_program_at
 from tests.carddemo.conftest import CardDemoRun
@@ -29,12 +32,46 @@ REWRITE = Point(BILLPAY, "UPDATE-ACCTDAT-FILE/0")
 WRITE_TRANSACT = Point(BILLPAY, "WRITE-TRANSACT-FILE/0")
 READ_ACCOUNT = Point(BILLPAY, "READ-ACCTDAT-FILE/0")
 BILLPAY_WATCHED = ("TRAN-AMT", "ACCT-CURR-BAL", "ACCT-ID", "ACTIDINI")
+CONFIRM_PROMPT = Point(BILLPAY, "PROCESS-ENTER-KEY/4.then.0.else.0")
+
+CARD_UPDATE = "COCRDUPC"
+CARD_LIST = "COCRDLIC"
+MAIN_MENU = "COMEN01C"
+CARD_REWRITE = Point(CARD_UPDATE, "9200-WRITE-PROCESSING/13")
+CHANGES_CHECKED = (
+    Point(CARD_UPDATE, "1200-EDIT-MAP-INPUTS/19.else.0"),
+    Point(CARD_UPDATE, "2000-DECIDE-ACTION/0.when.1.0.else.0"),
+)
+CARD_STATE = NamedFields(frozenset({"EIBCALEN", "CCUP-CHANGE-ACTION"}))
+CARD_HANDOVER = NamedFields(
+    frozenset(
+        {
+            "EIBCALEN",
+            "CCUP-CHANGE-ACTION",
+            "CDEMO-PGM-CONTEXT",
+            "CDEMO-FROM-PROGRAM",
+            "LIT-MENUPGM",
+            "LIT-CCLISTPGM",
+            "LIT-THISPGM",
+            "WS-PGMNAME",
+        }
+    )
+)
+
+
+def _program(run: CardDemoRun, program: str) -> Program:
+    with cached_asg_dialect_parsers_registered():
+        asg = first_program_at(cache_path(run.asg, run.cobol / f"{program}.cbl"))
+        return program_of(asg)
 
 
 def _lowered(run: CardDemoRun, program: str, watched: Sequence[str] = ()) -> HornSystem:
-    with cached_asg_dialect_parsers_registered():
-        asg = first_program_at(cache_path(run.asg, run.cobol / f"{program}.cbl"))
-        return lower(program_of(asg), watched)
+    return lower(_program(run, program), watched)
+
+
+def _links(run: CardDemoRun) -> tuple[LinkRow, ...]:
+    lines = (run.combine / "links.jsonl").read_text(encoding="utf-8").splitlines()
+    return tuple(LinkRow.model_validate_json(line) for line in lines if line.strip())
 
 
 @pytest.fixture(scope="module")
@@ -47,7 +84,9 @@ def billpay(carddemo: CardDemoRun) -> HornSystem:
     return _lowered(carddemo, BILLPAY, BILLPAY_WATCHED)
 
 
-def _ask(system: HornSystem, point: Point, conditions: Sequence[Condition]) -> Answer:
+def _ask(
+    system: HornSystem, point: Point, conditions: Sequence[Condition | Visited]
+) -> Answer:
     verdict = reaches(system, point, conditions, time.perf_counter)
     logger.info(
         "%s %s: %s in %.3fs", point.node, conditions, verdict.answer, verdict.seconds
@@ -195,3 +234,64 @@ def test_billpay_reads_for_update_the_account_the_user_typed(
         _ask(billpay, READ_ACCOUNT, (Condition(key, Op.NE, typed),)),
         _ask(billpay, READ_ACCOUNT, (Condition(key, Op.EQ, typed),)),
     ) == (Answer.UNSAT, Answer.SAT)
+
+
+def _card_rewrite(system: HornSystem) -> tuple[Answer, Answer, Answer]:
+    def visited(value: bool) -> tuple[Visited, ...]:
+        return tuple(Visited(point, value) for point in CHANGES_CHECKED)
+
+    return (
+        _ask(system, CARD_REWRITE, ()),
+        _ask(system, CARD_REWRITE, visited(True)),
+        _ask(system, CARD_REWRITE, visited(False)),
+    )
+
+
+def test_a_card_rewrite_in_card_updates_own_chain_follows_a_check_of_the_changes(
+    carddemo: CardDemoRun,
+) -> None:
+    """COCRDUPC.cbl:988-990 WHEN CCUP-CHANGES-OK-NOT-CONFIRMED AND CCARD-AID-PFK05
+    PERFORM 9200-WRITE-PROCESSING, the REWRITE at :1478. CCUP-CHANGE-ACTION is
+    'N' only after :713, the end of the edits, or :976, and a task without a
+    commarea INITIALIZEs it (:388-394). Here the chain starts cold and only card
+    update hands it on, so those two fields are all the proof needs."""
+    links = tuple(link for link in _links(carddemo) if link.caller == CARD_UPDATE)
+    system = converse(
+        (_program(carddemo, CARD_UPDATE),),
+        links,
+        marks=CHANGES_CHECKED,
+        kept=CARD_STATE,
+    )
+    assert _card_rewrite(system) == (Answer.SAT, Answer.SAT, Answer.UNSAT)
+
+
+@pytest.mark.slow
+def test_a_card_rewrite_always_follows_a_check_of_the_changes(
+    carddemo: CardDemoRun,
+) -> None:
+    """As above, with the menu and the card list handing over too. One from the
+    menu with CDEMO-PGM-ENTER INITIALIZEs (:502-510), and one from the card list
+    sets 'S' (:482-494), COCRDLIC.cbl :548-551 having set its own name and
+    CDEMO-PGM-ENTER. The menu and the card list hand over 160 bytes, so the state
+    byte past them is whatever storage holds; the program never reads it there.
+    The proof keeps only the tests on the entry fields and the program names they
+    are compared with."""
+    system = converse(
+        tuple(_program(carddemo, p) for p in (CARD_UPDATE, CARD_LIST, MAIN_MENU)),
+        _links(carddemo),
+        marks=CHANGES_CHECKED,
+        kept=CARD_HANDOVER,
+    )
+    assert _card_rewrite(system) == (Answer.SAT, Answer.SAT, Answer.UNSAT)
+
+
+def test_billpay_pays_on_the_press_that_shows_the_balance(
+    carddemo: CardDemoRun,
+) -> None:
+    """COBIL00C.cbl:173-176 sets CONF-PAY-YES when CONFIRMI is 'Y' on the same
+    Enter that carries the account id, and :210-235 then pays; the prompt at
+    :237-239 need never have been shown."""
+    system = converse(
+        (_program(carddemo, BILLPAY),), _links(carddemo), marks=(CONFIRM_PROMPT,)
+    )
+    assert _ask(system, REWRITE, (Visited(CONFIRM_PROMPT, False),)) == Answer.SAT

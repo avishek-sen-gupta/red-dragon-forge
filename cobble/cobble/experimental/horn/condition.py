@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from enum import Enum
 
+from cobble.experimental.horn.point import Point
+
 
 class Op(Enum):
     EQ = "=="
@@ -34,3 +36,12 @@ class Condition:
     field: str | Part | Digits
     op: Op
     value: str | Part | Digits
+
+
+@dataclass(frozen=True)
+class Visited:
+    """Whether ``point`` has run: in this task, or in an earlier task that handed
+    its commarea on to this one. Asked only of a point the lowering marks."""
+
+    point: Point
+    value: bool

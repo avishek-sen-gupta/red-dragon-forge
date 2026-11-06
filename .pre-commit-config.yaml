@@ -123,7 +123,7 @@ repos:
 
       - id: tests-cobble
         name: cobble test suite
-        entry: bash -c 'cd cobble && uv run --no-sync python -m pytest -x -q'
+        entry: bash -c 'cd cobble && uv run --no-sync python -m pytest -x -q -m "not slow"'
         language: system
         pass_filenames: false
         files: ^(cobble/|cicada/|squall/|vendor/|\.gitmodules$)

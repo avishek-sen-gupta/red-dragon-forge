@@ -5,7 +5,10 @@ import pytest
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.experimental.horn.answer import Answer
 from cobble.experimental.horn.condition import Condition, Digits, Op, Part
+from cobble.experimental.horn.every_test import EVERY_TEST
+from cobble.experimental.horn.kept_tests import KeptTests
 from cobble.experimental.horn.lower import lower
+from cobble.experimental.horn.named_fields import NamedFields
 from cobble.experimental.horn.point import Point
 from cobble.experimental.horn.program import program_of
 from cobble.experimental.horn.reaches import reaches
@@ -119,11 +122,12 @@ def _ask(
     writer: str,
     conditions: Sequence[Condition] = (),
     watched: Sequence[str] = (),
+    kept: KeptTests = EVERY_TEST,
     **extra: object,
 ) -> Answer:
     program = program_of(_asg(paragraphs, data, **extra))
     node = next(node.id for node in program.cfg.nodes if writer in node.writes)
-    system = lower(program, watched)
+    system = lower(program, watched, kept=kept)
     return reaches(system, Point("PROGA", node), conditions, _clock()).answer
 
 
@@ -676,3 +680,119 @@ def test_a_copy_from_a_variable_length_part_frees_the_target() -> None:
         _ask(program, data, "X-OUT", [Condition("B", Op.EQ, "'W  '")], ("B",))
         == Answer.SAT
     )
+
+
+def test_eibcalen_holds_one_value_for_the_whole_task() -> None:
+    """CICS sets EIBCALEN when the task starts, and nothing in the program writes
+    it, so two tests on it agree."""
+    program = [
+        ("MAIN", [_if(_ref("EIBCALEN"), "0", [], [_test("EIBCALEN", "0", [X_OUT])])])
+    ]
+    data = (*FIELDS, _x("Y-OUT"))
+    inner = [("MAIN", [_test("EIBCALEN", "0", [_move("'y'", "Y-OUT")])])]
+
+    assert _ask(program, FIELDS, "X-OUT") == Answer.UNSAT
+    assert _ask(inner, data, "Y-OUT") == Answer.SAT
+
+
+def test_a_number_compared_with_an_integer_reads_its_digits() -> None:
+    """F PIC 9 with 88 F-ZERO VALUE 0 and 88 F-ONE VALUE 1. SET F-ONE TO TRUE
+    writes the digit 1, so IF F-ZERO fails; a number moved from another number
+    keeps its digit but not its zone, so a test against 1 may still go either
+    way on its zone."""
+    numeric = _x(
+        "F",
+        "9",
+        conditions=[
+            {"name": "F-ZERO", "values": [{"from": "0"}]},
+            {"name": "F-ONE", "values": [{"from": "1"}]},
+        ],
+    )
+    data = (numeric, _x("N", "9"), _x("G"), _x("X-OUT"))
+    zero = [("MAIN", [_set_true("F-ONE"), _test("F", "0", [X_OUT])])]
+    one = [("MAIN", [_set_true("F-ONE"), _test("F", "1", [X_OUT])])]
+    moved = [
+        (
+            "MAIN",
+            [_set_true("F-ONE"), _move("F", "N"), _if(_ref("N"), "1", [], [X_OUT])],
+        )
+    ]
+
+    assert _ask(zero, data, "X-OUT") == Answer.UNSAT
+    assert _ask(one, data, "X-OUT") == Answer.SAT
+    assert _ask(moved, data, "X-OUT") == Answer.SAT
+
+
+def test_two_numbers_that_test_equal_may_differ_in_their_zones() -> None:
+    """IF N1 = N2 compares values: the digits must agree, the zones need not, so
+    the test says nothing about the bytes."""
+    data = (_x("N1", "9"), _x("N2", "9"), *FIELDS)
+    same = {
+        "type": "IF",
+        "condition": {
+            "not": False,
+            "relation": {"left": _ref("N1"), "op": "==", "right": _ref("N2")},
+        },
+        "children": [X_OUT],
+        "else_children": [],
+    }
+    program = [("MAIN", [same])]
+    differ = Condition("N1", Op.NE, "N2")
+
+    assert _ask(program, data, "X-OUT", [differ], ("N1", "N2")) == Answer.SAT
+
+
+def test_an_inspect_frees_only_the_field_it_rewrites() -> None:
+    """INSPECT G REPLACING ALL 'A' BY 'B' writes G and nothing else, so F keeps
+    the value its test gave it and G may now hold anything."""
+    inspect = {
+        "type": "INSPECT",
+        "inspect_type": "REPLACING",
+        "source": {"name": "G"},
+        "replacings": [
+            {
+                "mode": "ALL",
+                "from": {"kind": "lit", "name": "'A'"},
+                "to": {"kind": "lit", "name": "'B'"},
+            }
+        ],
+    }
+    program = [
+        ("MAIN", [_move_literal("'A'", "G"), _test("F", "'Y'", [inspect, X_OUT])])
+    ]
+
+    assert _ask(program, FIELDS, "X-OUT", [_f(Op.EQ, "'N'")]) == Answer.UNSAT
+    assert _ask(program, FIELDS, "X-OUT", [Condition("G", Op.EQ, "'A'")], ("G",)) == (
+        Answer.SAT
+    )
+
+
+def test_an_integer_moved_into_a_number_sets_its_digits() -> None:
+    """MOVE 1 TO N, N PIC 9(2), writes the digits 01, so IF N = 1 cannot fail and
+    N's digits are 01. Into PIC 9V9 the literal's digits need a scale, which
+    this encoding leaves unknown."""
+    data = (_x("N", "9(2)"), _x("D", "9V9"), *FIELDS)
+    into_n = [("MAIN", [_move_literal("1", "N"), _if(_ref("N"), "1", [], [X_OUT])])]
+    held = [("MAIN", [_move_literal("1", "N"), _move_literal("1", "D"), X_OUT])]
+
+    assert _ask(into_n, data, "X-OUT") == Answer.UNSAT
+    assert _ask(
+        held, data, "X-OUT", [Condition(Digits("N", 1, 2), Op.NE, "'01'")], ("N",)
+    ) == (Answer.UNSAT)
+    assert _ask(
+        held, data, "X-OUT", [Condition(Digits("D", 1, 2), Op.NE, "'10'")], ("D",)
+    ) == (Answer.SAT)
+
+
+def test_a_test_on_a_field_not_tracked_can_go_either_way() -> None:
+    """MOVE 'N' TO G, then IF G = 'Y': tracking G proves the THEN branch dead;
+    tracking only F leaves the test unencoded, so both branches stay open, even
+    when a question follows G's bytes."""
+    program = [("MAIN", [_move_literal("'N'", "G"), _test("G", "'Y'", [X_OUT])])]
+
+    assert (
+        _ask(program, FIELDS, "X-OUT"),
+        _ask(program, FIELDS, "X-OUT", kept=NamedFields(frozenset({"G"}))),
+        _ask(program, FIELDS, "X-OUT", kept=NamedFields(frozenset({"F"}))),
+        _ask(program, FIELDS, "X-OUT", [], ("G",), NamedFields(frozenset({"F"}))),
+    ) == (Answer.UNSAT, Answer.UNSAT, Answer.SAT, Answer.SAT)
