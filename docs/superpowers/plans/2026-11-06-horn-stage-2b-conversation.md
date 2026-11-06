@@ -101,11 +101,20 @@ Asked on the same encoding, with the fields to keep picked by hand.
   the screen again (`COCRDUPC.cbl:603`, `:1425`), never compared with `CCUP-OLD-CARDID`; the
   record check (`:1503-1508`) compares the card's data, not its number. The program relies on
   the field being protected (`:1183`). Read from the code; the run was not replayed.
-- **A user deleted without an admin sign-on?** `sat`. Thirteen programs take in their commarea
-  with `MOVE DFHCOMMAREA(1:EIBCALEN)`, which the encoding used to free, so this question could not
-  be asked until that move was encoded (above). The commarea's user type is no witness: the
-  transaction type list sets it to `U` during an admin session (`COTRTLIC.cbl:634`). Asked with
-  a mark on sign-on's XCTL to the admin menu instead, the answer is `sat`: `CTLI`, defined in
-  the CSD, started with no commarea, sets `CDEMO-USRTYP-ADMIN` itself (`COTRTLIC.cbl:115-120`)
-  and its PF3 transfers to the admin menu (`:603`), which leads to the delete. CICS transaction
-  security is outside the encoding. Read from the code; the run was not replayed.
+- **A user deleted without an admin sign-on?** Not settled. Thirteen programs take in their
+  commarea with `MOVE DFHCOMMAREA(1:EIBCALEN)`, which the encoding used to free; that move is
+  now encoded. The commarea's user type is no witness: the transaction type list sets it to `U`
+  during an admin session (`COTRTLIC.cbl:634`), so the question is asked with a mark on
+  sign-on's XCTL to the admin menu. Each `sat` was checked by keeping only the rules on the
+  relations the solver's own run used and asking again with every test and field: the
+  confirmation runs on a subgraph taken from the solver, never one picked by hand.
+  - The first run continued past `PERFORM RETURN-TO-PREV-SCREEN`, whose range ends in an XCTL.
+    The CFG keeps that edge as a margin against its own mistakes; the lowering now drops it
+    when every way out of the range ends the task.
+  - The next runs start a user-admin program cold and take its dynamic XCTL to another
+    admin program. Cold, the program names sign-on in `CDEMO-TO-PROGRAM`, but a link row lets a
+    dynamic XCTL reach every program it lists whatever that field holds. The check rejected
+    each route. Tying a hand-over to the program-name field is the next gap.
+  - Reading the code suggests a real path: `CTLI` started with no commarea sets
+    `CDEMO-USRTYP-ADMIN` itself (`COTRTLIC.cbl:115-120`) and its PF3 goes to the admin menu
+    (`:603`). The solver has not confirmed it.

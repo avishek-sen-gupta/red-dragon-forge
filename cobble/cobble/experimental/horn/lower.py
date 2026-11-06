@@ -7,7 +7,7 @@ from itertools import groupby
 
 import z3
 from cobble.dataflow.srccfg.cfg import Edge, EdgeKind
-from cobble.dataflow.srccfg.desugar import PERFORM_TRANSFER
+from cobble.dataflow.srccfg.desugar import DISPATCH_TRANSFER_CICS, PERFORM_TRANSFER
 from cobble.experimental.horn.atoms import comparison
 from cobble.experimental.horn.context import (
     Context,
@@ -48,11 +48,18 @@ from cobble.experimental.horn.terms import (
     holds,
     nibble,
 )
+from cobol_asg.cobol_statements import (
+    AlterStatement,
+    ExitProgramStatement,
+    GobackStatement,
+    StopRunStatement,
+)
 from cobol_memory.region_id import RegionId
 
 logger = logging.getLogger(__name__)
 
 PAD = b" "
+TERMINATORS = (StopRunStatement, GobackStatement, ExitProgramStatement)
 
 
 @dataclass(frozen=True)
@@ -325,7 +332,45 @@ def _edge_rules(lowering: Lowering, context: Context) -> tuple[z3.BoolRef, ...]:
         _edge_rule(lowering, context, edge)
         for node in sorted(lowering.members[context])
         for edge in steps(lowering.program.cfg, context, node)
+        if not _never_back(lowering, edge)
     )
+
+
+def _never_back(lowering: Lowering, edge: Edge) -> bool:
+    """The FLOW edge the CFG keeps past a PERFORM whose range end nothing reaches,
+    when every way out of the range ends the task and no ALTER can redirect a GO
+    TO: the PERFORM cannot come back, so the edge is not a path."""
+    cfg = lowering.program.cfg
+    if (
+        edge.kind is not EdgeKind.FLOW
+        or cfg.node(edge.source).transfer != PERFORM_TRANSFER
+    ):
+        return False
+    calls = perform_edge(cfg, edge.source)
+    return (
+        bool(calls)
+        and not _altered(lowering)
+        and all(
+            _ends_task(lowering, node)
+            for call in calls
+            for node in lowering.members[performed(cfg, call)]
+            if not cfg.successors(node)
+        )
+    )
+
+
+def _altered(lowering: Lowering) -> bool:
+    return any(
+        isinstance(statement, AlterStatement)
+        for statement in lowering.program.statements.values()
+    )
+
+
+def _ends_task(lowering: Lowering, node: str) -> bool:
+    """STOP RUN, GOBACK, EXIT PROGRAM, or a CICS condition no handler takes."""
+    if lowering.program.cfg.node(node).transfer == DISPATCH_TRANSFER_CICS:
+        return True
+    return isinstance(lowering.program.statements.get(node), TERMINATORS)
 
 
 def _call(lowering: Lowering, context: Context, edge: Edge) -> tuple[z3.BoolRef, ...]:

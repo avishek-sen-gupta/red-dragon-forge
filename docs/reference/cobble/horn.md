@@ -86,7 +86,10 @@ soundness.
   its negation. RETURN edges are not followed; returns go through summaries. A FALLTHRU out of a
   range's end is not followed inside that range. A node with no successors ends the task. The
   FLOW edge the CFG keeps past a PERFORM it could not resolve, or whose range end nothing
-  reaches, frees every tracked byte.
+  reaches, frees every tracked byte. The CFG keeps the second kind in case its own picture is
+  wrong; the lowering drops it when the program has no ALTER and every node in the range with
+  no successor ends the task (STOP RUN, GOBACK, EXIT PROGRAM, or a CICS condition no handler
+  takes, such as an XCTL's), since such a PERFORM cannot come back.
 - **Unconstrained.** One task's initial state (`lower` reads no VALUE clause: a program entered
   by CALL finds its working storage as the last call left it), every input, every freed byte,
   every untracked byte and every test not encoded. A missing fact therefore never removes a

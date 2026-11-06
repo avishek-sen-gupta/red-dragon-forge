@@ -822,3 +822,22 @@ def test_a_copy_of_eibcalen_bytes_takes_that_many_and_pads_with_spaces() -> None
         _ask(program, data, "X-OUT", [Condition("B", Op.NE, "'WX '")], ("B",)),
         _ask(program, data, "X-OUT", [Condition("B", Op.EQ, "'WX '")], ("B",)),
     ) == (Answer.UNSAT, Answer.SAT)
+
+
+def test_a_perform_of_a_paragraph_that_ends_the_task_does_not_come_back() -> None:
+    """PERFORM P, where P ends in STOP RUN or in an EXEC CICS XCTL with no handler:
+    nothing after the PERFORM runs. A program with an ALTER keeps the CFG's edge
+    past such a PERFORM, since its GO TOs may lead elsewhere."""
+    xctl = {
+        "type": "EXEC_CICS",
+        "verb": "XCTL",
+        "options": {"PROGRAM": {"text": "'OTHER'", "is_literal": True}},
+    }
+    ends = lambda last: [("MAIN", [_perform("P"), X_OUT, STOP]), ("P", [last])]
+    altered = [("MAIN", [{"type": "ALTER"}, _perform("P"), X_OUT, STOP]), ("P", [STOP])]
+
+    assert (
+        _ask(ends(STOP), FIELDS, "X-OUT"),
+        _ask(ends(xctl), FIELDS, "X-OUT"),
+        _ask(altered, FIELDS, "X-OUT"),
+    ) == (Answer.UNSAT, Answer.UNSAT, Answer.SAT)
