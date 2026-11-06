@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 
 import z3
+from cics.statements import CicsOperand, ExecCicsStatement
 from cobble.dataflow.combine.link_row import LinkRow
 from cobble.dataflow.fields.extent_text import ByteRange, byte_range
 from cobble.experimental.horn.context import top
@@ -29,10 +30,20 @@ from cobble.experimental.horn.storage import (
     Storage,
     storage_of,
 )
-from cobble.experimental.horn.terms import bits, concat, constant, every, holds
+from cobble.experimental.horn.terms import (
+    bits,
+    concat,
+    conjunction,
+    constant,
+    equal,
+    every,
+    holds,
+)
 from cobol_memory.region_id import RegionId
 
-TRANSFERS = frozenset({"XCTL", "RETURN_TRANSID"})
+XCTL = "XCTL"
+TRANSFERS = frozenset({XCTL, "RETURN_TRANSID"})
+PROGRAM_OPTION = "PROGRAM"
 NO_WATCHED: Mapping[str, Sequence[str]] = MappingProxyType({})
 COLD = 0
 
@@ -204,16 +215,44 @@ def _chained(tasks: Tasks, window: Window, index: int) -> tuple[z3.BoolRef, ...]
     point = Point(window.link.caller, window.link.node)
     state, fresh = _handed(window, tasks, f"h!{index}")
     v = caller.vars
+    named = _names_callee(caller, window)
     return tuple(
         every(
             (*v.entry, *v.now, *fresh),
             z3.Implies(
-                holds(relation, *_arguments(relation, v.entry, v.now)),
+                conjunction(
+                    holds(relation, *_arguments(relation, v.entry, v.now)), *named
+                ),
                 tasks.enter(window.link.callee, state),
             ),
         )
         for relation in points_of(caller).get(point, ())
     )
+
+
+def _names_callee(caller: Lowering, window: Window) -> tuple[z3.BoolRef, ...]:
+    """An XCTL that names its target in a field reaches the callee only while the
+    field holds the callee's name."""
+    field = _program_field(caller.program, window.link)
+    extents = caller.storage.tracked(field) if field else ()
+    if not extents:
+        return ()
+    name = window.link.callee.encode("ascii").ljust(extents[0].length)
+    if len(name) != extents[0].length:
+        return ()
+    held = caller.storage.value(extents[0], caller.vars.now)
+    return (equal(held, constant(name)),)
+
+
+def _program_field(program: Program, link: LinkRow) -> str:
+    """The one alphanumeric field an XCTL names its target in, or nothing."""
+    statement = program.statements.get(link.node)
+    if link.transfer != XCTL or not isinstance(statement, ExecCicsStatement):
+        return ""
+    operand = statement.options.get(PROGRAM_OPTION)
+    if not isinstance(operand, CicsOperand) or operand.is_literal:
+        return ""
+    return operand.text if Storage(program.index, ()).field(operand.text) else ""
 
 
 def _arguments(
@@ -274,7 +313,8 @@ def converse(
     """Any of ``programs`` may start a conversation with no commarea, EIBCALEN
     0; an XCTL or RETURN TRANSID among them hands its commarea on, EIBCALEN its
     length; one into them from any other program hands over bytes nothing knows.
-    A mark is unknown wherever the chain of commareas begins. ``kept`` says
+    An XCTL that names its target in a field hands over only to the program the
+    field names. A mark is unknown wherever the chain of commareas begins. ``kept`` says
     which tests every program keeps."""
     named = {program.cfg.program: program for program in programs}
     windows = tuple(
@@ -285,7 +325,18 @@ def converse(
     )
     inner = tuple(w for w in windows if w.link.caller in named)
     outer = tuple(w for w in windows if w.link.caller not in named)
-    storages = _storages(named, inner, watched, marks, {}, kept)
+    targets = {
+        name: tuple(
+            field
+            for window in inner
+            if window.link.caller == name
+            for field in (_program_field(named[name], window.link),)
+            if field
+        )
+        for name in named
+    }
+    followed = {name: (*watched.get(name, ()), *targets[name]) for name in named}
+    storages = _storages(named, inner, followed, marks, {}, kept)
     lowerings = {name: lowering_of(named[name], storages[name]) for name in named}
     tasks = Tasks(lowerings, {name: _entered(name, storages[name]) for name in named})
     rules = (

@@ -114,7 +114,11 @@ Asked on the same encoding, with the fields to keep picked by hand.
   - The next runs start a user-admin program cold and take its dynamic XCTL to another
     admin program. Cold, the program names sign-on in `CDEMO-TO-PROGRAM`, but a link row lets a
     dynamic XCTL reach every program it lists whatever that field holds. The check rejected
-    each route. Tying a hand-over to the program-name field is the next gap.
+    each route. A hand-over now fires only while the XCTL's program field names the callee.
+  - With that, the confirmation found a run: the admin menu started with no commarea XCTLs to
+    sign-on, the XCTL raises PGMIDERR, the menu's handler (`COADM01C.cbl:270-283`) returns with
+    `TRANSID` and the commarea, and the next press reaches the delete. It rests on a CICS
+    condition the encoding allows on any command: sign-on not being installed.
   - Reading the code suggests a real path: `CTLI` started with no commarea sets
     `CDEMO-USRTYP-ADMIN` itself (`COTRTLIC.cbl:115-120`) and its PF3 goes to the admin menu
     (`:603`). The solver has not confirmed it.

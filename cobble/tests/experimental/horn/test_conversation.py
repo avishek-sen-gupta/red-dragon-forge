@@ -1,6 +1,7 @@
 import json
 from collections.abc import Callable, Iterator, Mapping, Sequence
 
+from cics.statements import ExecCicsStatement
 from cobble.dataflow.combine.link_row import LinkRow
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.experimental.horn.answer import Answer
@@ -72,15 +73,20 @@ BODY = [
 ]
 
 
-def _program() -> Program:
-    body = {
-        "program_id": "PROGA",
-        "data_fields": list(DATA),
-        "linkage_fields": list(LINKAGE),
-        "paragraphs": [{"name": "MAIN", "statements": BODY}],
+def _program(
+    name: str = "PROGA",
+    data: Sequence[Statement] = DATA,
+    linkage: Sequence[Statement] = LINKAGE,
+    body: Sequence[Statement] = BODY,
+) -> Program:
+    asg = {
+        "program_id": name,
+        "data_fields": list(data),
+        "linkage_fields": list(linkage),
+        "paragraphs": [{"name": "MAIN", "statements": list(body)}],
     }
     with cached_asg_dialect_parsers_registered():
-        return program_of(CobolASG.from_dict(json.loads(json.dumps(body))))
+        return program_of(CobolASG.from_dict(json.loads(json.dumps(asg))))
 
 
 def _writer(program: Program, name: str) -> str:
@@ -161,3 +167,49 @@ def test_a_transfer_from_outside_the_conversation_brings_any_commarea() -> None:
     assert _ask(conversation, program, "X-OUT", [Visited(checked, False)]) == (
         Answer.SAT
     )
+
+
+def test_a_dynamic_xctl_reaches_only_the_program_its_field_names() -> None:
+    """PROGX moves 'PROGA' into WS-PGM and XCTLs to PROGRAM(WS-PGM). The links
+    list PROGA and PROGB for that XCTL, but only PROGA is handed the commarea,
+    so only PROGA's task can find EIBCALEN other than 0."""
+    xctl = {
+        "type": "EXEC_CICS",
+        "verb": "XCTL",
+        "options": {
+            "PROGRAM": {"text": "WS-PGM", "is_literal": False},
+            "COMMAREA": {"text": "WS-COMM", "is_literal": False},
+        },
+    }
+    caller = _program(
+        "PROGX",
+        (_x("WS-PGM", "X(5)"), _x("WS-COMM")),
+        (),
+        [_move("'PROGA'", "WS-PGM"), xctl],
+    )
+    callees = (_program("PROGA"), _program("PROGB"))
+    node = next(
+        n for n, s in caller.statements.items() if isinstance(s, ExecCicsStatement)
+    )
+    links = tuple(
+        LinkRow(
+            caller="PROGX",
+            node=node,
+            transfer="XCTL",
+            callee=callee.cfg.program,
+            caller_extent=_extent(caller, "WS-COMM"),
+            callee_extent=_extent(callee, "LK-STATE"),
+            returns=False,
+            reason="",
+        )
+        for callee in callees
+    )
+    system = converse((caller, *callees), links)
+
+    def handed(program: Program) -> Answer:
+        test = next(n.id for n in program.cfg.nodes if n.atom.left == "EIBCALEN")
+        (taken,) = (e for e in program.cfg.successors(test) if e.kind.name == "FALSE")
+        point = Point(program.cfg.program, taken.target)
+        return reaches(system, point, (), _clock()).answer
+
+    assert tuple(handed(p) for p in callees) == (Answer.SAT, Answer.UNSAT)

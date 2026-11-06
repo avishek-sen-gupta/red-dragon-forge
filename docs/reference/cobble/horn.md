@@ -111,6 +111,8 @@ and the marks.
   caller tracks it; EIBCALEN is the extent's length; the marks are the caller's. Every other
   LINKAGE byte is unknown. Each program also follows the bytes it hands over that the next
   program follows, until no program follows another byte.
+  An XCTL that names its target in one alphanumeric field hands over only while that field
+  holds the callee's name, padded with spaces; the field is followed for that.
 - **From outside.** A row into one of the programs from any other program enters it with nothing
   known but EIBCALEN.
 
