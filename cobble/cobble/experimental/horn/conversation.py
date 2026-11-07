@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from types import MappingProxyType
 
 import z3
-from cics.statements import CicsOperand, ExecCicsStatement
 from cobble.dataflow.combine.link_row import LinkRow
 from cobble.dataflow.fields.extent_text import ByteRange, byte_range
 from cobble.experimental.horn.context import top
@@ -39,11 +38,10 @@ from cobble.experimental.horn.terms import (
     every,
     holds,
 )
+from cobble.experimental.horn.xctl import XCTL, program_field
 from cobol_memory.region_id import RegionId
 
-XCTL = "XCTL"
 TRANSFERS = frozenset({XCTL, "RETURN_TRANSID"})
-PROGRAM_OPTION = "PROGRAM"
 NO_WATCHED: Mapping[str, Sequence[str]] = MappingProxyType({})
 COLD = 0
 
@@ -245,14 +243,7 @@ def _names_callee(caller: Lowering, window: Window) -> tuple[z3.BoolRef, ...]:
 
 
 def _program_field(program: Program, link: LinkRow) -> str:
-    """The one alphanumeric field an XCTL names its target in, or nothing."""
-    statement = program.statements.get(link.node)
-    if link.transfer != XCTL or not isinstance(statement, ExecCicsStatement):
-        return ""
-    operand = statement.options.get(PROGRAM_OPTION)
-    if not isinstance(operand, CicsOperand) or operand.is_literal:
-        return ""
-    return operand.text if Storage(program.index, ()).field(operand.text) else ""
+    return program_field(program, link.node) if link.transfer == XCTL else ""
 
 
 def _arguments(
@@ -337,7 +328,10 @@ def converse(
     }
     followed = {name: (*watched.get(name, ()), *targets[name]) for name in named}
     storages = _storages(named, inner, followed, marks, {}, kept)
-    lowerings = {name: lowering_of(named[name], storages[name]) for name in named}
+    installed = frozenset(named)
+    lowerings = {
+        name: lowering_of(named[name], storages[name], installed) for name in named
+    }
     tasks = Tasks(lowerings, {name: _entered(name, storages[name]) for name in named})
     rules = (
         *(_opened(tasks, name, f"c!{name}", COLD) for name in named),

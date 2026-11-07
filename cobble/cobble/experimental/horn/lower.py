@@ -46,7 +46,13 @@ from cobble.experimental.horn.terms import (
     every,
     extract,
     holds,
+    negation,
     nibble,
+)
+from cobble.experimental.horn.xctl import (
+    never_pgmiderr,
+    pgmiderr_handlers,
+    program_field,
 )
 from cobol_asg.cobol_statements import (
     AlterStatement,
@@ -59,6 +65,7 @@ from cobol_memory.region_id import RegionId
 logger = logging.getLogger(__name__)
 
 PAD = b" "
+NOTHING_INSTALLED: frozenset[str] = frozenset()
 TERMINATORS = (StopRunStatement, GobackStatement, ExitProgramStatement)
 
 
@@ -100,6 +107,7 @@ class Lowering:
     summaries: Mapping[Context, z3.FuncDeclRef]
     effects: Mapping[str, Effect]
     vars: States
+    installed: frozenset[str] = NOTHING_INSTALLED
 
     def at(
         self,
@@ -318,9 +326,56 @@ def _edge_rule(lowering: Lowering, context: Context, edge: Edge) -> z3.BoolRef:
         *step.terms,
         *_extras(lowering, edge),
         *_guard(lowering, edge),
+        *_installed(lowering, edge),
     )
     head = lowering.at(context, edge.target, v.entry, v.after)
     return _rule(lowering, body, head, step.fresh)
+
+
+def _installed(lowering: Lowering, edge: Edge) -> tuple[z3.BoolRef, ...]:
+    """The dispatch into a handler armed for PGMIDERR alone: never from a command
+    that cannot raise it, and from an XCTL only while it names a program not
+    installed."""
+    if not _into_pgmiderr(lowering, edge):
+        return ()
+    cfg = lowering.program.cfg
+    commands = tuple(
+        command.source
+        for raised in cfg.predecessors(edge.source)
+        for command in cfg.predecessors(raised.source)
+    )
+    if len(commands) != 1:
+        return ()
+    return _pgmiderr_from(lowering, commands[0])
+
+
+def _pgmiderr_from(lowering: Lowering, command: str) -> tuple[z3.BoolRef, ...]:
+    if never_pgmiderr(lowering.program, command):
+        return (z3.BoolVal(False),)
+    return _not_naming(lowering, program_field(lowering.program, command))
+
+
+def _into_pgmiderr(lowering: Lowering, edge: Edge) -> bool:
+    cfg = lowering.program.cfg
+    return (
+        edge.kind is EdgeKind.GOTO
+        and cfg.node(edge.source).transfer == DISPATCH_TRANSFER_CICS
+        and cfg.node(edge.target).paragraph in pgmiderr_handlers(lowering.program)
+    )
+
+
+def _not_naming(lowering: Lowering, field: str) -> tuple[z3.BoolRef, ...]:
+    storage = lowering.storage
+    extents = storage.tracked(field) if field else ()
+    if not extents:
+        return ()
+    held = storage.value(extents[0], lowering.vars.now)
+    return tuple(
+        negation(equal(held, constant(padded)))
+        for name in sorted(lowering.installed)
+        for padded in (name.encode("ascii").ljust(extents[0].length),)
+        if len(padded) == extents[0].length
+    )
 
 
 def _tag(edge: Edge) -> str:
@@ -419,7 +474,11 @@ def _start(lowering: Lowering) -> z3.BoolRef:
     return _rule(lowering, (), lowering.at(top(cfg), cfg.entry, v.entry, v.now))
 
 
-def lowering_of(program: Program, storage: Storage) -> Lowering:
+def lowering_of(
+    program: Program,
+    storage: Storage,
+    installed: frozenset[str] = NOTHING_INSTALLED,
+) -> Lowering:
     cfg = program.cfg
     _check_marks(program, storage)
     reach = {context: members(cfg, context) for context in contexts(cfg)}
@@ -441,6 +500,7 @@ def lowering_of(program: Program, storage: Storage) -> Lowering:
         },
         {node.id: effect_of(program, storage, node.id) for node in cfg.nodes},
         states(storage),
+        installed,
     )
 
 

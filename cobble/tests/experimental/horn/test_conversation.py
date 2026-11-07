@@ -213,3 +213,104 @@ def test_a_dynamic_xctl_reaches_only_the_program_its_field_names() -> None:
         return reaches(system, point, (), _clock()).answer
 
     assert tuple(handed(p) for p in callees) == (Answer.SAT, Answer.UNSAT)
+
+
+def test_an_xctl_to_a_program_of_the_conversation_finds_it_installed() -> None:
+    """PROGX arms HANDLE CONDITION PGMIDERR(MISSING) and XCTLs to the program
+    WS-PGM names. Naming PROGA, one of the programs, never raises PGMIDERR, so
+    MISSING never runs; naming NOPE, which is not one of them, may."""
+    handle = {
+        "type": "EXEC_CICS",
+        "verb": "HANDLE CONDITION",
+        "options": {"PGMIDERR": {"text": "MISSING", "is_literal": False}},
+    }
+    xctl = {
+        "type": "EXEC_CICS",
+        "verb": "XCTL",
+        "options": {
+            "PROGRAM": {"text": "WS-PGM", "is_literal": False},
+            "COMMAREA": {"text": "WS-COMM", "is_literal": False},
+        },
+    }
+
+    def missing(target: str) -> Answer:
+        caller = _paragraphs(
+            "PROGX",
+            (_x("WS-PGM", "X(5)"), _x("WS-COMM"), _x("X-OUT")),
+            [
+                ("MAIN", [handle, _move(f"'{target}'", "WS-PGM"), xctl]),
+                ("MISSING", [_move("'x'", "X-OUT"), STOP]),
+            ],
+        )
+        callee = _program("PROGA")
+        node = next(
+            n
+            for n, s in caller.statements.items()
+            if isinstance(s, ExecCicsStatement) and s.verb == "XCTL"
+        )
+        link = LinkRow(
+            caller="PROGX",
+            node=node,
+            transfer="XCTL",
+            callee="PROGA",
+            caller_extent=_extent(caller, "WS-COMM"),
+            callee_extent=_extent(callee, "LK-STATE"),
+            returns=False,
+            reason="",
+        )
+        system = converse((caller, callee), (link,))
+        point = Point("PROGX", _writer(caller, "X-OUT"))
+        return reaches(system, point, (), _clock()).answer
+
+    assert (missing("PROGA"), missing("NOPE")) == (Answer.UNSAT, Answer.SAT)
+
+
+def _paragraphs(
+    name: str,
+    data: Sequence[Statement],
+    paragraphs: Sequence[tuple[str, Sequence[Statement]]],
+) -> Program:
+    asg = {
+        "program_id": name,
+        "data_fields": list(data),
+        "linkage_fields": [],
+        "paragraphs": [{"name": p, "statements": list(s)} for p, s in paragraphs],
+    }
+    with cached_asg_dialect_parsers_registered():
+        return program_of(CobolASG.from_dict(json.loads(json.dumps(asg))))
+
+
+def test_return_and_send_map_never_raise_pgmiderr() -> None:
+    """IBM lists no PGMIDERR among the conditions of RETURN or SEND MAP, so a
+    handler armed for PGMIDERR alone is not entered from either; an XCTL that
+    names its target by literal still may."""
+    handle = {
+        "type": "EXEC_CICS",
+        "verb": "HANDLE CONDITION",
+        "options": {"PGMIDERR": {"text": "MISSING", "is_literal": False}},
+    }
+
+    def command(verb: str, options: Mapping[str, object]) -> Answer:
+        program = _paragraphs(
+            "PROGX",
+            (_x("X-OUT"),),
+            [
+                (
+                    "MAIN",
+                    [
+                        handle,
+                        {"type": "EXEC_CICS", "verb": verb, "options": options},
+                        STOP,
+                    ],
+                ),
+                ("MISSING", [_move("'x'", "X-OUT"), STOP]),
+            ],
+        )
+        point = Point("PROGX", _writer(program, "X-OUT"))
+        return reaches(lower(program), point, (), _clock()).answer
+
+    assert (
+        command("RETURN", {}),
+        command("SEND MAP", {"MAP": {"text": "'M'", "is_literal": True}}),
+        command("XCTL", {"PROGRAM": {"text": "'NOPE'", "is_literal": True}}),
+    ) == (Answer.UNSAT, Answer.UNSAT, Answer.SAT)

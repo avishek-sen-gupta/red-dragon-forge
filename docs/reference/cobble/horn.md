@@ -113,6 +113,11 @@ and the marks.
   program follows, until no program follows another byte.
   An XCTL that names its target in one alphanumeric field hands over only while that field
   holds the callee's name, padded with spaces; the field is followed for that.
+- **PGMIDERR.** The CFG gives every CICS command an edge into each armed handler. Into a
+  paragraph armed for PGMIDERR alone, the lowering keeps that edge only from a command that can
+  raise it: never from RETURN or SEND MAP, whose condition lists in the CICS reference have no
+  PGMIDERR, and in a conversation from an XCTL only while its program field names none of the
+  conversation's programs, which are taken to be installed.
 - **From outside.** A row into one of the programs from any other program enters it with nothing
   known but EIBCALEN.
 

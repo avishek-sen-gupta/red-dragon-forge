@@ -151,6 +151,7 @@ def test_signon_never_transfers_with_a_low_values_password(signon: HornSystem) -
     assert _never_with(signon, "PASSWDI", "LOW-VALUES") == Answer.UNSAT
 
 
+@pytest.mark.slow
 def test_billpay_proceeds_only_on_a_y_or_lowercase_y_in_the_confirm_field(
     billpay: HornSystem,
 ) -> None:
@@ -167,6 +168,7 @@ def test_billpay_proceeds_only_on_a_y_or_lowercase_y_in_the_confirm_field(
     )
 
 
+@pytest.mark.slow
 def test_billpay_never_proceeds_with_a_blank_or_low_values_account_id(
     billpay: HornSystem,
 ) -> None:
@@ -179,6 +181,7 @@ def test_billpay_never_proceeds_with_a_blank_or_low_values_account_id(
     ) == (Answer.UNSAT, Answer.UNSAT)
 
 
+@pytest.mark.slow
 def test_billpay_rewrites_the_balance_after_a_failed_transaction_write(
     billpay: HornSystem,
 ) -> None:
@@ -194,6 +197,7 @@ def test_billpay_rewrites_the_balance_after_a_failed_transaction_write(
     ) == (Answer.UNSAT, Answer.SAT)
 
 
+@pytest.mark.slow
 def test_billpay_writes_the_balance_it_read_less_its_leading_digit(
     billpay: HornSystem,
 ) -> None:
@@ -221,6 +225,7 @@ def test_billpay_writes_the_balance_it_read_less_its_leading_digit(
     ) == (Answer.UNSAT, Answer.SAT, Answer.SAT, Answer.SAT)
 
 
+@pytest.mark.slow
 def test_billpay_reads_for_update_the_account_the_user_typed(
     billpay: HornSystem,
 ) -> None:
@@ -285,6 +290,7 @@ def test_a_card_rewrite_always_follows_a_check_of_the_changes(
     assert _card_rewrite(system) == (Answer.SAT, Answer.SAT, Answer.UNSAT)
 
 
+@pytest.mark.slow
 def test_billpay_pays_on_the_press_that_shows_the_balance(
     carddemo: CardDemoRun,
 ) -> None:

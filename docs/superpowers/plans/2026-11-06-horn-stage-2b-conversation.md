@@ -119,6 +119,14 @@ Asked on the same encoding, with the fields to keep picked by hand.
     sign-on, the XCTL raises PGMIDERR, the menu's handler (`COADM01C.cbl:270-283`) returns with
     `TRANSID` and the commarea, and the next press reaches the delete. It rests on a CICS
     condition the encoding allows on any command: sign-on not being installed.
+  - So the conversation's programs are now taken to be installed (user's call), and RETURN and
+    SEND MAP never raise PGMIDERR (IBM's condition lists for both have none). The run that
+    remains: the admin menu started cold XCTLs to whatever `CDEMO-TO-PROGRAM` holds, a field
+    with no VALUE clause that it replaces with `'COSGN00C'` only when it is spaces or low-values
+    (`COADM01C.cbl:165-167`). Left-over bytes there name a program that does not exist, the
+    PGMIDERR handler returns with the commarea, and the next press reaches the delete. Whether
+    working storage can hold such bytes on a cold start depends on how the runtime initialises
+    it.
   - Reading the code suggests a real path: `CTLI` started with no commarea sets
     `CDEMO-USRTYP-ADMIN` itself (`COTRTLIC.cbl:115-120`) and its PF3 goes to the admin menu
     (`:603`). The solver has not confirmed it.
