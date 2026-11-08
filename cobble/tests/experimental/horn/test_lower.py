@@ -7,6 +7,7 @@ from cobble.experimental.horn.answer import Answer
 from cobble.experimental.horn.condition import Condition, Digits, Op, Part
 from cobble.experimental.horn.every_test import EVERY_TEST
 from cobble.experimental.horn.kept_tests import KeptTests
+from cobble.experimental.horn.leading_to import leading_to
 from cobble.experimental.horn.lower import lower
 from cobble.experimental.horn.named_fields import NamedFields
 from cobble.experimental.horn.point import Point
@@ -796,6 +797,38 @@ def test_a_test_on_a_field_not_tracked_can_go_either_way() -> None:
         _ask(program, FIELDS, "X-OUT", kept=NamedFields(frozenset({"F"}))),
         _ask(program, FIELDS, "X-OUT", [], ("G",), NamedFields(frozenset({"F"}))),
     ) == (Answer.UNSAT, Answer.UNSAT, Answer.SAT, Answer.SAT)
+
+
+def test_tests_no_path_to_the_goal_runs_through_are_left_out() -> None:
+    """MOVE 'N' TO G, IF G = 'Y' writes X-OUT, then IF F = 'Y' after it: asked
+    about X-OUT, the test on G still proves it dead, while F, tested only where
+    X-OUT can no longer be reached, leaves the state."""
+    program = program_of(
+        _asg(
+            [
+                (
+                    "MAIN",
+                    [
+                        _move_literal("'N'", "G"),
+                        _test("G", "'Y'", [X_OUT]),
+                        _test("F", "'Y'", [_move_literal("'Z'", "G")]),
+                    ],
+                )
+            ],
+            FIELDS,
+        )
+    )
+    node = next(node.id for node in program.cfg.nodes if "X-OUT" in node.writes)
+    goal = Point("PROGA", node)
+    whole, cut = lower(program), lower(program, kept=leading_to(program.cfg, node))
+
+    assert (
+        reaches(whole, goal, (), _clock()).answer,
+        reaches(cut, goal, (), _clock()).answer,
+        len(whole.storages["PROGA"].tracked("F")),
+        len(cut.storages["PROGA"].tracked("F")),
+        len(cut.storages["PROGA"].tracked("G")),
+    ) == (Answer.UNSAT, Answer.UNSAT, 1, 0, 1)
 
 
 def test_a_copy_of_eibcalen_bytes_takes_that_many_and_pads_with_spaces() -> None:

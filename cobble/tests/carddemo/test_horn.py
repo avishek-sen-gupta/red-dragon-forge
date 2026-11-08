@@ -12,6 +12,7 @@ from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_regis
 from cobble.experimental.horn.answer import Answer
 from cobble.experimental.horn.condition import Condition, Digits, Op, Part, Visited
 from cobble.experimental.horn.conversation import converse
+from cobble.experimental.horn.leading_to import leading_to
 from cobble.experimental.horn.lower import HornSystem, lower
 from cobble.experimental.horn.named_fields import NamedFields
 from cobble.experimental.horn.point import Point
@@ -80,8 +81,12 @@ def signon(carddemo: CardDemoRun) -> HornSystem:
 
 
 @pytest.fixture(scope="module")
-def billpay(carddemo: CardDemoRun) -> HornSystem:
-    return _lowered(carddemo, BILLPAY, BILLPAY_WATCHED)
+def billpay(carddemo: CardDemoRun) -> Program:
+    return _program(carddemo, BILLPAY)
+
+
+def _toward(program: Program, goal: Point) -> HornSystem:
+    return lower(program, BILLPAY_WATCHED, kept=leading_to(program.cfg, goal.node))
 
 
 def _ask(
@@ -153,16 +158,20 @@ def test_signon_never_transfers_with_a_low_values_password(signon: HornSystem) -
 
 @pytest.mark.slow
 def test_billpay_proceeds_only_on_a_y_or_lowercase_y_in_the_confirm_field(
-    billpay: HornSystem,
+    billpay: Program,
 ) -> None:
     """COBIL00C.cbl:156 SET CONF-PAY-NO TO TRUE; :173-176 EVALUATE CONFIRMI WHEN 'Y'
     WHEN 'y' SET CONF-PAY-YES TO TRUE; :210 IF CONF-PAY-YES PERFORM
     READ-CXACAIX-FILE (:211). Nothing else sets CONF-PAY-YES."""
+    system = _toward(billpay, CONFIRMED)
     neither = (
         Condition("CONFIRMI", Op.NE, "'Y'"),
         Condition("CONFIRMI", Op.NE, "'y'"),
     )
-    assert (_ask(billpay, CONFIRMED, ()), _ask(billpay, CONFIRMED, neither)) == (
+    assert (
+        _ask(system, CONFIRMED, ()),
+        _ask(system, CONFIRMED, neither),
+    ) == (
         Answer.SAT,
         Answer.UNSAT,
     )
@@ -170,36 +179,54 @@ def test_billpay_proceeds_only_on_a_y_or_lowercase_y_in_the_confirm_field(
 
 @pytest.mark.slow
 def test_billpay_never_proceeds_with_a_blank_or_low_values_account_id(
-    billpay: HornSystem,
+    billpay: Program,
 ) -> None:
     """COBIL00C.cbl:159-160 WHEN ACTIDINI OF COBIL0AI = SPACES OR LOW-VALUES MOVE
     'Y' TO WS-ERR-FLG, and :208 IF NOT ERR-FLG-ON guards :210-211. Nothing between
     clears the flag or writes ACTIDINI."""
+    system = _toward(billpay, CONFIRMED)
     assert (
-        _ask(billpay, CONFIRMED, (Condition("ACTIDINI", Op.EQ, "SPACES"),)),
-        _ask(billpay, CONFIRMED, (Condition("ACTIDINI", Op.EQ, "LOW-VALUES"),)),
+        _ask(
+            system,
+            CONFIRMED,
+            (Condition("ACTIDINI", Op.EQ, "SPACES"),),
+        ),
+        _ask(
+            system,
+            CONFIRMED,
+            (Condition("ACTIDINI", Op.EQ, "LOW-VALUES"),),
+        ),
     ) == (Answer.UNSAT, Answer.UNSAT)
 
 
 @pytest.mark.slow
 def test_billpay_rewrites_the_balance_after_a_failed_transaction_write(
-    billpay: HornSystem,
+    billpay: Program,
 ) -> None:
     """COBIL00C.cbl:233 PERFORM WRITE-TRANSACT-FILE, then :234-235 COMPUTE and
     PERFORM UPDATE-ACCTDAT-FILE with no test between. A successful write clears the
     screen (:523-524, :563-565: CONFIRMI to SPACES); a failed one sets WS-ERR-FLG to
     'Y' (:535, :542) and leaves CONFIRMI as typed. So the REWRITE can run with
     CONFIRMI still 'Y' only after a failed write."""
+    system = _toward(billpay, REWRITE)
     confirmed = Condition("CONFIRMI", Op.EQ, "'Y'")
     assert (
-        _ask(billpay, REWRITE, (confirmed, Condition("WS-ERR-FLG", Op.EQ, "'N'"))),
-        _ask(billpay, REWRITE, (confirmed, Condition("WS-ERR-FLG", Op.EQ, "'Y'"))),
+        _ask(
+            system,
+            REWRITE,
+            (confirmed, Condition("WS-ERR-FLG", Op.EQ, "'N'")),
+        ),
+        _ask(
+            system,
+            REWRITE,
+            (confirmed, Condition("WS-ERR-FLG", Op.EQ, "'Y'")),
+        ),
     ) == (Answer.UNSAT, Answer.SAT)
 
 
 @pytest.mark.slow
 def test_billpay_writes_the_balance_it_read_less_its_leading_digit(
-    billpay: HornSystem,
+    billpay: Program,
 ) -> None:
     """COBIL00C.cbl:224 MOVE ACCT-CURR-BAL (S9(10)V99) TO TRAN-AMT (S9(9)V99), then
     :233 PERFORM WRITE-TRANSACT-FILE before :234 COMPUTE ACCT-CURR-BAL. The move
@@ -208,17 +235,26 @@ def test_billpay_writes_the_balance_it_read_less_its_leading_digit(
     amount equals the balance except its top digit, and differs from it for a
     balance of 1,000,000,000.00 or more. The zones and sign are the compiler's, so
     the bytes themselves may differ."""
+    system = _toward(billpay, WRITE_TRANSACT)
     amount, low = Digits("TRAN-AMT", 1, 11), Digits("ACCT-CURR-BAL", 2, 11)
     assert (
-        _ask(billpay, WRITE_TRANSACT, (Condition(amount, Op.NE, low),)),
-        _ask(billpay, WRITE_TRANSACT, (Condition(amount, Op.EQ, low),)),
         _ask(
-            billpay,
+            system,
+            WRITE_TRANSACT,
+            (Condition(amount, Op.NE, low),),
+        ),
+        _ask(
+            system,
+            WRITE_TRANSACT,
+            (Condition(amount, Op.EQ, low),),
+        ),
+        _ask(
+            system,
             WRITE_TRANSACT,
             (Condition(Digits("ACCT-CURR-BAL", 1, 1), Op.NE, "'0'"),),
         ),
         _ask(
-            billpay,
+            system,
             WRITE_TRANSACT,
             (Condition("TRAN-AMT", Op.NE, Part("ACCT-CURR-BAL", 2, 11)),),
         ),
@@ -227,17 +263,26 @@ def test_billpay_writes_the_balance_it_read_less_its_leading_digit(
 
 @pytest.mark.slow
 def test_billpay_reads_for_update_the_account_the_user_typed(
-    billpay: HornSystem,
+    billpay: Program,
 ) -> None:
     """COBIL00C.cbl:170 MOVE ACTIDINI OF COBIL0AI TO ACCT-ID XREF-ACCT-ID; both
     PERFORMs of READ-ACCTDAT-FILE (:177, :184) follow it, and nothing between
     writes either field; :345-351 EXEC CICS READ INTO(ACCOUNT-RECORD) RIDFLD(ACCT-ID)
     UPDATE, the read whose record the REWRITE at :379 replaces. ACCT-ID is a
     number, so it holds the typed digits under the compiler's zones."""
+    system = _toward(billpay, READ_ACCOUNT)
     key, typed = Digits("ACCT-ID", 1, 11), Digits("ACTIDINI", 1, 11)
     assert (
-        _ask(billpay, READ_ACCOUNT, (Condition(key, Op.NE, typed),)),
-        _ask(billpay, READ_ACCOUNT, (Condition(key, Op.EQ, typed),)),
+        _ask(
+            system,
+            READ_ACCOUNT,
+            (Condition(key, Op.NE, typed),),
+        ),
+        _ask(
+            system,
+            READ_ACCOUNT,
+            (Condition(key, Op.EQ, typed),),
+        ),
     ) == (Answer.UNSAT, Answer.SAT)
 
 

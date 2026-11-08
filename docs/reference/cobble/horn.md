@@ -50,6 +50,10 @@ soundness.
   not kept constrains nothing and its operands are not tracked for it, so any choice of fields
   is sound: `unsat` stays a proof, and a `sat` may be a run the dropped tests would have ruled
   out. Such a run shows which test to keep next: one it passes the wrong way.
+  `leading_to(cfg, node)` keeps only the tests at nodes from which some CFG path reaches `node`.
+  Past any other test `node` is out of reach whichever way it goes, so for a question about
+  `node` within one program the answers are exact, and the bytes only those tests read leave
+  the state. Z3 already drops the rules that cannot reach the query; this drops their bytes too.
 - **Writes**, in the order the fixpoint's transfer lists them for the node:
   - a definite write whose value is one known byte string, or a figurative literal, sets those
     bytes; so does an unsigned integer literal moved into one unsigned integer zoned field that
