@@ -50,6 +50,7 @@ full flag list with `--help`.
 | `cobble-experimental-aggregate-matrix` | fixpoint defs, extents, unified classes | [aggregates](aggregates.md) (experimental) |
 | `cobble-experimental-aggregate-decompose` | aggregate matrix | [aggregates](aggregates.md) (experimental) |
 | `cobble-experimental-datalog-facts` | a run directory | [datalog](datalog.md) (experimental) |
+| `cobble-experimental-reaching-conditions` | one program's ASG | [horn](horn.md) (experimental) |
 
 ## Environment and tools
 

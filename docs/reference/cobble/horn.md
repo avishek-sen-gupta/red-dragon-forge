@@ -5,7 +5,9 @@ Horn clauses, and a question about it answered by Z3's Spacer engine (the `z3-so
 `cobble/experimental/horn/`. Two `.importlinter` contracts keep it removable in one piece:
 `horn-is-a-leaf` lets nothing outside the package import it, and `z3-only-in-horn` lets nothing
 outside it import z3. Deleting the experiment is deleting the package, its tests, those
-contracts, `horn-not-datalog` and the `z3-solver` dependency. There is no command yet: a question is asked from Python, as the CardDemo tests do.
+contracts, `horn-not-datalog` and the `z3-solver` dependency. One command uses it,
+`cobble-experimental-reaching-conditions` (see [Reaching conditions](#reaching-conditions)); any
+other question is asked from Python, as the CardDemo tests do.
 
 ## What it reads
 
@@ -36,6 +38,17 @@ soundness.
   so it stays as the task found it, unless the CFG lists a node as writing it.
 - **Marks.** Each point a question names as marked adds a byte to the state, 0 or 1, set to 1 on
   every edge out of the point. A point left only by a PERFORM, or not at all, is refused.
+- **Outcome marks.** Each TEST node passed as `outcomes` adds a byte: 0 until the test runs, then
+  1 after its TRUE edge and 2 after its FALSE edge, overwritten each time it runs, so it holds the
+  last outcome. A node that is not a TEST is refused.
+- **Entry marks.** Each PERFORM range passed as `entries` adds a byte: 0 until the range is
+  entered, then 1 plus the index of the PERFORM that entered it among the range's call sites
+  sorted by node id. A range has one relation for all its call sites, so without this byte a
+  question about a run through one call site can be answered by a run through another.
+  Outcome and entry marks are 0 when the task starts, whatever else the state holds.
+- **Edges no run takes** (`unfollowed`) are left out: the FLOW edge past a PERFORM whose every
+  way out ends the task, and the dispatch into a handler armed for PGMIDERR alone from a
+  command that cannot raise it (RETURN, SEND MAP).
 - **Tests.** A plain atom compares its left operand's bytes with a literal's bytes (the
   fixpoint's: UTF-8, padded with spaces; a literal longer than the field compares equal only if
   the excess is spaces), a figurative's byte repeated, or the bytes of a tracked field of the
@@ -151,7 +164,9 @@ must have the same length. A literal is compared only with an alphanumeric field
 literal compares by value, which bytes do not encode.
 
 `Visited(point, value)` asks whether a marked point has run, in this task or one that handed its
-commarea on to it.
+commarea on to it. `Took(test, outcome)` asks whether a test with an outcome mark last took
+`outcome` (`Outcome.UNRUN` if it has not run); `Entered(range, call)` whether the last PERFORM into
+a range with an entry mark was the node `call`.
 
 `reaches` asks whether some run arrives at the node, in any context, with the conditions true
 there, before the node's own statement runs. A condition on an untracked field, a `Part`
@@ -160,6 +175,53 @@ watched name that is not exactly one field. The answer is one of:
 
 - `UNSAT`: no run does;
 - `SAT`: some run of the encoding does, which is a real run only as far as the encoding is exact;
-- `UNKNOWN`: Spacer gave up.
+- `UNKNOWN`: Spacer gave up, or ran past the 180-second limit every query runs under
+  (`QUERY_TIMEOUT_MS`).
 
 `Verdict.seconds` is the solver's time, from the clock passed in.
+
+## Reaching conditions
+
+```
+cobble-experimental-reaching-conditions --asg ASG.json --node NODE_ID
+```
+
+The ways one node of one program is reached, as the tests that decide each, with every way Z3
+proves impossible left out. `--asg` is one program's ASG cache file; `--node` a node id of its
+CFG. Progress, one line per query with its answer and seconds, goes to stderr; the answer to
+stdout. An unknown node id exits 1. It runs no JVM.
+
+- **Ways.** In each context (the top level, or a PERFORM range) a node is control dependent on
+  the outcome of a test when that outcome's edge leads only to it and the other can avoid it
+  (post-dominators over the context's followed edges, with one exit for the context's end and
+  every node that leaves it). A way is a chain of such `(test, outcome)` decisions from the
+  context's entry to the node, and for a node in a range, a way to a call site of the range
+  first, one way per call site. A PERFORM that dominates the node and whose range can end the
+  task adds the decisions that bring the range back to its end. At most 64 ways
+  (`MAX_WAYS`); past that the output says the list was cut.
+- **Checking a way.** One `reaches` query on the program lowered with `leading_to(cfg, node)`,
+  with an outcome mark per test of the way and of its route and an entry mark per range it
+  enters: `Took` for each decision, `Entered` for each call site. `UNSAT` drops the way;
+  `UNKNOWN` keeps it, marked "solver gave up".
+- **Route tests.** Every other test on a path from each context's entry to where the way goes
+  next, and every test in a range performed on such a path, at any depth. Each is asked twice,
+  with `Took(test, TRUE)` and with `Took(test, FALSE)`:
+  - both `SAT`: **either way**;
+  - one `UNSAT`: **if it runs**, with the outcome it takes; a run of the way may also skip it;
+  - both `UNSAT`: **never runs on this way**;
+  - either `UNKNOWN`: **solver gave up**. Under a way the solver gave up on, its route tests are
+    not asked, and all show as given up.
+
+```
+COSGN00C READ-USER-SEC-FILE/1.when.0.0.then.5.else.0 (617): 1 way
+  way 0: EIBCALEN == 0 (461) FALSE, EIBAID == DFHENTER (466) TRUE, ERR-FLG-ON (WS-ERR-FLG == 'Y') (519) FALSE, WS-RESP-CD == 0 (602) TRUE, SEC-USR-PWD == WS-USER-PWD (604) TRUE, CDEMO-USRTYP-ADMIN (CDEMO-USER-TYPE == 'A') (611) FALSE
+    if it runs: USERIDI == SPACES (498) FALSE, USERIDI == LOW-VALUES (498) FALSE, PASSWDI == SPACES (498) FALSE, PASSWDI == LOW-VALUES (498) FALSE
+    never runs on this way: %HANDLER[ANY] RAISED (579), %HANDLER[ANY] RAISED (583), %HANDLER[ANY] RAISED (532)
+```
+
+A test is its atom's text and the line its node's span starts on, in the source the ASG was
+parsed from (after copybook expansion). Further lines, when they apply: `dropped: N ways Z3
+proved impossible`, and `(cut at 64 ways: this list is incomplete)`.
+
+On sign-on each query takes under a second. On the largest CardDemo programs a way's check
+can run to the limit: COACTUPC's account REWRITE gives up on its first way at 180 s.

@@ -1,7 +1,7 @@
 """The ways a node is reached, each checked by Z3, with what Z3 proves about every other test on its route."""
 
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 
@@ -14,6 +14,7 @@ from cobble.experimental.horn.point import Point
 from cobble.experimental.horn.program import Program
 from cobble.experimental.horn.reaches import Asked, reaches
 from cobble.experimental.horn.route import route_tests
+from cobble.experimental.horn.verdict import Verdict
 from cobble.experimental.horn.ways import Way, ways_to
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,8 @@ DECIDED: Mapping[tuple[Answer, Answer], tuple[RouteVerdict, Outcome]] = {
 }
 GAVE_UP = (RouteVerdict.GAVE_UP, Outcome.UNRUN)
 
+Ask = Callable[[HornSystem, Point, Sequence[Asked], Callable[[], float]], Verdict]
+
 
 def classified(test: str, true: Answer, false: Answer) -> RouteTest:
     """Both outcomes possible, one only, or neither; or the solver gave up on
@@ -71,11 +74,18 @@ def classified(test: str, true: Answer, false: Answer) -> RouteTest:
     return RouteTest(test, verdict, outcome)
 
 
+def _unchecked(test: str) -> RouteTest:
+    """A route test under a way the solver gave up on: each of its checks asks
+    more than the way, so it is left as given up rather than run to the limit."""
+    return RouteTest(test, *GAVE_UP)
+
+
 @dataclass(frozen=True)
 class Checker:
     program: Program
     node: str
     clock: Callable[[], float]
+    ask: Ask
 
     def checked(self, index: int, way: Way) -> CheckedWay:
         route = route_tests(self.program, way, self.node)
@@ -92,6 +102,8 @@ class Checker:
         answer = self._ask(system, conditions, f"way {index}")
         if answer is Answer.UNSAT:
             return CheckedWay(way, answer, ())
+        if answer is Answer.UNKNOWN:
+            return CheckedWay(way, answer, tuple(_unchecked(test) for test in route))
         return CheckedWay(
             way,
             answer,
@@ -117,19 +129,19 @@ class Checker:
         self, system: HornSystem, conditions: tuple[Asked, ...], what: str
     ) -> Answer:
         point = Point(self.program.cfg.program, self.node)
-        verdict = reaches(system, point, conditions, self.clock)
+        verdict = self.ask(system, point, conditions, self.clock)
         logger.info("%s: %s in %.1fs", what, verdict.answer.name, verdict.seconds)
         return verdict.answer
 
 
 def reaching_conditions(
-    program: Program, node: str, clock: Callable[[], float]
+    program: Program, node: str, clock: Callable[[], float], ask: Ask = reaches
 ) -> Report:
     cfg = program.cfg
     if node not in cfg.node_ids:
         raise ValueError(f"{node} is not a node of {cfg.program}")
     found = ways_to(program, node)
-    checker = Checker(program, node, clock)
+    checker = Checker(program, node, clock, ask)
     checked = tuple(checker.checked(n, way) for n, way in enumerate(found.ways))
     kept = tuple(way for way in checked if way.answer is not Answer.UNSAT)
     return Report(cfg.program, node, kept, len(checked) - len(kept), found.cut)

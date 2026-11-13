@@ -36,6 +36,7 @@ Run every tool from `cobble/` with `uv run --no-sync`. `$RUN` below is the outpu
 - `cobble-trace-query {backward|forward} PROGRAM.FIELD --fixpoint $RUN/fixpoint --links $RUN/combine/links.jsonl --extents $RUN/extents.jsonl --depth N`: provenance chains across programs.
 - `cobble-dataflow-fixpoint-query {extents|writers|readers|reaches|reached-by|contains|within|overlapping} SUBJECT --fixpoint-dir $RUN/fixpoint --extents $RUN/extents.jsonl`: byte-interval questions; `writers` lists every write with its site and definers.
 - `cobble-srccfg-query {provenance|guards|coassign} SUBJECT --cfg $RUN/srccfg/cfg-P.jsonl`: control-flow questions within one program.
+- `cobble-experimental-reaching-conditions --asg <ASG> --node <ID>`: the ways one CFG node is reached, each a list of `test (line) TRUE|FALSE` decisions Z3 could not rule out; ways Z3 proved impossible are counted as dropped. Under each way, "either way" tests do not matter, "if it runs" tests can only go the stated way, and "solver gave up" means unproved.
 - `cobble-access-query FIELD --accesses $RUN/accesses/P.jsonl --extents $RUN/extents.jsonl`: where a field is read or tested.
 - `cobble-experimental-partition-copies --graph $RUN/graph.jsonl --extents $RUN/extents.jsonl --width N --start NODE_ID [--start …]`: every place holding all `N` bytes of a value, followed byte by byte. Starts are node ids from `graph.jsonl`, usually file slots such as `AWS.M2.CARDDEMO.CARDDATA.VSAM.KSDS[0:16]`; quote them, since `[…]` is a glob to the shell.
 

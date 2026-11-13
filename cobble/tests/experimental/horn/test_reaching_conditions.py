@@ -1,7 +1,11 @@
+from collections.abc import Callable, Sequence
+
 import pytest
 from cobble.dataflow.srccfg.cfg import NodeKind
 from cobble.experimental.horn.answer import Answer
+from cobble.experimental.horn.lower import HornSystem
 from cobble.experimental.horn.outcome import Outcome
+from cobble.experimental.horn.point import Point
 from cobble.experimental.horn.reaching_conditions import (
     CheckedWay,
     Report,
@@ -10,6 +14,8 @@ from cobble.experimental.horn.reaching_conditions import (
     classified,
     reaching_conditions,
 )
+from cobble.experimental.horn.reaches import Asked
+from cobble.experimental.horn.verdict import Verdict
 from cobble.experimental.horn.ways import Decision, Way
 from tests.experimental.horn.asg_builder import (
     STOP,
@@ -279,4 +285,35 @@ def test_a_route_test_is_classified_by_its_two_answers() -> None:
         RouteTest("T", RouteVerdict.NEVER_RUNS, Outcome.UNRUN),
         RouteTest("T", RouteVerdict.GAVE_UP, Outcome.UNRUN),
         RouteTest("T", RouteVerdict.GAVE_UP, Outcome.UNRUN),
+    )
+
+
+def test_a_way_the_solver_gave_up_on_leaves_its_route_unchecked() -> None:
+    p = program([("MAIN", [if_("F", "'Y'", [move_literal("'Y'", "G")]), X_OUT, STOP])])
+    node = writer(p, "X-OUT")
+
+    def ask(
+        system: HornSystem,
+        point: Point,
+        conditions: Sequence[Asked],
+        clock: Callable[[], float],
+    ) -> Verdict:
+        return Verdict(Answer.UNKNOWN if not conditions else Answer.SAT, 0.0)
+
+    assert reaching_conditions(p, node, clock(), ask) == Report(
+        "PROGA",
+        node,
+        (
+            CheckedWay(
+                Way((), ()),
+                Answer.UNKNOWN,
+                (
+                    RouteTest(
+                        branch_on(p, "F", "'Y'"), RouteVerdict.GAVE_UP, Outcome.UNRUN
+                    ),
+                ),
+            ),
+        ),
+        0,
+        False,
     )
