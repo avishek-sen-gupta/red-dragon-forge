@@ -317,3 +317,59 @@ def test_a_way_the_solver_gave_up_on_leaves_its_route_unchecked() -> None:
         0,
         False,
     )
+
+
+def test_a_test_a_way_passes_twice_is_checked_by_its_last_outcome() -> None:
+    p = program(
+        [
+            ("MAIN", [perform("CHK"), perform("CHK"), X_OUT, STOP]),
+            (
+                "CHK",
+                [
+                    if_(
+                        "F",
+                        "'A'",
+                        [move_literal("'C'", "F"), if_("G", "'Z'", [STOP])],
+                        [if_("G", "'Y'", [STOP])],
+                    )
+                ],
+            ),
+        ]
+    )
+    node = writer(p, "X-OUT")
+    f, gz, gy = (
+        branch_on(p, "F", "'A'"),
+        branch_on(p, "G", "'Z'"),
+        branch_on(p, "G", "'Y'"),
+    )
+    report = reaching_conditions(p, node, clock())
+
+    assert (
+        tuple(
+            (tuple((d.test, d.outcome) for d in w.way.decisions), w.answer)
+            for w in report.ways
+        ),
+        report.dropped,
+    ) == (
+        (
+            (
+                (
+                    (f, Outcome.FALSE),
+                    (gy, Outcome.FALSE),
+                    (f, Outcome.FALSE),
+                    (gy, Outcome.FALSE),
+                ),
+                Answer.SAT,
+            ),
+            (
+                (
+                    (f, Outcome.TRUE),
+                    (gz, Outcome.FALSE),
+                    (f, Outcome.FALSE),
+                    (gy, Outcome.FALSE),
+                ),
+                Answer.SAT,
+            ),
+        ),
+        2,
+    )

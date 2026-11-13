@@ -3,8 +3,8 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 
 import pytest
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
-from cobble.experimental.horn.answer import Answer
 from cobble.dataflow.srccfg.cfg import EdgeKind, NodeKind
+from cobble.experimental.horn.answer import Answer
 from cobble.experimental.horn.condition import (
     Condition,
     Digits,
@@ -14,6 +14,7 @@ from cobble.experimental.horn.condition import (
     Took,
 )
 from cobble.experimental.horn.context import perform_edge, performed
+from cobble.experimental.horn.entries import entries_of
 from cobble.experimental.horn.every_test import EVERY_TEST
 from cobble.experimental.horn.kept_tests import KeptTests
 from cobble.experimental.horn.leading_to import leading_to
@@ -23,6 +24,7 @@ from cobble.experimental.horn.outcome import Outcome
 from cobble.experimental.horn.point import Point
 from cobble.experimental.horn.program import Program, program_of
 from cobble.experimental.horn.reaches import reaches
+from cobble.experimental.horn.terms import constant
 from cobol_asg.asg_types import CobolASG
 
 Statement = Mapping[str, object]
@@ -946,3 +948,37 @@ def test_an_entry_mark_names_the_call_site_that_entered_the_range() -> None:
         return reaches(system, point, (Entered(sub, call),), _clock()).answer
 
     assert (ask(then_call), ask(else_call)) == (Answer.SAT, Answer.UNSAT)
+
+
+def test_an_entry_mark_numbers_more_call_sites_than_a_byte_holds() -> None:
+    calls = 256
+    data = (*FIELDS, _x("Y-OUT"))
+    program = program_of(
+        _asg(
+            [
+                (
+                    "MAIN",
+                    [
+                        *(_perform("SUB") for _ in range(calls)),
+                        _move("'y'", "Y-OUT"),
+                        STOP,
+                    ],
+                ),
+                ("SUB", [X_OUT]),
+            ],
+            data,
+        )
+    )
+    sites = sorted(n.id for n in program.cfg.nodes if perform_edge(program.cfg, n.id))
+    sub = performed(program.cfg, perform_edge(program.cfg, sites[0])[0])
+    entries = entries_of(program.cfg, sub)
+    system = lower(program, entries=(sub,))
+    point = Point("PROGA", _writer(program, "Y-OUT"))
+    first = Entered(sub, "MAIN/0")
+
+    assert (
+        len(sites),
+        entries.width,
+        entries.value(sites[-1]).eq(constant(b"\x01\x00")),
+        reaches(system, point, (first,), _clock()).answer,
+    ) == (calls, 2, True, Answer.UNSAT)

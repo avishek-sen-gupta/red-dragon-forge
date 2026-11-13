@@ -430,8 +430,7 @@ def _entered(
     if not marked:
         return now
     at = len(now) - len(storage.entries) + storage.entered(callee)
-    value = constant(bytes((marked[0].value(call),)))
-    return (*now[:at], value, *now[at + 1 :])
+    return (*now[:at], marked[0].value(call), *now[at + 1 :])
 
 
 def _resume(
@@ -472,11 +471,10 @@ def _start(lowering: Lowering) -> z3.BoolRef:
     v = lowering.vars
     cfg = lowering.program.cfg
     storage = lowering.storage
-    unset = (
-        *(storage.outcome(test, v.now) for test in storage.outcomes),
-        *(storage.entry(e.range, v.now) for e in storage.entries),
+    body = (
+        *(equal(storage.outcome(test, v.now), UNSET) for test in storage.outcomes),
+        *(equal(storage.entry(e.range, v.now), e.unset()) for e in storage.entries),
     )
-    body = tuple(equal(byte, UNSET) for byte in unset)
     return _rule(lowering, body, lowering.at(top(cfg), cfg.entry, v.entry, v.now))
 
 

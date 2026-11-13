@@ -89,14 +89,15 @@ class Checker:
 
     def checked(self, index: int, way: Way) -> CheckedWay:
         route = route_tests(self.program, way, self.node)
+        last = {d.test: d.outcome for d in way.decisions}
         system = lower(
             self.program,
             kept=leading_to(self.program.cfg, self.node),
-            outcomes=(*(d.test for d in way.decisions), *route),
+            outcomes=(*last, *route),
             entries=tuple(dict.fromkeys(context for context, _ in way.calls)),
         )
         conditions = (
-            *(Took(d.test, d.outcome) for d in way.decisions),
+            *(Took(test, outcome) for test, outcome in last.items()),
             *(Entered(context, call) for context, call in way.calls),
         )
         answer = self._ask(system, conditions, f"way {index}")

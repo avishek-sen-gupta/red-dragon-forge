@@ -52,7 +52,7 @@ class Storage:
             *(segment.length for segment in self.segments),
             *((CALEN_BYTES,) if self.eib else ()),
             *((MARK_BYTES,) * (len(self.marks) + len(self.outcomes))),
-            *((MARK_BYTES,) * len(self.entries)),
+            *(entries.width for entries in self.entries),
         )
 
     def calen(self, state: Sequence[z3.BitVecRef]) -> z3.BitVecRef:

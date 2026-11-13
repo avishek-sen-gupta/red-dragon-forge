@@ -52,8 +52,7 @@ def _marked(
             storage.outcome(condition.test, state), outcome_byte(condition.outcome)
         )
     entries = storage.entries[storage.entered(condition.range)]
-    value = constant(bytes((entries.value(condition.call),)))
-    return equal(storage.entry(condition.range, state), value)
+    return equal(storage.entry(condition.range, state), entries.value(condition.call))
 
 
 def _condition(
