@@ -575,4 +575,6 @@ fileignoreconfig:
   checksum: 5a8fbad70fedb196e1b478305d0c8ef6ccb3971028cd60cb60149bfb892a4e1c
 - filename: docs/presentation/artifacts/srccfg/reaching-conditions-COSGN00C-xctl.txt
   checksum: 8450a33e6b465c6a7f16470803e703c1428c1f054dd63d4ee5acb65a79bc8c10
+- filename: docs/superpowers/plans/2026-11-13-reaching-conditions.md
+  checksum: 011b6e2881d7458f955b84fd9b2538acb4f4125975457bbad3ed1d82794507f9
 version: "1.0"
