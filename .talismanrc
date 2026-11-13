@@ -561,4 +561,6 @@ fileignoreconfig:
   checksum: 95e8a97a9964729d4d4aa65eb96f47fd43c76cada9e24176af8b82b43acca522
 - filename: docs/superpowers/plans/2026-11-05-horn-stage-2a-copies.md
   checksum: fed19850d8d45fec574a6ef6dda8d5d76f2a90d11c59fc955afc58933a6c437f
+- filename: docs/superpowers/specs/cobble/2026-11-13-reaching-conditions-design.md
+  checksum: dd3a16a81951a07d0c65053c29a5f6ddde69e27ccfc396a15366606973e5ebd3
 version: "1.0"
