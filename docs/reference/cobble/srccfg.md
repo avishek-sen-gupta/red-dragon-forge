@@ -77,22 +77,20 @@ field, with an empty `entry`.
 ## cobble-srccfg-query
 
 ```
-cobble-srccfg-query {provenance,guards,coassign} SUBJECT --cfg CFG
-    [--min-tier {SAME_STATEMENT,SAME_SOURCE,SAME_GUARD,SAME_PARAGRAPH}]
-    [--max-depth N] [--max-paths N]
+cobble-srccfg-query {provenance,coassign} FIELD --cfg CFG
+    [--min-tier {SAME_STATEMENT,SAME_SOURCE,SAME_PARAGRAPH}] [--max-depth N]
 ```
 
 | Query | Subject | Answer |
 |---|---|---|
-| `guards` | node id | the conditions on each path reaching the node |
-| `provenance` | field name | what the field's value derives from, and what it feeds, by name |
-| `coassign` | field name | fields assigned together with it, at or above `--min-tier` |
+| `provenance` | field name | what the field's value derives from and what it feeds, by name: each writer or reader as `NODE VERB`, then the fields it reads or writes |
+| `coassign` | field name | fields assigned together with it, at or above `--min-tier`: by the same statement, from a shared source in the same paragraph, or in the same paragraph |
 
-`--max-depth` bounds how far `provenance` follows each direction. `--max-paths` caps the paths
-enumerated for reaching conditions (default 64). A CFG file holds every program the seed reaches,
-and a node id can exist in more than one, so `guards` prints one block per program, headed
-`PROGRAM NODE: N path(s)`. The queries run per program: a field crossing
-a commarea stops at the boundary. Cross-program flow is the [field dataflow](field-dataflow.md).
+`--max-depth` bounds how far `provenance` follows each direction. A CFG file holds every program
+the seed reaches, and each query reports per program. The queries run per program: a field
+crossing a commarea stops at the boundary. Cross-program flow is the
+[field dataflow](field-dataflow.md). The conditions under which a node is reached are
+`cobble-experimental-reaching-conditions` (see [horn](horn.md#reaching-conditions)).
 
 ## cobble-srccfg-reachability-walk
 

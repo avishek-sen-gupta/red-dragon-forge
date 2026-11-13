@@ -16,6 +16,7 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
+import networkx as nx
 import pytest
 
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
@@ -27,7 +28,6 @@ from cobble.dataflow.srccfg.rows.cfg_row import CFG_ROWS
 from cobble.dataflow.srccfg.config import load_srccfg_build_config
 from cobble.dataflow.srccfg.cfg import EdgeKind, NodeKind
 from cobble.dataflow.srccfg.dataflow import (
-    reaching_conditions,
     reaching_definitions,
     with_handler_edges,
 )
@@ -110,14 +110,6 @@ def test_every_assign_node_writes_or_reads_something(corpus_asg_paths) -> None:
         assert empty == [], f"{cfg.program}: {empty[:3]}"
 
 
-def test_reaching_conditions_terminate_on_every_member(corpus_asg_paths) -> None:
-    """The path walk is capped, so this is really a test that the cap is reached
-    rather than the walk diverging -- a member with deep nesting is where an
-    unbounded walk stops being a theory."""
-    for _, cfg in _cfgs(corpus_asg_paths):
-        assert reaching_conditions(cfg).guards
-
-
 def test_reaching_definitions_terminate_on_every_member(corpus_asg_paths) -> None:
     """The fixpoint has no iteration cap, so a member with a loop through a PERFORM
     range is what would hang it."""
@@ -125,26 +117,32 @@ def test_reaching_definitions_terminate_on_every_member(corpus_asg_paths) -> Non
         assert reaching_definitions(cfg)
 
 
-def test_most_members_have_at_least_one_guarded_assignment(corpus_asg_paths) -> None:
-    """The aggregate the design rests on: guards are the common case, not the exotic
-    one. A pass that produced almost none would still satisfy every unit test above.
-    """
-    guarded = 0
-    total = 0
-    for _, cfg in _cfgs(corpus_asg_paths):
-        total = total + 1
-        reaching = reaching_conditions(cfg)
-        if any(
-            any(guard for guard in reaching.guards.get(node.id, ()))
-            for node in cfg.nodes
-            if node.kind == NodeKind.ASSIGN
-        ):
-            guarded = guarded + 1
+def _guarded(cfg) -> bool:
+    """Whether some assignment has a TEST on a chain of edges before it."""
+    graph = nx.DiGraph()
+    graph.add_nodes_from(node.id for node in cfg.nodes)
+    graph.add_edges_from((edge.source, edge.target) for edge in cfg.edges)
+    tests = frozenset(node.id for node in cfg.nodes if node.kind == NodeKind.TEST)
+    return any(
+        tests & nx.ancestors(graph, node.id)
+        for node in cfg.nodes
+        if node.kind == NodeKind.ASSIGN
+    )
 
-    if total == 0:
+
+def test_most_members_have_at_least_one_guarded_assignment(corpus_asg_paths) -> None:
+    """The aggregate the design rests on: conditional writes are the common case,
+    not the exotic one. A pass that produced almost no tests would still satisfy
+    every unit test above."""
+    cfgs = tuple(cfg for _, cfg in _cfgs(corpus_asg_paths))
+    if not cfgs:
         pytest.skip("the configured members list is empty; nothing to aggregate over")
 
-    assert guarded > total // 2, f"{guarded} of {total} members had a guarded write"
+    guarded = sum(1 for cfg in cfgs if _guarded(cfg))
+
+    assert (
+        guarded > len(cfgs) // 2
+    ), f"{guarded} of {len(cfgs)} members had a guarded write"
 
 
 def test_handler_resolution_adds_no_dangling_edge(corpus_asg_paths) -> None:

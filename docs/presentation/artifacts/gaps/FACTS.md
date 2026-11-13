@@ -163,8 +163,7 @@ From `cobble/docs/outstanding-issues.md` (section headings, status as written) a
 - `red-dragon-forge-9dr` (P1) BMS screen text the symbolic copybooks cannot carry
 - `red-dragon-forge-9fa` (P1) field-dataflow fixpoint that hits its dequeue cap reports
   coverage as if it converged; `red-dragon-forge-1f5` (P1) fixpoint height
-- `red-dragon-forge-z8r` srccfg reaching_conditions does not finish in 10 min on the largest
-  estate members; `red-dragon-forge-3sv` dataflow latency superlinear in write count
+- `red-dragon-forge-3sv` dataflow latency superlinear in write count
 - `red-dragon-forge-7ow` no source line positions on dataflow answers
 - `forge-0sp` (P1) one unresolved JCL symbol in a DSN loses the whole job's graph;
   `forge-ptc` (P1) `expr_from_dict` rejects three expression kinds, losing a whole program's ASG
@@ -191,5 +190,5 @@ From `cobble/docs/outstanding-issues.md` (section headings, status as written) a
    Db2 harness stability (`forge-zka`).
 5. **Estate onboarding / cobble:** robust ingest (`forge-0sp`, `forge-ptc`,
    `red-dragon-forge-5qb`), dataflow scale and honesty (`red-dragon-forge-9fa`, `-1f5`,
-   `-z8r`, `-3sv`), source positions (`-7ow`), BMS screen text (`-9dr`), no-CSD synthesis
+   `-3sv`), source positions (`-7ow`), BMS screen text (`-9dr`), no-CSD synthesis
    (`forge-jqx`).

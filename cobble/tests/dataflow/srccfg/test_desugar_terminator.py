@@ -20,10 +20,10 @@ from __future__ import annotations
 
 import pytest
 
+import networkx as nx
+
 from cobble.dataflow.srccfg.build import build_program, end_id, label_id
 from cobble.dataflow.srccfg.cfg import EdgeKind
-from cobble.dataflow.srccfg.dataflow import guards_of, reaching_conditions
-from cobble.dataflow.srccfg.query import guards_report
 
 TERMINATORS = ("STOP_RUN", "GOBACK", "EXIT_PROGRAM")
 
@@ -61,6 +61,14 @@ def _writer_of(cfg, field: str) -> str:
     return next(node.id for node in cfg.nodes if field in node.writes)
 
 
+def _reached(cfg) -> frozenset[str]:
+    """Every node some chain of edges leads to from the entry."""
+    graph = nx.DiGraph()
+    graph.add_nodes_from(node.id for node in cfg.nodes)
+    graph.add_edges_from((edge.source, edge.target) for edge in cfg.edges)
+    return frozenset({cfg.entry, *nx.descendants(graph, cfg.entry)})
+
+
 @pytest.mark.parametrize("terminator", TERMINATORS)
 def test_a_terminator_has_no_successor(program_of, terminator: str) -> None:
     cfg = build_program(program_of([{"type": terminator}, _move("'A'", "WS-AFTER")]))
@@ -77,7 +85,7 @@ def test_the_statement_after_a_terminator_is_reached_by_nothing(
     cfg = build_program(program_of([{"type": terminator}, _move("'A'", "WS-AFTER")]))
 
     assert cfg.predecessors("MAIN/1") == ()
-    assert guards_of(reaching_conditions(cfg), "MAIN/1") == ()
+    assert "MAIN/1" not in _reached(cfg)
 
 
 @pytest.mark.parametrize("terminator", TERMINATORS)
@@ -100,23 +108,22 @@ def test_a_paragraph_after_one_that_stops_is_not_reached(
         asg_of(_two_paragraphs([_move("'F'", "WS-A"), {"type": terminator}]))
     )
 
-    reaching = reaching_conditions(cfg)
+    reached = _reached(cfg)
 
-    assert guards_of(reaching, label_id("2000-SECOND")) == ()
-    assert guards_of(reaching, _writer_of(cfg, "WS-SECOND")) == ()
+    assert label_id("2000-SECOND") not in reached
+    assert _writer_of(cfg, "WS-SECOND") not in reached
 
 
-def test_an_unreached_paragraph_is_reported_unreachable_and_not_abandoned(
-    asg_of,
-) -> None:
-    """The distinction the cascade used to make impossible. No guards means one of
-    two very different things, and only a node the walk did not ABANDON may be
-    reported as code the program cannot reach."""
+def test_an_unreached_paragraph_has_no_edge_into_it(asg_of) -> None:
+    """The distinction the cascade used to make impossible: a paragraph after one
+    that stops is dead code, with no edge from the paragraph before it."""
     cfg = build_program(asg_of(_two_paragraphs([{"type": "GOBACK"}])))
-    second = _writer_of(cfg, "WS-SECOND")
 
-    assert second not in reaching_conditions(cfg).abandoned
-    assert any("unreachable from PROGA" in line for line in guards_report(cfg, second))
+    assert cfg.predecessors(label_id("2000-SECOND")) == (
+        cfg.successors(end_id("1000-FIRST"))
+    )
+    assert cfg.predecessors(end_id("1000-FIRST")) == ()
+    assert _writer_of(cfg, "WS-SECOND") not in _reached(cfg)
 
 
 def test_a_terminator_in_one_arm_leaves_the_other_arm_falling_through(asg_of) -> None:
@@ -137,11 +144,13 @@ def test_a_terminator_in_one_arm_leaves_the_other_arm_falling_through(asg_of) ->
         )
     )
 
-    guards = guards_of(reaching_conditions(cfg), _writer_of(cfg, "WS-SECOND"))
+    test = next(node.id for node in cfg.nodes if node.id.endswith("#test"))
+    into_end = tuple(edge.source for edge in cfg.predecessors(end_id("1000-FIRST")))
+    false_arm = next(e.target for e in cfg.successors(test) if e.kind is EdgeKind.FALSE)
 
-    assert [[kind.value for _, kind in guard] for guard in guards] == [
-        [EdgeKind.FALSE.value]
-    ]
+    assert into_end == (_writer_of(cfg, "WS-ELSE"),)
+    assert false_arm == _writer_of(cfg, "WS-ELSE")
+    assert _writer_of(cfg, "WS-SECOND") in _reached(cfg)
 
 
 def test_plain_exit_still_falls_through(asg_of) -> None:
@@ -154,7 +163,7 @@ def test_plain_exit_still_falls_through(asg_of) -> None:
     assert [(e.target, e.kind) for e in cfg.successors(end_id("1000-FIRST"))] == [
         (label_id("2000-SECOND"), EdgeKind.FALLTHRU)
     ]
-    assert guards_of(reaching_conditions(cfg), _writer_of(cfg, "WS-SECOND")) == ((),)
+    assert _writer_of(cfg, "WS-SECOND") in _reached(cfg)
 
 
 def test_performing_a_paragraph_that_stops_still_reaches_the_next_statement(
@@ -184,5 +193,10 @@ def test_performing_a_paragraph_that_stops_still_reaches_the_next_statement(
         )
     )
 
+    after = _writer_of(cfg, "WS-AFTER")
+
     assert cfg.predecessors(end_id("HANDLER")) == ()
-    assert guards_of(reaching_conditions(cfg), _writer_of(cfg, "WS-AFTER")) == ((),)
+    assert [(e.target, e.kind) for e in cfg.successors("MAIN/0")] == [
+        (label_id("HANDLER"), EdgeKind.PERFORM),
+        (after, EdgeKind.FLOW),
+    ]

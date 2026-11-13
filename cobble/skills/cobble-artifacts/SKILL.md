@@ -21,7 +21,7 @@ Run every tool from `cobble/` with `uv run --no-sync`. `$RUN` below is the outpu
 | `combine/links.jsonl` | every `CALL`/`LINK`/`XCTL`: caller and callee extents of the shared area | which bytes cross which program boundary, in each direction |
 | `combine/targets.jsonl` | dynamic call/file targets with their candidate values | what a `CALL WS-PGM` or `FILE(WS-FILE)` can resolve to |
 | `knowledge-graph.jsonl` (`.html`) | programs, copybooks, JCL jobs and steps, DDs, datasets, CSD transactions and files, in-stream control cards (`IDCAMS DEFINE`) | which job runs which program, which DD is which dataset, which transaction starts which program |
-| `srccfg/cfg-<P>.jsonl` (`.html`) | one program's control-flow graph and its transitive closure: nodes with writes and reads, guards | which paragraphs run, under which conditions, in which order |
+| `srccfg/cfg-<P>.jsonl` (`.html`) | one program's control-flow graph and its transitive closure: nodes with writes and reads, tests and their TRUE/FALSE edges | which paragraphs run, and in which order |
 | `accesses/<P>.jsonl` | every place a field is read or tested (`IF`/`EVALUATE`), with bytes | where a field is examined, including tests that move nothing |
 | `depgraph/` | name-level dependency graph, one node per name | quick, coarse "what feeds what" across a program |
 | `bms/metadata.json`, `bms/*.html` | every screen field: map, name, length, position, attributes, label (one JSON object per line, one per mapset: `{"mapset", "maps": [{"map_name", "fields": [{"name", "length", "attrb", "pos", "screen_label"}]}]}`; a program's output field is the name plus `O`, its input field the name plus `I`) | which program field a label on a screen is |
@@ -35,8 +35,8 @@ Run every tool from `cobble/` with `uv run --no-sync`. `$RUN` below is the outpu
 
 - `cobble-trace-query {backward|forward} PROGRAM.FIELD --fixpoint $RUN/fixpoint --links $RUN/combine/links.jsonl --extents $RUN/extents.jsonl --depth N`: provenance chains across programs.
 - `cobble-dataflow-fixpoint-query {extents|writers|readers|reaches|reached-by|contains|within|overlapping} SUBJECT --fixpoint-dir $RUN/fixpoint --extents $RUN/extents.jsonl`: byte-interval questions; `writers` lists every write with its site and definers.
-- `cobble-srccfg-query {provenance|guards|coassign} SUBJECT --cfg $RUN/srccfg/cfg-P.jsonl`: control-flow questions within one program.
-- `cobble-experimental-reaching-conditions --asg <ASG> --node <ID>`: the ways one CFG node is reached, each a list of `test (line) TRUE|FALSE` decisions Z3 could not rule out; ways Z3 proved impossible are counted as dropped. Under each way, "either way" tests do not matter, "if it runs" tests can only go the stated way, and "solver gave up" means unproved.
+- `cobble-srccfg-query {provenance|coassign} FIELD --cfg $RUN/srccfg/cfg-P.jsonl`: a field's writers and readers, and the fields written beside it, within one program.
+- `cobble-experimental-reaching-conditions --asg <P.json from the ASG cache, e.g. cobble/out-parsed> --node <ID>`: the ways one CFG node is reached, each a list of `test (line) TRUE|FALSE` decisions Z3 could not rule out; ways Z3 proved impossible are counted as dropped. Under each way, "either way" tests do not matter, "if it runs" tests can only go the stated way, and "solver gave up" means unproved.
 - `cobble-access-query FIELD --accesses $RUN/accesses/P.jsonl --extents $RUN/extents.jsonl`: where a field is read or tested.
 - `cobble-experimental-partition-copies --graph $RUN/graph.jsonl --extents $RUN/extents.jsonl --width N --start NODE_ID [--start …]`: every place holding all `N` bytes of a value, followed byte by byte. Starts are node ids from `graph.jsonl`, usually file slots such as `AWS.M2.CARDDEMO.CARDDATA.VSAM.KSDS[0:16]`; quote them, since `[…]` is a glob to the shell.
 

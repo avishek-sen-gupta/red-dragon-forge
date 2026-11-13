@@ -180,7 +180,7 @@ fileignoreconfig:
 - filename: docs/presentation/artifacts/cobble/screens/COUSR2A.html
   checksum: 16b659c283be7a514b0dd183ac6c79fd7ded305a3269b3e40214f811f402fc32
 - filename: docs/presentation/artifacts/srccfg/FACTS.md
-  checksum: dabb96626d2adf26cae9686af707142da3ec0e9e9dec18b0b8acdc6fb0777d75
+  checksum: 8b966b0aa1427f66233d79f761f7d534d7dc8242e8a65f052d0aff851d0b452c
 - filename: docs/presentation/artifacts/sql/cursor-sqb-run.txt
   checksum: ece6d7c2424da7f11c137a806c49d53ab3bd20639da504491d9cb74ac1cdb8d1
 - filename: docs/presentation/artifacts/cics/turns.jsonl
@@ -462,7 +462,7 @@ fileignoreconfig:
 - filename: cicada/cics/aid_handling.py
   checksum: ba44fc0466d1b89b3e0cae478741b7ea25c140489f097415839b815fd256c9bc
 - filename: docs/presentation/index.html
-  checksum: f393f594c48c11263cd7f0733862bc326f941e457d1d66b30e4a902663f24a66
+  checksum: b850ce0337b61a855f412f5ac53efb9d4253d8a12dc38b5445f139fb8f2d3d6e
 - filename: cobble/cobble/experimental/aggregates/io.py
   checksum: 721e16fe12122ae919b113f6305285f7bad21cd36c6ba62eed332f55618a83f2
 - filename: cobble/cobble/experimental/aggregates/decompose.py
@@ -573,4 +573,6 @@ fileignoreconfig:
   checksum: 9ff7057224d941278fb4ee51db84103c7bfe1a6e043541d20bd1f31016757be4
 - filename: docs/reference/cobble/horn.md
   checksum: 5a8fbad70fedb196e1b478305d0c8ef6ccb3971028cd60cb60149bfb892a4e1c
+- filename: docs/presentation/artifacts/srccfg/reaching-conditions-COSGN00C-xctl.txt
+  checksum: 8450a33e6b465c6a7f16470803e703c1428c1f054dd63d4ee5acb65a79bc8c10
 version: "1.0"

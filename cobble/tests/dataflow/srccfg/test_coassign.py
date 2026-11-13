@@ -1,4 +1,4 @@
-"""Which fields are written together with this one, in four tiers.
+"""Which fields are written together with this one, in three tiers.
 
 Tiers rather than one answer because the strong relation is rare and the weak one is
 everywhere: on a real corpus, "same paragraph" makes a 300-line paragraph's every
@@ -12,16 +12,7 @@ from cobol_asg.asg_types import CobolASG
 
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.srccfg.build import build_program
-from cobble.dataflow.srccfg.coassign import (
-    NO_ROUTE,
-    SUBSET,
-    Caveat,
-    Tier,
-    caveats,
-    co_assigned,
-    guard_signature,
-)
-from cobble.dataflow.srccfg.dataflow import Reaching, reaching_conditions
+from cobble.dataflow.srccfg.coassign import Tier, co_assigned
 
 
 def _asg(paragraphs: list[dict]) -> CobolASG:
@@ -64,7 +55,7 @@ def _rel(left: str, right: str) -> dict:
 
 
 def _for(cfg, field: str, **kwargs):
-    return co_assigned(cfg, field, reaching_conditions(cfg), **kwargs)
+    return co_assigned(cfg, field, **kwargs)
 
 
 def _fields(candidates) -> dict:
@@ -125,9 +116,7 @@ def test_the_shared_source_is_named_on_the_candidate() -> None:
     assert candidate.shared == ("WS-IN",)
 
 
-def test_two_fields_under_the_same_guard_in_different_paragraphs_are_tier_three() -> (
-    None
-):
+def test_two_fields_in_different_paragraphs_are_not_candidates() -> None:
     cfg = build_program(
         _asg(
             [
@@ -147,10 +136,10 @@ def test_two_fields_under_the_same_guard_in_different_paragraphs_are_tier_three(
         )
     )
 
-    assert _fields(_for(cfg, "WS-A")).get("WS-B") == Tier.SAME_GUARD
+    assert _fields(_for(cfg, "WS-A")) == {}
 
 
-def test_two_unrelated_fields_in_one_paragraph_are_tier_four() -> None:
+def test_two_unrelated_fields_in_one_paragraph_are_tier_three() -> None:
     """The weakest tier is still reported, because on the corpus it is often the only
     evidence there is -- and its weakness has to be visible in the answer rather than
     argued about afterwards."""
@@ -169,9 +158,8 @@ def test_two_unrelated_fields_in_one_paragraph_are_tier_four() -> None:
 
 
 def test_a_pair_is_reported_once_at_its_strongest_tier() -> None:
-    """Two fields in one paragraph, sharing a source, under one guard, satisfy tiers
-    2, 3 and 4 at once. Three rows for one pair would make every count meaningless.
-    """
+    """Two fields in one paragraph, sharing a source, satisfy tiers 2 and 3 at once.
+    Two rows for one pair would make every count meaningless."""
     cfg = build_program(
         _asg(
             [
@@ -293,31 +281,9 @@ def test_two_writes_of_one_field_in_two_paragraphs_find_candidates_in_both() -> 
     assert set(_fields(_for(cfg, "WS-A"))) == {"WS-B", "WS-C"}
 
 
-def test_guard_signature_is_order_insensitive_and_covers_every_path() -> None:
-    """A node reached under two guards has a signature of two sets, so it matches
-    another node only when both are reached the same ways."""
-    cfg = build_program(
-        _asg(
-            [
-                {
-                    "name": "MAIN",
-                    "statements": [
-                        _if(_rel("WS-FLAG-A", "'Y'"), [_move("'1'", "WS-A")], []),
-                        _move("'2'", "WS-AFTER"),
-                    ],
-                }
-            ]
-        )
-    )
-    reaching = reaching_conditions(cfg)
-    writer = next(node.id for node in cfg.nodes if "WS-AFTER" in node.writes)
-
-    assert len(guard_signature(reaching, writer)) == 2
-
-
 def test_shared_source_filters_out_figurative_constants() -> None:
     """R64: Two writes whose only common read is a figurative constant must come back
-    tier 4, not tier 2. Without this filter, every pair of 'MOVE SPACES TO X' /
+    tier 3, not tier 2. Without this filter, every pair of 'MOVE SPACES TO X' /
     'MOVE SPACES TO Y' in one paragraph reports as SAME_SOURCE, making tier 2 worthless.
     """
     cfg = build_program(
@@ -331,13 +297,13 @@ def test_shared_source_filters_out_figurative_constants() -> None:
         )
     )
 
-    # Should be tier 4 (SAME_PARAGRAPH) because the shared literal is filtered out
+    # Should be tier 3 (SAME_PARAGRAPH) because the shared literal is filtered out
     assert _fields(_for(cfg, "WS-A")) == {"WS-B": Tier.SAME_PARAGRAPH}
 
 
 def test_shared_source_filters_out_all_with_literal() -> None:
     """F1: ALL with literal arrives as 'ALL \"-\"' in reads. Without filtering, two
-    writes sharing this literal report as tier 2 instead of tier 4."""
+    writes sharing this literal report as tier 2 instead of tier 3."""
     cfg = build_program(
         _asg(
             [
@@ -354,7 +320,7 @@ def test_shared_source_filters_out_all_with_literal() -> None:
 
 def test_shared_source_filters_out_hex_literals() -> None:
     """F1: Hex literal X'40' appears in reads as \"X'40'\". Without filtering, two
-    writes sharing this literal report as tier 2 instead of tier 4."""
+    writes sharing this literal report as tier 2 instead of tier 3."""
     cfg = build_program(
         _asg(
             [
@@ -371,7 +337,7 @@ def test_shared_source_filters_out_hex_literals() -> None:
 
 def test_shared_source_filters_out_national_literals() -> None:
     """F1: National literal N'...' appears in reads. Without filtering, two writes
-    sharing this literal report as tier 2 instead of tier 4."""
+    sharing this literal report as tier 2 instead of tier 3."""
     cfg = build_program(
         _asg(
             [
@@ -388,7 +354,7 @@ def test_shared_source_filters_out_national_literals() -> None:
 
 def test_shared_source_filters_out_z_prefixed_literals() -> None:
     """F1: Z-prefixed literal Z'...' appears in reads. Without filtering, two writes
-    sharing this literal report as tier 2 instead of tier 4."""
+    sharing this literal report as tier 2 instead of tier 3."""
     cfg = build_program(
         _asg(
             [
@@ -405,7 +371,7 @@ def test_shared_source_filters_out_z_prefixed_literals() -> None:
 
 def test_shared_source_filters_out_g_prefixed_literals() -> None:
     """F1: G-prefixed literal G'...' appears in reads. Without filtering, two writes
-    sharing this literal report as tier 2 instead of tier 4."""
+    sharing this literal report as tier 2 instead of tier 3."""
     cfg = build_program(
         _asg(
             [
@@ -422,7 +388,7 @@ def test_shared_source_filters_out_g_prefixed_literals() -> None:
 
 def test_shared_source_filters_out_binary_literals() -> None:
     """F1: Binary literal B'...' appears in reads. Without filtering, two writes
-    sharing this literal report as tier 2 instead of tier 4."""
+    sharing this literal report as tier 2 instead of tier 3."""
     cfg = build_program(
         _asg(
             [
@@ -438,71 +404,6 @@ def test_shared_source_filters_out_binary_literals() -> None:
     )
 
     assert _fields(_for(cfg, "WS-A")) == {"WS-B": Tier.SAME_PARAGRAPH}
-
-
-# F3: tier 3 rests on a guard comparison, so it needs guards to compare
-
-
-def _two_paragraphs() -> object:
-    """MAIN performs both paragraphs unconditionally; each writes one field."""
-    return build_program(
-        _asg(
-            [
-                {"name": "MAIN", "statements": [_perform("P-ONE"), _perform("P-TWO")]},
-                {"name": "P-ONE", "statements": [_move("'1'", "WS-A")]},
-                {"name": "P-TWO", "statements": [_move("'2'", "WS-B")]},
-            ]
-        )
-    )
-
-
-def test_two_unconditional_writes_are_not_a_same_guard_pair() -> None:
-    """F3: signature equality was read as evidence, and "no condition" compares equal.
-
-    Both writes are reached unconditionally, so both signatures are {the empty guard}.
-    That is not something the two fields share -- it is the absence of a shared thing,
-    and it awarded tier 3, the strongest tier here, to every unconditional write paired
-    with every other unconditional write in a different paragraph.
-    """
-    assert _fields(_for(_two_paragraphs(), "WS-A")).get("WS-B") is None
-
-
-def test_two_writes_the_walk_abandoned_are_not_a_same_guard_pair() -> None:
-    """F3: the same read of equality, from the other empty value.
-
-    A node the walk gave up on has no guards at all, and two of them compare equal.
-    Reaching's contract is explicit that an empty answer there is a fact about the walk
-    and not about the program, so it cannot support the strongest claim this relation
-    makes. Declining here is what the caveats channel then has to report.
-    """
-    cfg = _two_paragraphs()
-    writers = tuple(node.id for node in cfg.nodes if node.writes)
-    gave_up = Reaching(guards={}, abandoned=frozenset(writers))
-
-    assert co_assigned(cfg, "WS-A", gave_up) == ()
-
-
-def test_a_writer_the_walk_abandoned_is_reported_as_a_caveat() -> None:
-    """F3: declining to compare is invisible otherwise -- the reader sees a shorter
-    candidate list and nothing saying a comparison was skipped."""
-    cfg = _two_paragraphs()
-    gave_up = Reaching(guards={}, abandoned=frozenset({"P-ONE/0"}))
-
-    assert caveats(cfg, "WS-A", gave_up) == (Caveat(node="P-ONE/0", reason=NO_ROUTE),)
-
-
-def test_a_writer_whose_guards_are_a_subset_is_reported_as_a_caveat() -> None:
-    """F3: the cap makes a guard list a subset of the real one (R77), so an equality
-    between two of them is not established -- but it is also not known to be false, so
-    the pair is still offered, with the reason attached."""
-    cfg = _two_paragraphs()
-    real = reaching_conditions(cfg)
-    capped = Reaching(guards=real.guards, truncated=frozenset({"P-ONE/0"}))
-
-    assert caveats(cfg, "WS-A", capped) == (Caveat(node="P-ONE/0", reason=SUBSET),)
-
-
-# F4: the same field name must mean the same thing in every query
 
 
 def test_a_subscripted_write_is_found_by_a_query_on_the_base_name() -> None:

@@ -12,13 +12,22 @@ to leave, so it falls through rather than jump to a node that does not exist.
 
 from __future__ import annotations
 
+import networkx as nx
+
 from cobble.dataflow.srccfg.build import build_program, end_id
 from cobble.dataflow.srccfg.cfg import Edge, EdgeKind
-from cobble.dataflow.srccfg.dataflow import guards_of, reaching_conditions
 
 
 def _exit(kind: str) -> dict:
     return {"type": "EXIT", "kind": kind} if kind else {"type": "EXIT"}
+
+
+def _reached(cfg) -> frozenset[str]:
+    """Every node some chain of edges leads to from the entry."""
+    graph = nx.DiGraph()
+    graph.add_nodes_from(node.id for node in cfg.nodes)
+    graph.add_edges_from((edge.source, edge.target) for edge in cfg.edges)
+    return frozenset({cfg.entry, *nx.descendants(graph, cfg.entry)})
 
 
 def _move(source: str, target: str) -> dict:
@@ -62,7 +71,7 @@ def test_exit_section_jumps_past_the_sections_later_paragraphs(asg_of) -> None:
         Edge(source="W1/0", target=end_id("WORK"), kind=EdgeKind.GOTO),
     )
     assert cfg.predecessors("W1/1") == ()
-    assert guards_of(reaching_conditions(cfg), "W2/0") == ()
+    assert "W2/0" not in _reached(cfg)
 
 
 def test_the_other_exits_fall_through(program_of) -> None:

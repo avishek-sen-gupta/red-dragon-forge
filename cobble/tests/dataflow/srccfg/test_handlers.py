@@ -270,16 +270,8 @@ def test_the_built_artefact_has_its_handler_transfers_resolved(tmp_path) -> None
     """F1: with_handler_edges existed, was tested, and was called by nothing.
 
     Every consumer reads the artefact, so an unresolved dispatch node made the raise
-    path invisible corpus-wide. A dispatch has no outgoing edge of its own, so the only
-    way into H-OOPS was the fallthrough out of MAIN -- reached on the FALSE edge of the
-    raise test. The handler's own assignment therefore printed as guarded by "NOT
-    (%HANDLER[ANY] RAISED)": the negation of the condition that is the one certain
-    thing about it. A missing path presented as a complete answer, in the case the
-    subsystem models CICS handlers for.
-
-    Both guards are correct once resolved. COBOL falls through from MAIN into H-OOPS,
-    so the paragraph is reachable without a raise as well, and the report must show
-    both rather than choosing.
+    path invisible corpus-wide: a dispatch has no outgoing edge of its own, so the only
+    way into H-OOPS was the fallthrough out of MAIN.
 
     Goes through build_one and load_cfg deliberately: calling with_handler_edges here
     would pass with the production wiring removed, which is precisely the bug."""
@@ -287,21 +279,15 @@ def test_the_built_artefact_has_its_handler_transfers_resolved(tmp_path) -> None
 
     from cobble.dataflow.srccfg.build_corpus import build_one
     from cobble.dataflow.srccfg.bundle import load_bundle
-    from cobble.dataflow.srccfg.query import provenance_report
 
     (tmp_path / "MEMA.json").write_text(json.dumps({"programs": [_handler_program()]}))
     (result,) = build_one(tmp_path / "MEMA.json", tmp_path / "out")
+    cfg = load_bundle(result.cfg_path).cfgs[0]
 
     assert result.message == ""
-    assert provenance_report(load_bundle(result.cfg_path).cfgs[0], "WS-ERR") == (
-        "WS-ERR in PROGA:",
-        "backward -- what its value is derived from:",
-        "  WS-ERR <-",
-        "  H-OOPS/0 MOVE when NOT (%HANDLER[ANY] RAISED); %HANDLER[ANY] RAISED",
-        "    %HANDLER[ANY] <- synthetic (the handler armed for ANY)",
-        "forward -- what its value reaches:",
-        "  WS-ERR -> sink (read nowhere in this member)",
-    )
+    assert [(e.target, e.kind) for e in cfg.successors(_dispatch_of(cfg))] == [
+        ("H-OOPS#label", EdgeKind.GOTO)
+    ]
 
 
 def test_resolving_an_already_resolved_cfg_adds_nothing(tmp_path) -> None:

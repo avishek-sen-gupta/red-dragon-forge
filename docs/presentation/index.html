@@ -330,35 +330,35 @@ WS-CARD-RID-ACCT-ID@working_storage[41:52]
 </section>
 
 <section>
-  <div class="kicker">Cobble · source CFG with reaching conditions</div>
+  <div class="kicker">Cobble · reaching conditions, checked by Z3</div>
   <h2>The conditions under which sign-on transfers control</h2>
   <div class="cols wide-right">
     <div class="whiteboard" style="height:680px; position:relative">
       <img src="artifacts/srccfg/COSGN00C-READ-USER-SEC-FILE.png" alt="CFG of COSGN00C READ-USER-SEC-FILE" style="height:680px">
     </div>
     <div>
-<pre class="log" style="white-space:pre-wrap">$ cobble-srccfg-query guards &lt;XCTL COADM01C node&gt;
-<span class="hl">5 path(s)</span>
-path 0: NOT (EIBCALEN == 0) AND EIBAID == DFHENTER
-  AND NOT (USERIDI == SPACES) AND NOT (USERIDI == LOW-VALUES)
-  AND NOT (PASSWDI == SPACES) AND NOT (PASSWDI == LOW-VALUES)
-  AND NOT (ERR-FLG-ON (WS-ERR-FLG == Y)) AND WS-RESP-CD == 0
-  AND <span class="ok">SEC-USR-PWD == WS-USER-PWD</span>
-  AND <span class="ok">CDEMO-USRTYP-ADMIN (CDEMO-USER-TYPE == A)</span>
+<pre class="log" style="white-space:pre-wrap">$ cobble-experimental-reaching-conditions --node &lt;XCTL COADM01C node&gt;
+COSGN00C … : <span class="hl">1 way</span>
+  way 0: EIBCALEN == 0 FALSE, EIBAID == DFHENTER TRUE,
+    ERR-FLG-ON (WS-ERR-FLG == 'Y') FALSE, WS-RESP-CD == 0 TRUE,
+    <span class="ok">SEC-USR-PWD == WS-USER-PWD TRUE</span>,
+    <span class="ok">CDEMO-USRTYP-ADMIN (CDEMO-USER-TYPE == 'A') TRUE</span>
+    if it runs: USERIDI == SPACES FALSE, USERIDI == LOW-VALUES FALSE,
+      PASSWDI == SPACES FALSE, PASSWDI == LOW-VALUES FALSE
 
-$ cobble-srccfg-query guards &lt;XCTL COMEN01C node&gt;
-<span class="hl">5 path(s)</span>
-path 0: … AND <span class="ok">SEC-USR-PWD == WS-USER-PWD</span>
-  AND <span class="warn">NOT (CDEMO-USRTYP-ADMIN (CDEMO-USER-TYPE == A))</span></pre>
+$ cobble-experimental-reaching-conditions --node &lt;XCTL COMEN01C node&gt;
+COSGN00C … : <span class="hl">1 way</span>
+  way 0: … <span class="ok">SEC-USR-PWD == WS-USER-PWD TRUE</span>,
+    <span class="warn">CDEMO-USRTYP-ADMIN (CDEMO-USER-TYPE == 'A') FALSE</span></pre>
       <div class="stats" style="grid-template-columns:repeat(3,1fr); margin-top:16px">
-        <div class="stat"><div class="n">22</div><div class="l">programs in the sign-on closure, expanded through XCTL, dynamic targets included</div></div>
-        <div class="stat"><div class="n">6,996</div><div class="l">CFG nodes across the closure</div></div>
-        <div class="stat"><div class="n">~7s</div><div class="l">to build from the parse cache, without compiling</div></div>
+        <div class="stat"><div class="n">1</div><div class="l">way to each menu XCTL; the unchecked walk it replaces listed 5, four of them impossible</div></div>
+        <div class="stat"><div class="n">&lt;1s</div><div class="l">per Z3 query on sign-on</div></div>
+        <div class="stat"><div class="n">22</div><div class="l">programs in the sign-on CFG closure, expanded through XCTL, dynamic targets included</div></div>
       </div>
     </div>
   </div>
-  <div class="source">artifacts/srccfg/guards-COSGN00C-xctl.txt · COSGN00C-READ-USER-SEC-FILE.png · summary.json · build-COSGN00C.txt · capture/srccfg.sh</div>
-  <aside class="notes">Every node carries the conditions, with their literals, that must hold to reach it. A business-rule review can use this directly: "admin menu only when the stored password matches and the user type is A" can be read from the guards and checked against a stated rule. Guard lists are capped and say so when truncated. The closure is built with the combine's dynamic targets, so it reaches 22 programs (COPAUS0C, COTRTLIC and COTRTUPC as external stubs, their source being outside the base corpus); the build time is wall clock including uv start-up.</aside>
+  <div class="source">artifacts/srccfg/reaching-conditions-COSGN00C-xctl.txt (excerpt, source lines left out) · COSGN00C-READ-USER-SEC-FILE.png · summary.json · capture/srccfg.sh</div>
+  <aside class="notes">Each way is the chain of tests the XCTL is control dependent on, through the PERFORMs that lead to it, and Z3 checks that some run takes it; ways it proves impossible are dropped. The query this replaces walked CFG paths without a solver: it listed five paths to each menu, and four of them pass a blank user id or password and still reach the menu, which the error flag rules out. The blank-input tests now show as "if it runs: FALSE": a run reaching the menu may skip them, and one that runs them takes FALSE. A business-rule review can read "admin menu only when the stored password matches and the user type is A" from the way and check it against a stated rule. On the largest CardDemo programs a check can run to its 180-second limit; the output then says the solver gave up.</aside>
 </section>
 
 <section>
@@ -370,28 +370,23 @@ path 0: … AND <span class="ok">SEC-USR-PWD == WS-USER-PWD</span>
 CDEMO-USER-ID in COSGN00C:
 backward -- what its value is derived from:
   CDEMO-USER-ID &lt;-
-  PROCESS-ENTER-KEY/2 MOVE when NOT (EIBCALEN == 0) AND EIBAID == DFHENTER
-    AND NOT (USERIDI == SPACES) AND NOT (USERIDI == LOW-VALUES) …
-    USERIDI  &lt;- source (written nowhere in this member)
-    EIBCALEN &lt;- source (written nowhere in this member)
-    PASSWDI  &lt;- source (written nowhere in this member)
-    %HANDLER[ANY] &lt;- synthetic (the handler armed for ANY)
-  READ-USER-SEC-FILE/1.when.0.0.then.2 MOVE when …
+  PROCESS-ENTER-KEY/2 MOVE
+    USERIDI &lt;- source (written nowhere in this member)
+  READ-USER-SEC-FILE/1.when.0.0.then.2 MOVE
     WS-USER-ID &lt;-
-    PROCESS-ENTER-KEY/2 MOVE when …
+    PROCESS-ENTER-KEY/2 MOVE
       USERIDI <span class="warn">(truncated at depth 2)</span>
-forward -- what its value reaches: …</pre>
-      <div class="caption">One walk covers both directions. Each step carries its conditions, and truncation is reported</div>
+forward -- what its value reaches:
+  CDEMO-USER-ID -&gt; sink (read nowhere in this member)</pre>
+      <div class="caption">One query covers both directions, each step named by its node, and truncation is reported</div>
     </div>
     <div>
 <pre class="log" style="white-space:pre-wrap">$ cobble-srccfg-query coassign CC-ACCT-ID   # COACTVWC
 CC-ACCT-ID: 3 candidate(s)
-  SAME_PARAGRAPH  FLG-ACCTFILTER-ISVALID
-  SAME_PARAGRAPH  INPUT-OK
-  SAME_PARAGRAPH  NO-SEARCH-CRITERIA-RECEIVED
-  <span class="warn">(guards are a subset of the real ones,
-   so a tier-3 match is not established)</span></pre>
-      <div class="caption">Fields assigned together, ranked by how tightly: same statement → same source → same guard → same paragraph</div>
+  SAME_PARAGRAPH  WS-EDIT-ACCT-FLAG
+  SAME_PARAGRAPH  WS-INPUT-FLAG
+  SAME_PARAGRAPH  WS-RETURN-MSG</pre>
+      <div class="caption">Fields assigned together, ranked by how tightly: same statement → same source → same paragraph</div>
       <div class="whiteboard" style="height:340px; margin-top:18px; position:relative">
         <img src="artifacts/srccfg/cfg-COSGN00C-webgl.png" alt="WebGL view of the sign-on CFG closure" style="position:absolute; width:640px; left:42px; top:-26px">
       </div>
@@ -399,7 +394,7 @@ CC-ACCT-ID: 3 candidate(s)
     </div>
   </div>
   <div class="source">artifacts/srccfg/provenance-COSGN00C-CDEMO-USER-ID.txt (excerpt) · coassign-COACTVWC-CC-ACCT-ID.txt · cfg-COSGN00C-webgl.png · webgl-COSGN00C.txt · summary.json · cobble/cobble/dataflow/srccfg/query.py</div>
-  <aside class="notes">Why it was built: the older MOVE-only dependency graph has no control dependence — on a production corpus a backward closure over one hub field reached 24,459 nodes, and fields that only appear in guards were missing entirely. Adding conditions makes a closure small enough to read. Dynamic XCTL targets are now expanded, from the combine's targets: candidates are followed like any callee, so the closure over-approximates which programs sign-on can reach. Limits: reaching conditions don't yet finish on the very largest production members.</aside>
+  <aside class="notes">Both queries read one program's CFG and stop at its boundary; cross-program flow is the field dataflow. Dynamic XCTL targets are expanded from the combine's targets: candidates are followed like any callee, so the closure over-approximates which programs sign-on can reach. These two captures come from a CFG closure rebuilt on 2026-11-13; the other artifacts on these slides are from the 2026-10-07 capture.</aside>
 </section>
 
 <section>
@@ -485,7 +480,7 @@ written: COACTVWC-pathwalk.html (84 KB)</pre>
     <tr class="fam-data"><td><strong>Cross-program linking</strong></td><td>Composes per-program results over XCTL, LINK, CALL, START and RETURN TRANSID, in rounds, until no new link is found.</td><td>Follows data through the COMMAREA from caller to callee, and answers "which program does this one return to".</td></tr>
     <tr class="fam-control"><td><strong>Interprocedural CFG</strong></td><td>The call closure of one program: its CFG and those of every program it reaches through calls, dynamic targets included when given, joined at the call sites.</td><td>One graph for a whole flow, so a walk or a drawing follows control into the programs called. The sign-on closure spans 22 programs.</td></tr>
     <tr class="fam-control"><td><strong>Reaching definitions</strong></td><td>Gen/kill over bitmasks. Finds which HANDLE CONDITION handlers a CICS command can reach.</td><td>Shows where control goes when a CICS command raises a condition: error paths that never appear as an explicit GO TO.</td></tr>
-    <tr class="fam-control"><td><strong>Reaching conditions</strong></td><td>The guards on each path to a node, with PERFORM returns matched on a frame stack; at most 64 paths per node, caps reported. The same walk answers what runs from one PERFORM until it returns.</td><td>States the rule that guards a statement, for example which inputs lead to the admin menu, as a reviewable condition.</td></tr>
+    <tr class="fam-control"><td><strong>Reaching conditions</strong></td><td>The tests a node is control dependent on, per PERFORM range and call site, each way checked by Z3's Spacer over the program's bytes; ways Z3 proves impossible are dropped. At most 64 ways per node, caps reported.</td><td>States the rule that guards a statement, for example which inputs lead to the admin menu, as a reviewable condition.</td></tr>
     <tr class="fam-control"><td><strong>Infeasible fall-through pruning</strong></td><td>Removes fall-through edges only a returning PERFORM would reach, before the fixpoint runs.</td><td>Removes paths the program cannot take, so field histories and call targets carry fewer false candidates.</td></tr>
     <tr class="fam-control"><td><strong>Depth-first order, back edges</strong></td><td>Reverse postorder for sweeps; back edges mark the cycles.</td><td>Finds the loops, and gives the analysis an order to visit statements in.</td></tr>
     <tr class="fam-exec"><td><strong>Path sampling</strong></td><td>Concrete paths, one at a time, over the same byte model, steered toward branches not yet taken.</td><td>Concrete, repeatable example paths with measured branch coverage: starting points for test cases and walkthroughs.</td></tr>

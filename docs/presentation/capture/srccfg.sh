@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Source-CFG evidence: per-program CFGs with reaching conditions, expanded across XCTL/LINK/CALL,
+# Source-CFG evidence: per-program CFGs, expanded across XCTL/LINK/CALL,
 # dynamic targets included. Reads cobble's ASG cache (cobble/out-parsed, written by
 # `cobble-parse-corpus`) and the combine's targets.jsonl that capture/cobble.sh leaves in
 # cobble/out-presentation/combined; no JVM.
@@ -79,13 +79,14 @@ subprocess.run(["dot", "-Tpng", "-Gdpi=110", str(art / "COSGN00C-READ-USER-SEC-F
 PY
 
 q() { uv run --no-sync cobble-srccfg-query "$@"; }
+r() { uv run --no-sync cobble-experimental-reaching-conditions --asg out-parsed/COSGN00C.json --node "$1" 2>/dev/null; }
 {
-  echo "\$ cobble-srccfg-query guards READ-USER-SEC-FILE/1.when.0.0.then.5.then.0 --cfg cfg-COSGN00C.jsonl   # XCTL COADM01C"
-  q guards "READ-USER-SEC-FILE/1.when.0.0.then.5.then.0" --cfg "$ART/cfg-COSGN00C.jsonl"
+  echo "\$ cobble-experimental-reaching-conditions --asg COSGN00C.json --node READ-USER-SEC-FILE/1.when.0.0.then.5.then.0   # XCTL COADM01C"
+  r "READ-USER-SEC-FILE/1.when.0.0.then.5.then.0"
   echo
-  echo "\$ cobble-srccfg-query guards READ-USER-SEC-FILE/1.when.0.0.then.5.else.0 --cfg cfg-COSGN00C.jsonl   # XCTL COMEN01C"
-  q guards "READ-USER-SEC-FILE/1.when.0.0.then.5.else.0" --cfg "$ART/cfg-COSGN00C.jsonl"
-} > "$ART/guards-COSGN00C-xctl.txt"
+  echo "\$ cobble-experimental-reaching-conditions --asg COSGN00C.json --node READ-USER-SEC-FILE/1.when.0.0.then.5.else.0   # XCTL COMEN01C"
+  r "READ-USER-SEC-FILE/1.when.0.0.then.5.else.0"
+} > "$ART/reaching-conditions-COSGN00C-xctl.txt"
 
 {
   echo "\$ cobble-srccfg-query provenance CDEMO-USER-ID --max-depth 2 --cfg cfg-COSGN00C.jsonl"
