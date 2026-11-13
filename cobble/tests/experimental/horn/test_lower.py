@@ -4,14 +4,24 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 import pytest
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.experimental.horn.answer import Answer
-from cobble.experimental.horn.condition import Condition, Digits, Op, Part
+from cobble.dataflow.srccfg.cfg import EdgeKind, NodeKind
+from cobble.experimental.horn.condition import (
+    Condition,
+    Digits,
+    Entered,
+    Op,
+    Part,
+    Took,
+)
+from cobble.experimental.horn.context import perform_edge, performed
 from cobble.experimental.horn.every_test import EVERY_TEST
 from cobble.experimental.horn.kept_tests import KeptTests
 from cobble.experimental.horn.leading_to import leading_to
 from cobble.experimental.horn.lower import lower
 from cobble.experimental.horn.named_fields import NamedFields
+from cobble.experimental.horn.outcome import Outcome
 from cobble.experimental.horn.point import Point
-from cobble.experimental.horn.program import program_of
+from cobble.experimental.horn.program import Program, program_of
 from cobble.experimental.horn.reaches import reaches
 from cobol_asg.asg_types import CobolASG
 
@@ -874,3 +884,65 @@ def test_a_perform_of_a_paragraph_that_ends_the_task_does_not_come_back() -> Non
         _ask(ends(xctl), FIELDS, "X-OUT"),
         _ask(altered, FIELDS, "X-OUT"),
     ) == (Answer.UNSAT, Answer.UNSAT, Answer.SAT)
+
+
+def _writer(program: Program, field: str) -> str:
+    return next(node.id for node in program.cfg.nodes if field in node.writes)
+
+
+def test_an_outcome_mark_holds_the_last_outcome_of_its_test() -> None:
+    program = program_of(_asg([("MAIN", [_test("F", "'Y'", [X_OUT])])], FIELDS))
+    test = next(n.id for n in program.cfg.nodes if n.kind is NodeKind.TEST)
+    system = lower(program, outcomes=(test,))
+    point = Point("PROGA", _writer(program, "X-OUT"))
+
+    def ask(outcome: Outcome) -> Answer:
+        return reaches(system, point, (Took(test, outcome),), _clock()).answer
+
+    assert (ask(Outcome.TRUE), ask(Outcome.FALSE), ask(Outcome.UNRUN)) == (
+        Answer.SAT,
+        Answer.UNSAT,
+        Answer.UNSAT,
+    )
+
+
+def _first_perform(program: Program, node: str) -> str:
+    if perform_edge(program.cfg, node):
+        return node
+    return _first_perform(program, program.cfg.successors(node)[0].target)
+
+
+def _calls_by_branch(program: Program) -> tuple[str, str]:
+    cfg = program.cfg
+    test = next(
+        n.id for n in cfg.nodes if n.kind is NodeKind.TEST and n.paragraph == "MAIN"
+    )
+    edges = {edge.kind: edge.target for edge in cfg.successors(test)}
+    return (
+        _first_perform(program, edges[EdgeKind.TRUE]),
+        _first_perform(program, edges[EdgeKind.FALSE]),
+    )
+
+
+def test_an_entry_mark_names_the_call_site_that_entered_the_range() -> None:
+    program = program_of(
+        _asg(
+            [
+                (
+                    "MAIN",
+                    [_if(_ref("F"), "'Y'", [_perform("SUB")], [_perform("SUB")]), STOP],
+                ),
+                ("SUB", [_test("F", "'Y'", [X_OUT])]),
+            ],
+            FIELDS,
+        )
+    )
+    then_call, else_call = _calls_by_branch(program)
+    sub = performed(program.cfg, perform_edge(program.cfg, then_call)[0])
+    system = lower(program, entries=(sub,))
+    point = Point("PROGA", _writer(program, "X-OUT"))
+
+    def ask(call: str) -> Answer:
+        return reaches(system, point, (Entered(sub, call),), _clock()).answer
+
+    assert (ask(then_call), ask(else_call)) == (Answer.SAT, Answer.UNSAT)

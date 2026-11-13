@@ -6,7 +6,7 @@ from dataclasses import dataclass, replace
 from itertools import groupby
 
 import z3
-from cobble.dataflow.srccfg.cfg import Edge, EdgeKind
+from cobble.dataflow.srccfg.cfg import Edge, EdgeKind, NodeKind
 from cobble.dataflow.srccfg.desugar import DISPATCH_TRANSFER_CICS, PERFORM_TRANSFER
 from cobble.experimental.horn.atoms import comparison
 from cobble.experimental.horn.context import (
@@ -29,7 +29,9 @@ from cobble.experimental.horn.effects import (
     everything,
 )
 from cobble.experimental.horn.every_test import EVERY_TEST
+from cobble.experimental.horn.followed import raising, unfollowed
 from cobble.experimental.horn.kept_tests import KeptTests
+from cobble.experimental.horn.outcome import Outcome
 from cobble.experimental.horn.point import Point
 from cobble.experimental.horn.program import Program
 from cobble.experimental.horn.segment import Segment
@@ -50,15 +52,8 @@ from cobble.experimental.horn.terms import (
     nibble,
 )
 from cobble.experimental.horn.xctl import (
-    never_pgmiderr,
     pgmiderr_handlers,
     program_field,
-)
-from cobol_asg.cobol_statements import (
-    AlterStatement,
-    ExitProgramStatement,
-    GobackStatement,
-    StopRunStatement,
 )
 from cobol_memory.region_id import RegionId
 
@@ -66,7 +61,11 @@ logger = logging.getLogger(__name__)
 
 PAD = b" "
 NOTHING_INSTALLED: frozenset[str] = frozenset()
-TERMINATORS = (StopRunStatement, GobackStatement, ExitProgramStatement)
+UNSET = constant(b"\x00")
+OUTCOMES: Mapping[EdgeKind, Outcome] = {
+    EdgeKind.TRUE: Outcome.TRUE,
+    EdgeKind.FALSE: Outcome.FALSE,
+}
 
 
 @dataclass(frozen=True)
@@ -107,6 +106,7 @@ class Lowering:
     summaries: Mapping[Context, z3.FuncDeclRef]
     effects: Mapping[str, Effect]
     vars: States
+    cut: frozenset[Edge]
     installed: frozenset[str] = NOTHING_INSTALLED
 
     def at(
@@ -300,7 +300,8 @@ def _guard(lowering: Lowering, edge: Edge) -> tuple[z3.BoolRef, ...]:
 
 def _extras(lowering: Lowering, edge: Edge) -> tuple[z3.BoolRef, ...]:
     """EIBCALEN as the task found it, unless the node writes it; each mark as it
-    was, or 1 leaving its own point."""
+    was, or 1 leaving its own point; each outcome mark as it was, or the outcome
+    of the edge leaving its test; each entry mark as it was."""
     storage, v = lowering.storage, lowering.vars
     base = len(storage.segments)
     node = lowering.program.cfg.node(edge.source)
@@ -315,7 +316,35 @@ def _extras(lowering: Lowering, edge: Edge) -> tuple[z3.BoolRef, ...]:
         equal(v.after[first + k], RAN if mark == here else v.now[first + k])
         for k, mark in enumerate(storage.marks)
     )
-    return (*calen, *marks)
+    return (*calen, *marks, *_outcomes(lowering, edge), *_entries_kept(lowering))
+
+
+def _outcomes(lowering: Lowering, edge: Edge) -> tuple[z3.BoolRef, ...]:
+    storage, v = lowering.storage, lowering.vars
+    taken = OUTCOMES.get(edge.kind, Outcome.UNRUN)
+    return tuple(
+        equal(
+            storage.outcome(test, v.after),
+            (
+                outcome_byte(taken)
+                if test == edge.source and taken is not Outcome.UNRUN
+                else storage.outcome(test, v.now)
+            ),
+        )
+        for test in storage.outcomes
+    )
+
+
+def _entries_kept(lowering: Lowering) -> tuple[z3.BoolRef, ...]:
+    storage, v = lowering.storage, lowering.vars
+    return tuple(
+        equal(storage.entry(e.range, v.after), storage.entry(e.range, v.now))
+        for e in storage.entries
+    )
+
+
+def outcome_byte(outcome: Outcome) -> z3.BitVecRef:
+    return constant(bytes((outcome.value,)))
 
 
 def _edge_rule(lowering: Lowering, context: Context, edge: Edge) -> z3.BoolRef:
@@ -333,26 +362,15 @@ def _edge_rule(lowering: Lowering, context: Context, edge: Edge) -> z3.BoolRef:
 
 
 def _installed(lowering: Lowering, edge: Edge) -> tuple[z3.BoolRef, ...]:
-    """The dispatch into a handler armed for PGMIDERR alone: never from a command
-    that cannot raise it, and from an XCTL only while it names a program not
-    installed."""
+    """The dispatch into a handler armed for PGMIDERR alone, from an XCTL, only
+    while it names a program not installed. The dispatch from a command that
+    cannot raise PGMIDERR is not followed at all."""
     if not _into_pgmiderr(lowering, edge):
         return ()
-    cfg = lowering.program.cfg
-    commands = tuple(
-        command.source
-        for raised in cfg.predecessors(edge.source)
-        for command in cfg.predecessors(raised.source)
-    )
+    commands = raising(lowering.program, edge)
     if len(commands) != 1:
         return ()
-    return _pgmiderr_from(lowering, commands[0])
-
-
-def _pgmiderr_from(lowering: Lowering, command: str) -> tuple[z3.BoolRef, ...]:
-    if never_pgmiderr(lowering.program, command):
-        return (z3.BoolVal(False),)
-    return _not_naming(lowering, program_field(lowering.program, command))
+    return _not_naming(lowering, program_field(lowering.program, commands[0]))
 
 
 def _into_pgmiderr(lowering: Lowering, edge: Edge) -> bool:
@@ -387,53 +405,33 @@ def _edge_rules(lowering: Lowering, context: Context) -> tuple[z3.BoolRef, ...]:
         _edge_rule(lowering, context, edge)
         for node in sorted(lowering.members[context])
         for edge in steps(lowering.program.cfg, context, node)
-        if not _never_back(lowering, edge)
+        if edge not in lowering.cut
     )
-
-
-def _never_back(lowering: Lowering, edge: Edge) -> bool:
-    """The FLOW edge the CFG keeps past a PERFORM whose range end nothing reaches,
-    when every way out of the range ends the task and no ALTER can redirect a GO
-    TO: the PERFORM cannot come back, so the edge is not a path."""
-    cfg = lowering.program.cfg
-    if (
-        edge.kind is not EdgeKind.FLOW
-        or cfg.node(edge.source).transfer != PERFORM_TRANSFER
-    ):
-        return False
-    calls = perform_edge(cfg, edge.source)
-    return (
-        bool(calls)
-        and not _altered(lowering)
-        and all(
-            _ends_task(lowering, node)
-            for call in calls
-            for node in lowering.members[performed(cfg, call)]
-            if not cfg.successors(node)
-        )
-    )
-
-
-def _altered(lowering: Lowering) -> bool:
-    return any(
-        isinstance(statement, AlterStatement)
-        for statement in lowering.program.statements.values()
-    )
-
-
-def _ends_task(lowering: Lowering, node: str) -> bool:
-    """STOP RUN, GOBACK, EXIT PROGRAM, or a CICS condition no handler takes."""
-    if lowering.program.cfg.node(node).transfer == DISPATCH_TRANSFER_CICS:
-        return True
-    return isinstance(lowering.program.statements.get(node), TERMINATORS)
 
 
 def _call(lowering: Lowering, context: Context, edge: Edge) -> tuple[z3.BoolRef, ...]:
     v = lowering.vars
     callee = performed(lowering.program.cfg, edge)
     caller = lowering.at(context, edge.source, v.entry, v.now)
-    enter = _rule(lowering, (caller,), lowering.at(callee, callee.entry, v.now, v.now))
+    entered = _entered(lowering, callee, edge.source)
+    enter = _rule(
+        lowering, (caller,), lowering.at(callee, callee.entry, entered, entered)
+    )
     return (enter, *_resume(lowering, context, edge, callee))
+
+
+def _entered(
+    lowering: Lowering, callee: Context, call: str
+) -> tuple[z3.BitVecRef, ...]:
+    """The caller's state with the callee's entry mark, if it has one, naming
+    ``call``."""
+    storage, now = lowering.storage, lowering.vars.now
+    marked = tuple(e for e in storage.entries if e.range == callee)
+    if not marked:
+        return now
+    at = len(now) - len(storage.entries) + storage.entered(callee)
+    value = constant(bytes((marked[0].value(call),)))
+    return (*now[:at], value, *now[at + 1 :])
 
 
 def _resume(
@@ -443,9 +441,10 @@ def _resume(
     resume = lowering.program.cfg.node(edge.source).resume
     if resume not in lowering.members[context]:
         return ()
+    entered = _entered(lowering, callee, edge.source)
     body = (
         lowering.at(context, edge.source, v.entry, v.now),
-        holds(lowering.summaries[callee], *v.now, *v.after),
+        holds(lowering.summaries[callee], *entered, *v.after),
     )
     return (_rule(lowering, body, lowering.at(context, resume, v.entry, v.after)),)
 
@@ -469,9 +468,16 @@ def _summary_rules(lowering: Lowering, context: Context) -> tuple[z3.BoolRef, ..
 
 
 def _start(lowering: Lowering) -> z3.BoolRef:
+    """Any state, but no test has run and no range has been entered."""
     v = lowering.vars
     cfg = lowering.program.cfg
-    return _rule(lowering, (), lowering.at(top(cfg), cfg.entry, v.entry, v.now))
+    storage = lowering.storage
+    unset = (
+        *(storage.outcome(test, v.now) for test in storage.outcomes),
+        *(storage.entry(e.range, v.now) for e in storage.entries),
+    )
+    body = tuple(equal(byte, UNSET) for byte in unset)
+    return _rule(lowering, body, lowering.at(top(cfg), cfg.entry, v.entry, v.now))
 
 
 def lowering_of(
@@ -500,11 +506,18 @@ def lowering_of(
         },
         {node.id: effect_of(program, storage, node.id) for node in cfg.nodes},
         states(storage),
+        unfollowed(program),
         installed,
     )
 
 
 def _check_marks(program: Program, storage: Storage) -> None:
+    _check_points(program, storage)
+    _check_outcomes(program, storage)
+    _check_entries(program, storage)
+
+
+def _check_points(program: Program, storage: Storage) -> None:
     """A mark is set leaving its point, so a point left only by a PERFORM, or not
     left at all, would never be marked."""
     cfg = program.cfg
@@ -516,6 +529,22 @@ def _check_marks(program: Program, storage: Storage) -> None:
     )
     if unmarkable:
         raise ValueError(f"{unmarkable[0]} cannot be marked")
+
+
+def _check_outcomes(program: Program, storage: Storage) -> None:
+    cfg = program.cfg
+    tests = frozenset(n.id for n in cfg.nodes if n.kind is NodeKind.TEST)
+    untested = tuple(test for test in storage.outcomes if test not in tests)
+    if untested:
+        raise ValueError(f"{untested[0]} is not a test of {cfg.program}")
+
+
+def _check_entries(program: Program, storage: Storage) -> None:
+    cfg = program.cfg
+    ranges = frozenset(contexts(cfg))
+    unranged = tuple(e.range for e in storage.entries if e.range not in ranges)
+    if unranged:
+        raise ValueError(f"{unranged[0]} is not a context of {cfg.program}")
 
 
 def relations_of(lowering: Lowering) -> tuple[z3.FuncDeclRef, ...]:
@@ -559,14 +588,16 @@ def lower(
     watched: Sequence[str] = (),
     marks: Sequence[Point] = (),
     kept: KeptTests = EVERY_TEST,
+    outcomes: Sequence[str] = (),
+    entries: Sequence[Context] = (),
 ) -> HornSystem:
     """One task of ``program``, entered in any state. ``watched`` names the
     fields a question will ask about, beside the ones the program's own tests
     read; ``marks`` the points a question will ask whether the task has passed;
-    ``kept`` the tests to keep."""
-    lowering = lowering_of(
-        program, storage_of(program, watched, marks, frozenset(), kept)
-    )
+    ``kept`` the tests to keep; ``outcomes`` the tests a question will ask the
+    last outcome of; ``entries`` the ranges it will ask the last call site of."""
+    storage = storage_of(program, watched, marks, frozenset(), kept, outcomes, entries)
+    lowering = lowering_of(program, storage)
     return HornSystem(
         (_start(lowering), *body_rules(lowering)),
         relations_of(lowering),

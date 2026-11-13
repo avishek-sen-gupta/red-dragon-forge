@@ -9,7 +9,9 @@ from functools import reduce
 import z3
 from cobble.dataflow.fields.extent import CellIndex
 from cobble.dataflow.srccfg.cfg import Atom, Cfg, NodeKind
+from cobble.experimental.horn.context import Context
 from cobble.experimental.horn.copies import EIBCALEN, Copy, program_copies
+from cobble.experimental.horn.entries import Entries, entries_of
 from cobble.experimental.horn.every_test import EVERY_TEST
 from cobble.experimental.horn.kept_tests import KeptTests
 from cobble.experimental.horn.point import Point
@@ -32,21 +34,25 @@ MARK_BYTES = 1
 @dataclass(frozen=True)
 class Storage:
     """The program's layout, and what the state holds: the segments of it, then
-    EIBCALEN when ``eib``, then one byte per mark, 1 once its point has run.
-    ``kept`` says which tests the encoding keeps."""
+    EIBCALEN when ``eib``, then one byte per mark, 1 once its point has run, then
+    one byte per outcome mark and one per entry mark. ``kept`` says which tests
+    the encoding keeps."""
 
     index: CellIndex
     segments: tuple[Segment, ...]
     eib: bool = False
     marks: tuple[Point, ...] = ()
     kept: KeptTests = EVERY_TEST
+    outcomes: tuple[str, ...] = ()
+    entries: tuple[Entries, ...] = ()
 
     @property
     def widths(self) -> tuple[int, ...]:
         return (
             *(segment.length for segment in self.segments),
             *((CALEN_BYTES,) if self.eib else ()),
-            *((MARK_BYTES,) * len(self.marks)),
+            *((MARK_BYTES,) * (len(self.marks) + len(self.outcomes))),
+            *((MARK_BYTES,) * len(self.entries)),
         )
 
     def calen(self, state: Sequence[z3.BitVecRef]) -> z3.BitVecRef:
@@ -56,6 +62,24 @@ class Storage:
         if point not in self.marks:
             raise ValueError(f"{point} is not marked")
         return state[len(self.segments) + int(self.eib) + self.marks.index(point)]
+
+    def outcome(self, test: str, state: Sequence[z3.BitVecRef]) -> z3.BitVecRef:
+        if test not in self.outcomes:
+            raise ValueError(f"{test} has no outcome mark")
+        return state[self._first_outcome + self.outcomes.index(test)]
+
+    def entry(self, range_: Context, state: Sequence[z3.BitVecRef]) -> z3.BitVecRef:
+        return state[self._first_outcome + len(self.outcomes) + self.entered(range_)]
+
+    def entered(self, range_: Context) -> int:
+        found = tuple(n for n, e in enumerate(self.entries) if e.range == range_)
+        if not found:
+            raise ValueError(f"{range_} has no entry mark")
+        return found[0]
+
+    @property
+    def _first_outcome(self) -> int:
+        return len(self.segments) + int(self.eib) + len(self.marks)
 
     def field(self, name: str) -> tuple[FieldExtent, ...]:
         """The one alphanumeric extent ``name`` denotes, written whole with no
@@ -137,6 +161,8 @@ def storage_of(
     marks: Sequence[Point] = (),
     extra: frozenset[Place] = frozenset(),
     kept: KeptTests = EVERY_TEST,
+    outcomes: Sequence[str] = (),
+    entries: Sequence[Context] = (),
 ) -> Storage:
     """``extra`` are bytes to follow beside the ones the program's tests read: a
     later task's tests, reading what this task hands it."""
@@ -155,7 +181,15 @@ def storage_of(
     eib = not probe.whole(EIBCALEN) and any(
         atom.left == EIBCALEN and integer(atom.right) for atom in comparisons
     )
-    return Storage(program.index, _segments(places), eib, tuple(marks), kept)
+    return Storage(
+        program.index,
+        _segments(places),
+        eib,
+        tuple(marks),
+        kept,
+        tuple(outcomes),
+        tuple(entries_of(program.cfg, range_) for range_ in entries),
+    )
 
 
 def _tested(probe: Storage, atom: Atom) -> tuple[FieldExtent, ...]:

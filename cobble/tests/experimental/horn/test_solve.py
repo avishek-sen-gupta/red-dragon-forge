@@ -47,3 +47,32 @@ def test_holds_refuses_a_function_that_is_not_a_relation() -> None:
 
     with pytest.raises(TypeError, match="^successor is not a boolean term$"):
         holds(successor, z3.IntVal(0))
+
+
+def test_a_query_past_its_time_limit_is_unknown() -> None:
+    x, y = z3.BitVecs("x y", 64)
+    inv = z3.Function("inv", z3.BitVecSort(64), z3.BitVecSort(64), z3.BoolSort())
+    goal = z3.Function("goal", z3.BoolSort())
+    rules = (
+        every(
+            [x, y],
+            z3.Implies(
+                conjunction(
+                    equal(x, z3.BitVecVal(0, 64)), equal(y, z3.BitVecVal(0, 64))
+                ),
+                holds(inv, x, y),
+            ),
+        ),
+        every([x, y], z3.Implies(holds(inv, x, y), holds(inv, x * 3 + 7, y ^ x))),
+        every(
+            [x, y],
+            z3.Implies(
+                conjunction(holds(inv, x, y), equal(x * x, y + 12345678901)),
+                holds(goal),
+            ),
+        ),
+    )
+
+    assert solve(rules, (inv, goal), holds(goal), _clock(), 1) == Verdict(
+        Answer.UNKNOWN, 2.5
+    )

@@ -563,4 +563,10 @@ fileignoreconfig:
   checksum: fed19850d8d45fec574a6ef6dda8d5d76f2a90d11c59fc955afc58933a6c437f
 - filename: docs/superpowers/specs/cobble/2026-11-13-reaching-conditions-design.md
   checksum: dd3a16a81951a07d0c65053c29a5f6ddde69e27ccfc396a15366606973e5ebd3
+- filename: cobble/cobble/experimental/horn/route.py
+  checksum: dc8e43725fde45b42b3e239f28faccd30605953186141b8d926122341e1c2e38
+- filename: cobble/cobble/experimental/horn/reaching_conditions.py
+  checksum: e2a74f0d30876dd666489b78e8e7cb5bb626bbdbe94e2c845712ba6cdb655417
+- filename: cobble/cobble/experimental/horn/ways.py
+  checksum: b8736c797e23b31d477fd03c663b3eefa1bedc8e585fabd1b45e40c72db1e1ef
 version: "1.0"

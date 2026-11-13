@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from enum import Enum
 
+from cobble.experimental.horn.context import Context
+from cobble.experimental.horn.outcome import Outcome
 from cobble.experimental.horn.point import Point
 
 
@@ -45,3 +47,21 @@ class Visited:
 
     point: Point
     value: bool
+
+
+@dataclass(frozen=True)
+class Took:
+    """Whether the TEST node ``test`` last took ``outcome``. Asked only of a test
+    the lowering marks."""
+
+    test: str
+    outcome: Outcome
+
+
+@dataclass(frozen=True)
+class Entered:
+    """Whether the last PERFORM into ``range`` was the node ``call``. Asked only of
+    a range the lowering marks."""
+
+    range: Context
+    call: str

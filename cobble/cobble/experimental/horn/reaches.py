@@ -4,8 +4,16 @@ from collections.abc import Callable, Sequence
 
 import z3
 from cobble.experimental.horn.atoms import literal_bytes
-from cobble.experimental.horn.condition import Condition, Digits, Op, Part, Visited
-from cobble.experimental.horn.lower import HornSystem, states
+from cobble.experimental.horn.condition import (
+    Condition,
+    Digits,
+    Entered,
+    Op,
+    Part,
+    Took,
+    Visited,
+)
+from cobble.experimental.horn.lower import HornSystem, outcome_byte, states
 from cobble.experimental.horn.point import Point
 from cobble.experimental.horn.solve import solve
 from cobble.experimental.horn.storage import Storage
@@ -22,14 +30,30 @@ from cobble.experimental.horn.terms import (
 )
 from cobble.experimental.horn.verdict import Verdict
 
+Asked = Condition | Visited | Took | Entered
+
 
 def _asked(
-    condition: Condition | Visited, storage: Storage, state: Sequence[z3.BitVecRef]
+    condition: Asked, storage: Storage, state: Sequence[z3.BitVecRef]
 ) -> z3.BoolRef:
+    if isinstance(condition, Took | Entered):
+        return _marked(condition, storage, state)
     if isinstance(condition, Visited):
         ran = equal(storage.mark(condition.point, state), RAN)
         return ran if condition.value else negation(ran)
     return _condition(condition, storage, state)
+
+
+def _marked(
+    condition: Took | Entered, storage: Storage, state: Sequence[z3.BitVecRef]
+) -> z3.BoolRef:
+    if isinstance(condition, Took):
+        return equal(
+            storage.outcome(condition.test, state), outcome_byte(condition.outcome)
+        )
+    entries = storage.entries[storage.entered(condition.range)]
+    value = constant(bytes((entries.value(condition.call),)))
+    return equal(storage.entry(condition.range, state), value)
 
 
 def _condition(
@@ -108,7 +132,7 @@ def _arguments(
 def reaches(
     system: HornSystem,
     point: Point,
-    conditions: Sequence[Condition | Visited],
+    conditions: Sequence[Asked],
     clock: Callable[[], float],
 ) -> Verdict:
     storage = system.storages[point.program]
