@@ -155,7 +155,7 @@ def condition_operands(atom: Atom) -> tuple[str, ...]:
     """The fields one guard step examines, and only the fields.
 
     ``atom.right`` is a second operand for a relation between two things and a VALUE
-    for everything else -- a class name for IS NUMERIC, an 88's list of values for IN,
+    for everything else -- a class name for IS NUMERIC, the bounds of a THRU range,
     the keyword RAISED for the handler test. Harvesting those reports ``NUMERIC`` and
     ``RAISED`` as fields the member never wrote, which spends the credibility of that
     line where it is genuinely true, as it is for a commarea or a file-read source.

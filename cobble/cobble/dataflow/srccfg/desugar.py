@@ -468,8 +468,11 @@ def _plain_without_arms(statement, ctx: Ctx, path: str) -> Fragment:
 
 
 def lower_condition(cond, ctx: Ctx, path: str, slot: str = "") -> CondFragment:
-    compound = _COMPOUNDS.get(type(cond))
-    return compound(cond, ctx, path, slot) if compound else _test(cond, ctx, path, slot)
+    resolved = resolve_atom(cond, ctx.index) if isinstance(cond, Atom) else cond
+    compound = _COMPOUNDS.get(type(resolved))
+    if compound:
+        return compound(resolved, ctx, path, slot)
+    return _test(resolved, ctx, path, slot)
 
 
 def _negated(cond, ctx: Ctx, path: str, slot: str) -> CondFragment:
@@ -508,20 +511,18 @@ def _test(atom, ctx: Ctx, path: str, slot: str) -> CondFragment:
         kind=NodeKind.TEST,
         paragraph=ctx.paragraph,
         span=ctx.span,
-        atom=resolve_atom(atom, ctx.index),
-        reads=_test_reads(atom, resolve_atom(atom, ctx.index)),
+        atom=atom,
+        reads=_test_reads(atom),
     )
     return _exits_of(node)
 
 
-def _test_reads(condition, atom: Atom) -> tuple[Read, ...]:
+def _test_reads(atom: Atom) -> tuple[Read, ...]:
     """A test consults its operands and whatever subscripts them."""
     operands = tuple(
         name for name in (atom.left, atom.right) if name and not is_literal(name)
     )
-    return reads_of(
-        _dedupe((*operands, *selector_names(condition))), ReadKind.CONSULTED
-    )
+    return reads_of(_dedupe((*operands, *selector_names(atom))), ReadKind.CONSULTED)
 
 
 def _with_selectors(statement, names: tuple[str, ...]) -> tuple[Read, ...]:

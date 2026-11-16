@@ -12,7 +12,7 @@ from cobol_asg.asg_types import CobolASG
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.srccfg.build import build_program
 from cobble.dataflow.srccfg.cfg import Atom
-from cobble.dataflow.srccfg.conditions import CLASS, IN
+from cobble.dataflow.srccfg.conditions import CLASS, RANGE
 from cobble.dataflow.srccfg.dataflow import (
     Definition,
     condition_operands,
@@ -346,14 +346,14 @@ def test_condition_operands_reports_both_sides_of_a_relation() -> None:
 
 
 def test_condition_operands_drops_the_right_of_a_value_operator() -> None:
-    """IS NUMERIC puts a class name on the right, and an 88 its list of VALUEs.
+    """IS NUMERIC puts a class name on the right, and a THRU range its bounds.
     Harvesting those reports NUMERIC as a field the member never wrote, which
     spends the credibility of that line where it is genuinely true."""
     assert condition_operands(
         Atom(text="WS-A IS NUMERIC", left="WS-A", op=CLASS, right="NUMERIC")
     ) == ("WS-A",)
     assert condition_operands(
-        Atom(text="WS-A IN ('Y')", left="WS-A", op=IN, right="'Y'")
+        Atom(text="WS-A = 1 THRU 9", left="WS-A", op=RANGE, right="1 THRU 9")
     ) == ("WS-A",)
 
 

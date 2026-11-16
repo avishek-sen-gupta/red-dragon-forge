@@ -94,6 +94,47 @@ def test_an_88_in_a_guard_is_resolved_to_its_parent_field(program_of) -> None:
     assert frag.nodes[0].atom.left == "WS-STATUS"
 
 
+def test_a_multi_valued_88_lowers_to_one_test_per_value_chained_as_or(
+    program_of,
+) -> None:
+    """An 88 with VALUES LOW-VALUES SPACES holds when the parent equals either, so
+    its TESTs chain on FALSE as a written OR does, and a consumer that reads only
+    equalities sees every value."""
+    asg = program_of(
+        [],
+        data_fields=[
+            {
+                "name": "WS-ACTION",
+                "level": 1,
+                "pic": "X(1)",
+                "conditions": [
+                    {
+                        "name": "NOT-FETCHED",
+                        "values": [
+                            {"from": "LOW-VALUES", "figurative": True},
+                            {"from": "SPACES", "figurative": True},
+                        ],
+                    }
+                ],
+            }
+        ],
+    )
+
+    frag = lower_condition(read_condition("NOT-FETCHED"), _ctx(asg), "0", "")
+
+    first, second = frag.nodes
+    assert [(n.atom.left, n.atom.op, n.atom.right) for n in frag.nodes] == [
+        ("WS-ACTION", "==", "LOW-VALUES"),
+        ("WS-ACTION", "==", "SPACES"),
+    ]
+    assert frag.entry == first.id
+    assert [(e.source, e.target, e.kind) for e in frag.edges] == [
+        (first.id, second.id, EdgeKind.FALSE)
+    ]
+    assert [e.node_id for e in frag.true_exits] == [first.id, second.id]
+    assert [e.node_id for e in frag.false_exits] == [second.id]
+
+
 def test_and_chains_the_two_tests_on_the_true_edge(program_of) -> None:
     """The definition of short-circuit AND: B is only evaluated when A held, so the
     only way into B is A's TRUE edge."""

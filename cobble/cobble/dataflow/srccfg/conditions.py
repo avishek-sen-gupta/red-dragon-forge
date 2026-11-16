@@ -238,15 +238,14 @@ def negate_atom(atom: Atom) -> Atom:
     return replace(atom, text=f"{atom.left} {flipped} {atom.right}", op=flipped)
 
 
-IN = "IN"
 RANGE = "RANGE"
 
-VALUE_OPS = frozenset({CLASS, EIGHTY_EIGHT, IN, RANGE})
+VALUE_OPS = frozenset({CLASS, EIGHTY_EIGHT, RANGE})
 """The operators whose ``right`` is a value rather than a second operand.
 
-``IS NUMERIC`` puts a class name there, an 88 resolution puts its list of VALUEs
-there, a THRU range puts ``lo THRU hi``. A consumer collecting the fields a
-condition depends on must read ``left`` only for these, because ``NUMERIC`` and
+``IS NUMERIC`` puts a class name there and a THRU range puts ``lo THRU hi``. A
+consumer collecting the fields a condition depends on must read ``left`` only for
+these, because ``NUMERIC`` and
 ``1 THRU 9`` are not fields and reporting them as fields written nowhere in the
 member devalues that line wherever it is true.
 """
@@ -295,9 +294,10 @@ def _unanimous(group: tuple[EightyEight, ...]) -> bool:
     return len({_signature(e) for e in group}) == 1
 
 
-def _signature(entry: EightyEight) -> tuple[str, str, str]:
-    op, right = _op_and_right(entry)
-    return (entry.parent, op, right)
+def _signature(
+    entry: EightyEight,
+) -> tuple[str, tuple[str, ...], tuple[tuple[str, str], ...]]:
+    return (entry.parent, entry.values, entry.ranges)
 
 
 def _walk_fields(fields) -> tuple[EightyEight, ...]:
@@ -391,8 +391,10 @@ def _first_value(values: Sequence[ConditionValue]) -> RefModOperand:
     return RefModOperand(name=_shown(values[0], values[0].from_val), kind=kind)
 
 
-def resolve_atom(atom: Atom, index: Mapping[str, EightyEight]) -> Atom:
-    """Rewrite an 88-name atom as a predicate on its parent field.
+def resolve_atom(atom: Atom, index: Mapping[str, EightyEight]) -> Cond:
+    """Rewrite an 88-name atom as a predicate on its parent field: one equality per
+    VALUE and one range per THRU, joined by OR as a written ``X = 'A' OR X = 'B'``
+    is, so lowering chains them and no consumer has to read a value list.
 
     The text keeps the name the code was written with, because that is what a
     reader recognises; ``left`` becomes the parent, because that is what a
@@ -407,45 +409,34 @@ def resolve_atom(atom: Atom, index: Mapping[str, EightyEight]) -> Atom:
     return _from_entry(atom.text, entry, atom.plain)
 
 
-def _from_entry(name: str, entry: EightyEight, plain: bool) -> Atom:
-    op, right = _op_and_right(entry)
-    if not op:
+def _from_entry(name: str, entry: EightyEight, plain: bool) -> Cond:
+    alternatives = (
+        *(
+            _alternative(name, entry.parent, "==", value, plain)
+            for value in entry.values
+        ),
+        *(
+            _alternative(name, entry.parent, RANGE, f"{lo} THRU {hi}", plain)
+            for lo, hi in entry.ranges
+        ),
+    )
+    if not alternatives:
         return Atom(text=name, left=entry.parent, op=EIGHTY_EIGHT, plain=plain)
+    return reduce(
+        lambda left, right: Or(left=left, right=right),
+        alternatives[1:],
+        alternatives[0],
+    )
+
+
+def _alternative(name: str, parent: str, op: str, right: str, plain: bool) -> Cond:
     return Atom(
-        text=f"{name} ({entry.parent} {op} {right})",
-        left=entry.parent,
+        text=f"{name} ({parent} {op} {right})",
+        left=parent,
         op=op,
         right=right,
         plain=plain,
     )
-
-
-def _op_and_right(entry: EightyEight) -> tuple[str, str]:
-    """A mixed 88 has no single operator, so every alternative is an IN member."""
-    alternatives = (*entry.values, *_render_ranges(entry.ranges))
-    return next(
-        (
-            shape
-            for applies, shape in _eighty_eight_shapes(entry, alternatives)
-            if applies
-        ),
-        ("", ""),
-    )
-
-
-def _eighty_eight_shapes(
-    entry: EightyEight, alternatives: tuple[str, ...]
-) -> tuple[tuple[bool, tuple[str, str]], ...]:
-    return (
-        (bool(entry.ranges and entry.values), (IN, " ".join(alternatives))),
-        (bool(entry.ranges), (RANGE, " ".join(alternatives))),
-        (len(entry.values) == 1, ("==", alternatives[0] if alternatives else "")),
-        (bool(entry.values), (IN, " ".join(alternatives))),
-    )
-
-
-def _render_ranges(ranges: tuple[tuple[str, str], ...]) -> tuple[str, ...]:
-    return tuple(f"{lo} THRU {hi}" for lo, hi in ranges)
 
 
 ALWAYS = Atom(text="ANY", left="", op="", right="")

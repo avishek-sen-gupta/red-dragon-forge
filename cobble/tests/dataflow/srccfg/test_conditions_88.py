@@ -7,9 +7,9 @@ from __future__ import annotations
 from cobble.dataflow.srccfg.cfg import UNRESOLVED, Atom
 from cobble.dataflow.srccfg.conditions import (
     EIGHTY_EIGHT,
-    IN,
     RANGE,
     EightyEight,
+    Or,
     condition_index,
     resolve_atom,
 )
@@ -127,15 +127,25 @@ def test_resolving_a_single_valued_88_gives_an_equality_on_the_parent(asg_of) ->
     )
 
 
-def test_resolving_a_multi_valued_88_gives_a_membership_test(asg_of) -> None:
+def test_resolving_a_multi_valued_88_gives_an_or_of_equalities(asg_of) -> None:
+    """VALUES 'A' 'B' is X = 'A' OR X = 'B', so it lowers the way a written OR does:
+    one TEST per value, each an equality a consumer reads like any other."""
     index = condition_index(asg_of(_WITH_88))
     atom = Atom(text="STATUS-VALID", left="STATUS-VALID", op=EIGHTY_EIGHT)
 
-    assert resolve_atom(atom, index) == Atom(
-        text="STATUS-VALID (WS-STATUS IN 'A' 'B')",
-        left="WS-STATUS",
-        op=IN,
-        right="'A' 'B'",
+    assert resolve_atom(atom, index) == Or(
+        left=Atom(
+            text="STATUS-VALID (WS-STATUS == 'A')",
+            left="WS-STATUS",
+            op="==",
+            right="'A'",
+        ),
+        right=Atom(
+            text="STATUS-VALID (WS-STATUS == 'B')",
+            left="WS-STATUS",
+            op="==",
+            right="'B'",
+        ),
     )
 
 
@@ -143,12 +153,11 @@ def test_resolving_a_range_88_says_it_is_a_range(asg_of) -> None:
     index = condition_index(asg_of(_WITH_88))
     atom = Atom(text="STATUS-ALPHA", left="STATUS-ALPHA", op=EIGHTY_EIGHT)
 
-    resolved = resolve_atom(atom, index)
-
-    assert (resolved.left, resolved.op, resolved.right) == (
-        "WS-STATUS",
-        RANGE,
-        "'A' THRU 'Z'",
+    assert resolve_atom(atom, index) == Atom(
+        text="STATUS-ALPHA (WS-STATUS RANGE 'A' THRU 'Z')",
+        left="WS-STATUS",
+        op=RANGE,
+        right="'A' THRU 'Z'",
     )
 
 
@@ -205,13 +214,27 @@ def test_a_mixed_88_with_both_discrete_values_and_ranges_keeps_all(asg_of) -> No
     index = condition_index(asg)
     atom = Atom(text="CODE-VALID", left="CODE-VALID", op=EIGHTY_EIGHT)
 
-    resolved = resolve_atom(atom, index)
-
-    assert resolved == Atom(
-        text="CODE-VALID (WS-CODE IN 'A' 'B' 'X' THRU 'Z')",
-        left="WS-CODE",
-        op=IN,
-        right="'A' 'B' 'X' THRU 'Z'",
+    assert resolve_atom(atom, index) == Or(
+        left=Or(
+            left=Atom(
+                text="CODE-VALID (WS-CODE == 'A')",
+                left="WS-CODE",
+                op="==",
+                right="'A'",
+            ),
+            right=Atom(
+                text="CODE-VALID (WS-CODE == 'B')",
+                left="WS-CODE",
+                op="==",
+                right="'B'",
+            ),
+        ),
+        right=Atom(
+            text="CODE-VALID (WS-CODE RANGE 'X' THRU 'Z')",
+            left="WS-CODE",
+            op=RANGE,
+            right="'X' THRU 'Z'",
+        ),
     )
 
 
