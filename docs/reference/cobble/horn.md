@@ -225,3 +225,26 @@ proved impossible`, and `(cut at 64 ways: this list is incomplete)`.
 
 On sign-on each query takes under a second. On the largest CardDemo programs a way's check
 can run to the limit: COACTUPC's account REWRITE gives up on its first way at 180 s.
+
+## One formula
+
+`flat.formula(lowering, node)` asks the questions `reaches` asks, over the same lowering, as one
+quantifier-free bit-vector formula for a plain SMT solver instead of Horn clauses for Spacer. It
+has no command; it is asked from Python.
+
+- **Unrolled.** Each context's CFG is walked in topological order, the state at a node being
+  the state of whichever arrival a run takes. A PERFORM is inlined at its call, as a fresh copy
+  of the range entered in the caller's state, and the caller resumes in the state at the copy's
+  end, so a range returns only to its own call.
+- **Loops cut.** A loop with one entry node (`loops.Cycles`) is cut at that header: the header
+  holds the state the loop was entered in, with every byte the loop, or a range it performs,
+  may write freed, and the back edges are not followed. Marks the loop may change are freed
+  the same way. Inner loops are found once the header's back edges are gone. A loop entered at
+  several nodes is a **knot**: all of its nodes hold one such state.
+- **Answers.** The target is reached when any inlined copy of it is: `UNSAT` means no copy is,
+  `SAT` that one is, and `UNKNOWN` that the solver ran past `QUERY_TIMEOUT_MS` (180 s). Cutting
+  a loop frees bytes rather than fixing them, so it can add runs, never remove them: an `UNSAT`
+  is a proof as Spacer's is, and a `SAT` may be a run the loop could not take.
+- **One solver per formula.** `Formula.ask` adds each question as an implication guarded by a
+  fresh literal and checks under that literal, so what the solver learns on one question
+  carries to the next.

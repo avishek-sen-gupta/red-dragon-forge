@@ -266,7 +266,7 @@ def _known(byte: Byte) -> int:
     raise TypeError(f"{byte} is not a known byte")
 
 
-def _step(lowering: Lowering, tag: str, effect: Effect) -> Step:
+def step_of(lowering: Lowering, tag: str, effect: Effect) -> Step:
     steps_ = tuple(
         _segment_step(lowering, f"{tag}!{n}", n, bytes_)
         for n, bytes_ in enumerate(effect.bytes)
@@ -277,7 +277,7 @@ def _step(lowering: Lowering, tag: str, effect: Effect) -> Step:
     )
 
 
-def _edge_effect(lowering: Lowering, edge: Edge) -> Effect:
+def edge_effect(lowering: Lowering, edge: Edge) -> Effect:
     """The FLOW edge the CFG keeps past a PERFORM it could not resolve, or whose
     range never returns, stands for whatever the range might have done."""
     node = lowering.program.cfg.node(edge.source)
@@ -286,7 +286,7 @@ def _edge_effect(lowering: Lowering, edge: Edge) -> Effect:
     return lowering.effects[edge.source]
 
 
-def _guard(lowering: Lowering, edge: Edge) -> tuple[z3.BoolRef, ...]:
+def edge_guard(lowering: Lowering, edge: Edge) -> tuple[z3.BoolRef, ...]:
     if edge.kind not in (EdgeKind.TRUE, EdgeKind.FALSE):
         return ()
     atom = lowering.program.cfg.node(edge.source).atom
@@ -298,7 +298,7 @@ def _guard(lowering: Lowering, edge: Edge) -> tuple[z3.BoolRef, ...]:
     return branches.true if edge.kind is EdgeKind.TRUE else branches.false
 
 
-def _extras(lowering: Lowering, edge: Edge) -> tuple[z3.BoolRef, ...]:
+def edge_extras(lowering: Lowering, edge: Edge) -> tuple[z3.BoolRef, ...]:
     """EIBCALEN as the task found it, unless the node writes it; each mark as it
     was, or 1 leaving its own point; each outcome mark as it was, or the outcome
     of the edge leaving its test; each entry mark as it was."""
@@ -349,19 +349,19 @@ def outcome_byte(outcome: Outcome) -> z3.BitVecRef:
 
 def _edge_rule(lowering: Lowering, context: Context, edge: Edge) -> z3.BoolRef:
     v = lowering.vars
-    step = _step(lowering, _tag(edge), _edge_effect(lowering, edge))
+    step = step_of(lowering, edge_tag(edge), edge_effect(lowering, edge))
     body = (
         lowering.at(context, edge.source, v.entry, v.now),
         *step.terms,
-        *_extras(lowering, edge),
-        *_guard(lowering, edge),
-        *_installed(lowering, edge),
+        *edge_extras(lowering, edge),
+        *edge_guard(lowering, edge),
+        *pgmiderr_guard(lowering, edge),
     )
     head = lowering.at(context, edge.target, v.entry, v.after)
     return _rule(lowering, body, head, step.fresh)
 
 
-def _installed(lowering: Lowering, edge: Edge) -> tuple[z3.BoolRef, ...]:
+def pgmiderr_guard(lowering: Lowering, edge: Edge) -> tuple[z3.BoolRef, ...]:
     """The dispatch into a handler armed for PGMIDERR alone, from an XCTL, only
     while it names a program not installed. The dispatch from a command that
     cannot raise PGMIDERR is not followed at all."""
@@ -396,7 +396,7 @@ def _not_naming(lowering: Lowering, field: str) -> tuple[z3.BoolRef, ...]:
     )
 
 
-def _tag(edge: Edge) -> str:
+def edge_tag(edge: Edge) -> str:
     return f"{edge.source}>{edge.target}"
 
 
@@ -413,14 +413,14 @@ def _call(lowering: Lowering, context: Context, edge: Edge) -> tuple[z3.BoolRef,
     v = lowering.vars
     callee = performed(lowering.program.cfg, edge)
     caller = lowering.at(context, edge.source, v.entry, v.now)
-    entered = _entered(lowering, callee, edge.source)
+    entered = entered_state(lowering, callee, edge.source)
     enter = _rule(
         lowering, (caller,), lowering.at(callee, callee.entry, entered, entered)
     )
     return (enter, *_resume(lowering, context, edge, callee))
 
 
-def _entered(
+def entered_state(
     lowering: Lowering, callee: Context, call: str
 ) -> tuple[z3.BitVecRef, ...]:
     """The caller's state with the callee's entry mark, if it has one, naming
@@ -440,7 +440,7 @@ def _resume(
     resume = lowering.program.cfg.node(edge.source).resume
     if resume not in lowering.members[context]:
         return ()
-    entered = _entered(lowering, callee, edge.source)
+    entered = entered_state(lowering, callee, edge.source)
     body = (
         lowering.at(context, edge.source, v.entry, v.now),
         holds(lowering.summaries[callee], *entered, *v.after),

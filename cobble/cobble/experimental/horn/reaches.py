@@ -33,7 +33,7 @@ from cobble.experimental.horn.verdict import Verdict
 Asked = Condition | Visited | Took | Entered
 
 
-def _asked(
+def asked_term(
     condition: Asked, storage: Storage, state: Sequence[z3.BitVecRef]
 ) -> z3.BoolRef:
     if isinstance(condition, Took | Entered):
@@ -136,7 +136,7 @@ def reaches(
 ) -> Verdict:
     storage = system.storages[point.program]
     v = states(storage)
-    asked = tuple(_asked(c, storage, v.now) for c in conditions)
+    asked = tuple(asked_term(c, storage, v.now) for c in conditions)
     goal = z3.Function("goal", z3.BoolSort())
     rules = tuple(
         every(
