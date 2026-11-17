@@ -3,15 +3,18 @@ from collections.abc import Callable, Sequence
 import pytest
 from cobble.dataflow.srccfg.cfg import NodeKind
 from cobble.experimental.horn.answer import Answer
-from cobble.experimental.horn.lower import HornSystem
+from cobble.experimental.horn.lower import Lowering
 from cobble.experimental.horn.outcome import Outcome
-from cobble.experimental.horn.point import Point
 from cobble.experimental.horn.reaching_conditions import (
+    Asker,
+    Check,
     CheckedWay,
     Report,
     RouteTest,
     RouteVerdict,
     classified,
+    fast,
+    horn,
     reaching_conditions,
 )
 from cobble.experimental.horn.reaches import Asked
@@ -33,18 +36,25 @@ from tests.experimental.horn.asg_builder import (
 )
 
 
+@pytest.fixture(params=(horn, fast), ids=("horn", "fast"))
+def check(request: pytest.FixtureRequest) -> Check:
+    return request.param
+
+
 def _either(test: str) -> RouteTest:
     return RouteTest(test, RouteVerdict.EITHER_WAY, Outcome.UNRUN)
 
 
-def test_a_way_with_contradictory_tests_is_dropped() -> None:
+def test_a_way_with_contradictory_tests_is_dropped(check: Check) -> None:
     p = program([("MAIN", [if_("F", "'A'", [if_("F", "'B'", [X_OUT])]), STOP])])
     node = writer(p, "X-OUT")
 
-    assert reaching_conditions(p, node, clock()) == Report("PROGA", node, (), 1, False)
+    assert reaching_conditions(p, node, clock(), check) == Report(
+        "PROGA", node, (), 1, False
+    )
 
 
-def test_a_flag_set_in_a_performed_paragraph_decides_a_later_test() -> None:
+def test_a_flag_set_in_a_performed_paragraph_decides_a_later_test(check: Check) -> None:
     p = program(
         [
             (
@@ -62,7 +72,7 @@ def test_a_flag_set_in_a_performed_paragraph_decides_a_later_test() -> None:
     node = writer(p, "X-OUT")
     g, f = branch_on(p, "G", "'N'"), branch_on(p, "F", "'Y'")
 
-    assert reaching_conditions(p, node, clock()) == Report(
+    assert reaching_conditions(p, node, clock(), check) == Report(
         "PROGA",
         node,
         (
@@ -77,11 +87,11 @@ def test_a_flag_set_in_a_performed_paragraph_decides_a_later_test() -> None:
     )
 
 
-def test_a_rejoining_if_on_another_field_is_either_way() -> None:
+def test_a_rejoining_if_on_another_field_is_either_way(check: Check) -> None:
     p = program([("MAIN", [if_("F", "'Y'", [move_literal("'Y'", "G")]), X_OUT, STOP])])
     node = writer(p, "X-OUT")
 
-    assert reaching_conditions(p, node, clock()) == Report(
+    assert reaching_conditions(p, node, clock(), check) == Report(
         "PROGA",
         node,
         (CheckedWay(Way((), ()), Answer.SAT, (_either(branch_on(p, "F", "'Y'")),)),),
@@ -90,7 +100,7 @@ def test_a_rejoining_if_on_another_field_is_either_way() -> None:
     )
 
 
-def test_an_if_repeated_on_an_unchanged_field_is_if_it_runs() -> None:
+def test_an_if_repeated_on_an_unchanged_field_is_if_it_runs(check: Check) -> None:
     p = program(
         [
             (
@@ -108,7 +118,7 @@ def test_an_if_repeated_on_an_unchanged_field_is_if_it_runs() -> None:
         n.id for n in p.cfg.nodes if n.kind is NodeKind.TEST and n.atom.left == "F"
     )
 
-    assert reaching_conditions(p, node, clock()) == Report(
+    assert reaching_conditions(p, node, clock(), check) == Report(
         "PROGA",
         node,
         (
@@ -123,7 +133,7 @@ def test_an_if_repeated_on_an_unchanged_field_is_if_it_runs() -> None:
     )
 
 
-def test_a_test_nested_in_an_impossible_branch_never_runs() -> None:
+def test_a_test_nested_in_an_impossible_branch_never_runs(check: Check) -> None:
     p = program(
         [
             (
@@ -158,7 +168,7 @@ def test_a_test_nested_in_an_impossible_branch_never_runs() -> None:
         g: RouteTest(g, RouteVerdict.NEVER_RUNS, Outcome.UNRUN),
     }
 
-    assert reaching_conditions(p, node, clock()) == Report(
+    assert reaching_conditions(p, node, clock(), check) == Report(
         "PROGA",
         node,
         (CheckedWay(Way((), ()), Answer.SAT, tuple(route[t] for t in sorted(route))),),
@@ -167,7 +177,7 @@ def test_a_test_nested_in_an_impossible_branch_never_runs() -> None:
     )
 
 
-def test_a_loop_leaves_its_last_outcome() -> None:
+def test_a_loop_leaves_its_last_outcome(check: Check) -> None:
     p = program(
         [
             ("MAIN", [move_literal("'N'", "F")]),
@@ -184,7 +194,7 @@ def test_a_loop_leaves_its_last_outcome() -> None:
     )
     node = writer(p, "X-OUT")
 
-    assert reaching_conditions(p, node, clock()) == Report(
+    assert reaching_conditions(p, node, clock(), check) == Report(
         "PROGA",
         node,
         (
@@ -203,7 +213,7 @@ def test_a_loop_leaves_its_last_outcome() -> None:
     )
 
 
-def test_a_test_on_an_unplain_atom_is_either_way() -> None:
+def test_a_test_on_an_unplain_atom_is_either_way(check: Check) -> None:
     p = program(
         [
             (
@@ -216,7 +226,7 @@ def test_a_test_on_an_unplain_atom_is_either_way() -> None:
     node = writer(p, "X-OUT")
     (test,) = (n.id for n in p.cfg.nodes if n.kind is NodeKind.TEST)
 
-    assert reaching_conditions(p, node, clock()) == Report(
+    assert reaching_conditions(p, node, clock(), check) == Report(
         "PROGA",
         node,
         (CheckedWay(Way((), ()), Answer.SAT, (_either(test),)),),
@@ -225,7 +235,7 @@ def test_a_test_on_an_unplain_atom_is_either_way() -> None:
     )
 
 
-def test_each_way_classifies_a_shared_test_independently() -> None:
+def test_each_way_classifies_a_shared_test_independently(check: Check) -> None:
     p = program(
         [
             (
@@ -238,7 +248,7 @@ def test_each_way_classifies_a_shared_test_independently() -> None:
     node = writer(p, "X-OUT")
     f, g = branch_on(p, "F", "'Y'"), branch_on(p, "G", "'Z'")
 
-    assert reaching_conditions(p, node, clock()) == Report(
+    assert reaching_conditions(p, node, clock(), check) == Report(
         "PROGA",
         node,
         (
@@ -258,11 +268,11 @@ def test_each_way_classifies_a_shared_test_independently() -> None:
     )
 
 
-def test_an_unknown_node_is_refused() -> None:
+def test_an_unknown_node_is_refused(check: Check) -> None:
     p = program([("MAIN", [X_OUT, STOP])])
 
     with pytest.raises(ValueError, match="^NOPE is not a node of PROGA$"):
-        reaching_conditions(p, "NOPE", clock())
+        reaching_conditions(p, "NOPE", clock(), check)
 
 
 def test_a_route_test_is_classified_by_its_two_answers() -> None:
@@ -292,15 +302,13 @@ def test_a_way_the_solver_gave_up_on_leaves_its_route_unchecked() -> None:
     p = program([("MAIN", [if_("F", "'Y'", [move_literal("'Y'", "G")]), X_OUT, STOP])])
     node = writer(p, "X-OUT")
 
-    def ask(
-        system: HornSystem,
-        point: Point,
-        conditions: Sequence[Asked],
-        clock: Callable[[], float],
-    ) -> Verdict:
+    def ask(conditions: Sequence[Asked], clock: Callable[[], float]) -> Verdict:
         return Verdict(Answer.UNKNOWN if not conditions else Answer.SAT, 0.0)
 
-    assert reaching_conditions(p, node, clock(), ask) == Report(
+    def gives_up(lowering: Lowering, node: str) -> Asker:
+        return ask
+
+    assert reaching_conditions(p, node, clock(), gives_up) == Report(
         "PROGA",
         node,
         (
@@ -319,7 +327,7 @@ def test_a_way_the_solver_gave_up_on_leaves_its_route_unchecked() -> None:
     )
 
 
-def test_a_test_a_way_passes_twice_is_checked_by_its_last_outcome() -> None:
+def test_a_test_a_way_passes_twice_is_checked_by_its_last_outcome(check: Check) -> None:
     p = program(
         [
             ("MAIN", [perform("CHK"), perform("CHK"), X_OUT, STOP]),
@@ -342,7 +350,7 @@ def test_a_test_a_way_passes_twice_is_checked_by_its_last_outcome() -> None:
         branch_on(p, "G", "'Z'"),
         branch_on(p, "G", "'Y'"),
     )
-    report = reaching_conditions(p, node, clock())
+    report = reaching_conditions(p, node, clock(), check)
 
     assert (
         tuple(

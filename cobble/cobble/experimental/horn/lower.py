@@ -595,7 +595,11 @@ def lower(
     ``kept`` the tests to keep; ``outcomes`` the tests a question will ask the
     last outcome of; ``entries`` the ranges it will ask the last call site of."""
     storage = storage_of(program, watched, marks, frozenset(), kept, outcomes, entries)
-    lowering = lowering_of(program, storage)
+    return system_of(lowering_of(program, storage))
+
+
+def system_of(lowering: Lowering) -> HornSystem:
+    program = lowering.program
     return HornSystem(
         (_start(lowering), *body_rules(lowering)),
         relations_of(lowering),

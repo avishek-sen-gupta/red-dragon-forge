@@ -1,5 +1,6 @@
 import json
 import logging
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import pytest
@@ -12,9 +13,16 @@ from cobble.experimental.horn.reaching_conditions import (
     RouteTest,
     RouteVerdict,
 )
-from cobble.experimental.horn.reaching_conditions_cli import main, render
+from cobble.experimental.horn.reaching_conditions_cli import fast_main, main, render
 from cobble.experimental.horn.ways import Decision, Way
-from tests.experimental.horn.asg_builder import FIELDS, STOP, X_OUT, if_, program
+from tests.experimental.horn.asg_builder import (
+    FIELDS,
+    STOP,
+    X_OUT,
+    if_,
+    program,
+    writer,
+)
 
 
 def test_render_prints_every_section() -> None:
@@ -72,8 +80,11 @@ def test_render_prints_every_section() -> None:
     )
 
 
+@pytest.mark.parametrize("command", (main, fast_main), ids=("horn", "fast"))
 def test_an_unknown_node_exits_1_naming_it(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
+    command: Callable[[Sequence[str]], int],
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     path = tmp_path / "PROGA.json"
     unit = {
@@ -88,9 +99,50 @@ def test_an_unknown_node_exits_1_naming_it(
     path.write_text(json.dumps(unit), encoding="utf-8")
 
     with caplog.at_level(logging.ERROR):
-        code = main(["--asg", str(path), "--node", "NOPE"])
+        code = command(["--asg", str(path), "--node", "NOPE"])
 
     assert (code, [r.getMessage() for r in caplog.records]) == (
         1,
         ["NOPE is not a node of PROGA"],
+    )
+
+
+@pytest.mark.parametrize(
+    ("command", "formula_logs"),
+    ((main, 0), (fast_main, 1)),
+    ids=("horn", "fast"),
+)
+def test_each_command_prints_the_ways_asked_by_its_own_check(
+    command: Callable[[Sequence[str]], int],
+    formula_logs: int,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    statements = [if_("F", "'A'", [if_("F", "'B'", [X_OUT])]), STOP]
+    path = tmp_path / "PROGA.json"
+    unit = {
+        "programs": [
+            {
+                "program_id": "PROGA",
+                "data_fields": list(FIELDS),
+                "paragraphs": [{"name": "MAIN", "statements": statements}],
+            }
+        ]
+    }
+    path.write_text(json.dumps(unit), encoding="utf-8")
+    p = program([("MAIN", statements)])
+    node = writer(p, "X-OUT")
+
+    with caplog.at_level(logging.INFO):
+        code = command(["--asg", str(path), "--node", node])
+
+    assert (
+        code,
+        capsys.readouterr().out,
+        sum(r.name == "cobble.experimental.horn.flat" for r in caplog.records),
+    ) == (
+        0,
+        f"PROGA {node} (0): 0 ways\n  dropped: 1 way Z3 proved impossible\n",
+        formula_logs,
     )

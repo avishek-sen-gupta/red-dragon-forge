@@ -1,4 +1,4 @@
-"""cobble-experimental-reaching-conditions: the ways one node of one program is reached, each checked by Z3."""
+"""cobble-experimental-reaching-conditions and its -fast twin: the ways one node of one program is reached, each checked by Z3."""
 
 from __future__ import annotations
 
@@ -15,10 +15,13 @@ from cobble.experimental.horn.answer import Answer
 from cobble.experimental.horn.outcome import Outcome
 from cobble.experimental.horn.program import Program, program_of
 from cobble.experimental.horn.reaching_conditions import (
+    Check,
     CheckedWay,
     Report,
     RouteTest,
     RouteVerdict,
+    fast,
+    horn,
     reaching_conditions,
 )
 from cobble.experimental.horn.ways import MAX_WAYS, Decision
@@ -34,12 +37,12 @@ SECTIONS = (
 )
 
 
-def _parser() -> argparse.ArgumentParser:
+def _parser(prog: str, by: str) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="cobble-experimental-reaching-conditions",
+        prog=prog,
         description=(
             "Experimental: the ways one CFG node is reached, as the tests that decide "
-            "each, with every way Z3 proves impossible left out."
+            f"each, with every way Z3 proves impossible left out, {by}."
         ),
     )
     parser.add_argument("--asg", type=Path, required=True, help="one program's ASG")
@@ -104,14 +107,29 @@ def render(program: Program, report: Report) -> tuple[str, ...]:
     )
 
 
-def main(argv: Sequence[str] = ()) -> int:
+def _run(parser: argparse.ArgumentParser, check: Check, argv: Sequence[str]) -> int:
     configure_cli_logging()
-    arguments = _parser().parse_args(tuple(argv) if argv else None)
+    arguments = parser.parse_args(tuple(argv) if argv else None)
     with cached_asg_dialect_parsers_registered():
         program = program_of(first_program_at(arguments.asg))
     if arguments.node not in program.cfg.node_ids:
         logger.error("%s is not a node of %s", arguments.node, program.cfg.program)
         return 1
-    report = reaching_conditions(program, arguments.node, time.monotonic)
+    report = reaching_conditions(program, arguments.node, time.monotonic, check)
     sys.stdout.write("\n".join(render(program, report)) + "\n")
     return 0
+
+
+def main(argv: Sequence[str] = ()) -> int:
+    parser = _parser(
+        "cobble-experimental-reaching-conditions", "asked of the Horn clauses"
+    )
+    return _run(parser, horn, argv)
+
+
+def fast_main(argv: Sequence[str] = ()) -> int:
+    parser = _parser(
+        "cobble-experimental-reaching-conditions-fast",
+        "asked of one formula with loops cut at their headers",
+    )
+    return _run(parser, fast, argv)

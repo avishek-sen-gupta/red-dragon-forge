@@ -4,16 +4,19 @@ import logging
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
+from functools import partial
 
 from cobble.experimental.horn.answer import Answer
 from cobble.experimental.horn.condition import Entered, Took
+from cobble.experimental.horn.flat import formula
 from cobble.experimental.horn.leading_to import leading_to
-from cobble.experimental.horn.lower import HornSystem, lower
+from cobble.experimental.horn.lower import Lowering, lowering_of, system_of
 from cobble.experimental.horn.outcome import Outcome
 from cobble.experimental.horn.point import Point
 from cobble.experimental.horn.program import Program
 from cobble.experimental.horn.reaches import Asked, reaches
 from cobble.experimental.horn.route import route_tests
+from cobble.experimental.horn.storage import storage_of
 from cobble.experimental.horn.verdict import Verdict
 from cobble.experimental.horn.ways import Way, ways_to
 
@@ -64,7 +67,19 @@ DECIDED: Mapping[tuple[Answer, Answer], tuple[RouteVerdict, Outcome]] = {
 }
 GAVE_UP = (RouteVerdict.GAVE_UP, Outcome.UNRUN)
 
-Ask = Callable[[HornSystem, Point, Sequence[Asked], Callable[[], float]], Verdict]
+Asker = Callable[[Sequence[Asked], Callable[[], float]], Verdict]
+Check = Callable[[Lowering, str], Asker]
+
+
+def horn(lowering: Lowering, node: str) -> Asker:
+    """Each question one Spacer query on the program's Horn clauses."""
+    point = Point(lowering.program.cfg.program, node)
+    return partial(reaches, system_of(lowering), point)
+
+
+def fast(lowering: Lowering, node: str) -> Asker:
+    """Each question one query on a single QF_BV formula, built once per way."""
+    return formula(lowering, node).ask
 
 
 def classified(test: str, true: Answer, false: Answer) -> RouteTest:
@@ -85,22 +100,24 @@ class Checker:
     program: Program
     node: str
     clock: Callable[[], float]
-    ask: Ask
+    check: Check
 
     def checked(self, index: int, way: Way) -> CheckedWay:
         route = route_tests(self.program, way, self.node)
         last = {d.test: d.outcome for d in way.decisions}
-        system = lower(
+        storage = storage_of(
             self.program,
+            (),
             kept=leading_to(self.program.cfg, self.node),
             outcomes=(*last, *route),
             entries=tuple(dict.fromkeys(context for context, _ in way.calls)),
         )
+        ask = self.check(lowering_of(self.program, storage), self.node)
         conditions = (
             *(Took(test, outcome) for test, outcome in last.items()),
             *(Entered(context, call) for context, call in way.calls),
         )
-        answer = self._ask(system, conditions, f"way {index}")
+        answer = self._ask(ask, conditions, f"way {index}")
         if answer is Answer.UNSAT:
             return CheckedWay(way, answer, ())
         if answer is Answer.UNKNOWN:
@@ -108,41 +125,38 @@ class Checker:
         return CheckedWay(
             way,
             answer,
-            tuple(self._route(system, conditions, index, test) for test in route),
+            tuple(self._route(ask, conditions, index, test) for test in route),
         )
 
     def _route(
         self,
-        system: HornSystem,
+        ask: Asker,
         conditions: tuple[Asked, ...],
         index: int,
         test: str,
     ) -> RouteTest:
         true, false = tuple(
             self._ask(
-                system, (*conditions, Took(test, o)), f"way {index}, {test} {o.name}"
+                ask, (*conditions, Took(test, o)), f"way {index}, {test} {o.name}"
             )
             for o in (Outcome.TRUE, Outcome.FALSE)
         )
         return classified(test, true, false)
 
-    def _ask(
-        self, system: HornSystem, conditions: tuple[Asked, ...], what: str
-    ) -> Answer:
-        point = Point(self.program.cfg.program, self.node)
-        verdict = self.ask(system, point, conditions, self.clock)
+    def _ask(self, ask: Asker, conditions: tuple[Asked, ...], what: str) -> Answer:
+        verdict = ask(conditions, self.clock)
         logger.info("%s: %s in %.1fs", what, verdict.answer.name, verdict.seconds)
         return verdict.answer
 
 
 def reaching_conditions(
-    program: Program, node: str, clock: Callable[[], float], ask: Ask = reaches
+    program: Program, node: str, clock: Callable[[], float], check: Check = horn
 ) -> Report:
     cfg = program.cfg
     if node not in cfg.node_ids:
         raise ValueError(f"{node} is not a node of {cfg.program}")
     found = ways_to(program, node)
-    checker = Checker(program, node, clock, ask)
+    checker = Checker(program, node, clock, check)
     checked = tuple(checker.checked(n, way) for n, way in enumerate(found.ways))
     kept = tuple(way for way in checked if way.answer is not Answer.UNSAT)
     return Report(cfg.program, node, kept, len(checked) - len(kept), found.cut)

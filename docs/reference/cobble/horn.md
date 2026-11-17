@@ -5,9 +5,10 @@ Horn clauses, and a question about it answered by Z3's Spacer engine (the `z3-so
 `cobble/experimental/horn/`. Two `.importlinter` contracts keep it removable in one piece:
 `horn-is-a-leaf` lets nothing outside the package import it, and `z3-only-in-horn` lets nothing
 outside it import z3. Deleting the experiment is deleting the package, its tests, those
-contracts, `horn-not-datalog` and the `z3-solver` dependency. One command uses it,
-`cobble-experimental-reaching-conditions` (see [Reaching conditions](#reaching-conditions)); any
-other question is asked from Python, as the CardDemo tests do.
+contracts, `horn-not-datalog` and the `z3-solver` dependency. Two commands use it,
+`cobble-experimental-reaching-conditions` and `cobble-experimental-reaching-conditions-fast` (see
+[Reaching conditions](#reaching-conditions)); any other question is asked from Python, as the
+CardDemo tests do.
 
 ## What it reads
 
@@ -184,7 +185,12 @@ watched name that is not exactly one field. The answer is one of:
 
 ```
 cobble-experimental-reaching-conditions --asg ASG.json --node NODE_ID
+cobble-experimental-reaching-conditions-fast --asg ASG.json --node NODE_ID
 ```
+
+The two take the same arguments, find the same ways and print the same report. The first asks
+each question of the Horn clauses with `reaches`; the second builds one formula per way
+([One formula](#one-formula)) and asks the way and its route tests of it.
 
 The ways one node of one program is reached, as the tests that decide each, with every way Z3
 proves impossible left out. `--asg` is one program's ASG cache file; `--node` a node id of its
@@ -199,7 +205,7 @@ stdout. An unknown node id exits 1. It runs no JVM.
   first, one way per call site. A PERFORM that dominates the node and whose range can end the
   task adds the decisions that bring the range back to its end. At most 64 ways
   (`MAX_WAYS`); past that the output says the list was cut.
-- **Checking a way.** One `reaches` query on the program lowered with `leading_to(cfg, node)`,
+- **Checking a way.** One query on the program lowered with `leading_to(cfg, node)`,
   with an outcome mark per test of the way and of its route and an entry mark per range it
   enters: `Took` for each decision, `Entered` for each call site. `UNSAT` drops the way;
   `UNKNOWN` keeps it, marked "solver gave up".
@@ -229,8 +235,8 @@ can run to the limit: COACTUPC's account REWRITE gives up on its first way at 18
 ## One formula
 
 `flat.formula(lowering, node)` asks the questions `reaches` asks, over the same lowering, as one
-quantifier-free bit-vector formula for a plain SMT solver instead of Horn clauses for Spacer. It
-has no command; it is asked from Python.
+quantifier-free bit-vector formula for a plain SMT solver instead of Horn clauses for Spacer.
+`cobble-experimental-reaching-conditions-fast` asks it.
 
 - **Unrolled.** Each context's CFG is walked in topological order, the state at a node being
   the state of whichever arrival a run takes. A PERFORM is inlined at its call, as a fresh copy

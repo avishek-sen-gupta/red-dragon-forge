@@ -151,9 +151,10 @@ jobs:
           cache: maven
       # The knowledge-graph layout is precomputed by graphviz's sfdp, and its
       # tests skip without the binary — so without this the layout code was not
-      # exercised in CI at all.
+      # exercised in CI at all. From Ubuntu 26.04 the graphviz package carries only
+      # dot: sfdp's layout is libgvplugin-neato-layout8 and unflatten is graphviz-tools.
       - name: Install graphviz and the hlasm_export build dependencies
-        run: sudo apt-get update && sudo apt-get install -y graphviz cmake ninja-build clang libc++-dev libc++abi-dev
+        run: sudo apt-get update && sudo apt-get install -y graphviz libgvplugin-neato-layout8 graphviz-tools cmake ninja-build clang libc++-dev libc++abi-dev
       - name: Build the bridge JARs (ProLeap + JCL)
         working-directory: ${{ github.workspace }}
         run: make jar

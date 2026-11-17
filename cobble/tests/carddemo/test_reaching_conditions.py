@@ -4,10 +4,17 @@ from __future__ import annotations
 
 import time
 
+import pytest
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.experimental.horn.answer import Answer
 from cobble.experimental.horn.program import Program, program_of
-from cobble.experimental.horn.reaching_conditions import Report, reaching_conditions
+from cobble.experimental.horn.reaching_conditions import (
+    Check,
+    Report,
+    fast,
+    horn,
+    reaching_conditions,
+)
 from cobble.parsing.asg_cache import cache_path, first_program_at
 from tests.carddemo.conftest import CardDemoRun
 
@@ -31,6 +38,11 @@ BLANK_INPUT_NEVER_REACHES = (
     ("USERIDI == LOW-VALUES", "if it runs", "FALSE"),
     ("USERIDI == SPACES", "if it runs", "FALSE"),
 )
+
+
+@pytest.fixture(params=(horn, fast), ids=("horn", "fast"))
+def check(request: pytest.FixtureRequest) -> Check:
+    return request.param
 
 
 def _program(run: CardDemoRun, program: str) -> Program:
@@ -65,9 +77,11 @@ def _read(
     )
 
 
-def test_signon_reaches_the_user_menu_one_way(carddemo: CardDemoRun) -> None:
+def test_signon_reaches_the_user_menu_one_way(
+    carddemo: CardDemoRun, check: Check
+) -> None:
     program = _program(carddemo, SIGNON)
-    report = reaching_conditions(program, USER_MENU, time.monotonic)
+    report = reaching_conditions(program, USER_MENU, time.monotonic, check)
 
     assert (_read(program, report), report.dropped, report.cut) == (
         (
@@ -82,9 +96,11 @@ def test_signon_reaches_the_user_menu_one_way(carddemo: CardDemoRun) -> None:
     )
 
 
-def test_signon_reaches_the_admin_menu_one_way(carddemo: CardDemoRun) -> None:
+def test_signon_reaches_the_admin_menu_one_way(
+    carddemo: CardDemoRun, check: Check
+) -> None:
     program = _program(carddemo, SIGNON)
-    report = reaching_conditions(program, ADMIN_MENU, time.monotonic)
+    report = reaching_conditions(program, ADMIN_MENU, time.monotonic, check)
 
     assert (_read(program, report), report.dropped, report.cut) == (
         (
