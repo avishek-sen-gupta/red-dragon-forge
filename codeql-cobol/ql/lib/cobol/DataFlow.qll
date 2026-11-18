@@ -14,37 +14,47 @@ private import codeql.util.Unit
 import cobol.Cfg
 
 private predicate boundary(Program p, string rec, int b) {
-  exists(Field f | f.getProgram() = p and f.getRecord() = rec |
-    b = f.getStart() or b = f.getEnd()
-  )
+  exists(Field f | f.getProgram() = p and f.getRecord() = rec | b = f.getStart() or b = f.getEnd())
+}
+
+private int boundaryRank(Program p, string rec, int b) {
+  b = rank[result](int x | boundary(p, rec, x) | x)
 }
 
 private newtype TAtom =
-  TAtomC(Program p, string rec, int lo, int hi) {
-    boundary(p, rec, lo) and hi = min(int b | boundary(p, rec, b) and b > lo)
+  TAtomC(Program p, string rec, int i) {
+    exists(boundaryRank(p, rec, _)) and
+    i = [1 .. max(boundaryRank(p, rec, _)) - 1]
   }
 
 class Atom extends TAtom {
-  Program getProgram() { this = TAtomC(result, _, _, _) }
+  Program getProgram() { this = TAtomC(result, _, _) }
 
-  string getRecord() { this = TAtomC(_, result, _, _) }
+  string getRecord() { this = TAtomC(_, result, _) }
 
-  int getLo() { this = TAtomC(_, _, result, _) }
-
-  int getHi() { this = TAtomC(_, _, _, result) }
-
-  string toString() {
-    result = this.getRecord() + "[" + this.getLo() + ":" + this.getHi() + ")"
+  int getLo() {
+    exists(Program p, string rec, int i |
+      this = TAtomC(p, rec, i) and i = boundaryRank(p, rec, result)
+    )
   }
+
+  int getHi() {
+    exists(Program p, string rec, int i |
+      this = TAtomC(p, rec, i) and i + 1 = boundaryRank(p, rec, result)
+    )
+  }
+
+  string toString() { result = this.getRecord() + "[" + this.getLo() + ":" + this.getHi() + ")" }
 
   Location getLocation() { result = this.getProgram().getLocation() }
 }
 
 predicate fieldAtom(Field f, Atom a) {
-  a.getProgram() = f.getProgram() and
-  a.getRecord() = f.getRecord() and
-  a.getLo() >= f.getStart() and
-  a.getHi() <= f.getEnd()
+  exists(Program p, string rec |
+    p = f.getProgram() and
+    rec = f.getRecord() and
+    a = TAtomC(p, rec, [boundaryRank(p, rec, f.getStart()) .. boundaryRank(p, rec, f.getEnd()) - 1])
+  )
 }
 
 private predicate directAccess(Scope sc, Atom a) {
@@ -67,14 +77,22 @@ predicate nodeWrites(CfgNode n, Atom a, boolean certain) {
     if s.isPartial(f) then certain = false else certain = true
   )
   or
-  (modRef(n.(PerformCall).getCallee(), a) or n.isEntry() and modRef(n.getScope(), a)) and
+  (
+    modRef(n.(PerformCall).getCallee(), a)
+    or
+    n.isEntry() and modRef(n.getScope(), a)
+  ) and
   certain = true
 }
 
 predicate nodeReads(CfgNode n, Atom a) {
   exists(Field f | n.getStmt().getARead() = f and fieldAtom(f, a))
   or
-  (modRef(n.(PerformCall).getCallee(), a) or n.isExit() and modRef(n.getScope(), a))
+  (
+    modRef(n.(PerformCall).getCallee(), a)
+    or
+    n.isExit() and modRef(n.getScope(), a)
+  )
 }
 
 private module SsaInput implements SsaImpl::InputSig<Location, Cfg::BasicBlock> {
@@ -97,12 +115,16 @@ private predicate moved(Stmt s, Atom a, Atom b) {
   exists(Field src, Field dst |
     src = s.getARead() and dst = s.getAWrite() and fieldAtom(src, a) and fieldAtom(dst, b)
   |
-    src.isNumeric() or
-    dst.isNumeric() or
-    s.isPartial(src) or
-    s.isPartial(dst) or
+    src.isNumeric()
+    or
+    dst.isNumeric()
+    or
+    s.isPartial(src)
+    or
+    s.isPartial(dst)
+    or
     a.getLo() - src.getStart() < b.getHi() - dst.getStart() and
-      b.getLo() - dst.getStart() < a.getHi() - src.getStart()
+    b.getLo() - dst.getStart() < a.getHi() - src.getStart()
   )
 }
 
@@ -122,8 +144,10 @@ module CobolDataFlow implements SharedDataFlow::InputSig<Location> {
     predicate isWrite() { this = TWriteNode(_, _) }
 
     Atom getAtom() {
-      this = TReadNode(_, result) or
-      this = TWriteNode(_, result) or
+      this = TReadNode(_, result)
+      or
+      this = TWriteNode(_, result)
+      or
       exists(Ssa::Definition d | this = TSsaNode(d) and result = d.getSourceVariable())
     }
 
@@ -181,9 +205,7 @@ module CobolDataFlow implements SharedDataFlow::InputSig<Location> {
   DataFlowCallable nodeGetEnclosingCallable(Node node) {
     result = node.getCfgNode().getScope()
     or
-    exists(Ssa::Definition d |
-      node = TSsaNode(d) and result = d.getBasicBlock().getScope()
-    )
+    exists(Ssa::Definition d | node = TSsaNode(d) and result = d.getBasicBlock().getScope())
   }
 
   DataFlowType getNodeType(Node node) { exists(node) and exists(result) }
@@ -305,9 +327,7 @@ module CobolDataFlow implements SharedDataFlow::InputSig<Location> {
 
   predicate lambdaCall(DataFlowCall call, LambdaCallKind kind, Node receiver) { none() }
 
-  predicate additionalLambdaFlowStep(Node nodeFrom, Node nodeTo, boolean preservesValue) {
-    none()
-  }
+  predicate additionalLambdaFlowStep(Node nodeFrom, Node nodeTo, boolean preservesValue) { none() }
 
   predicate knownSourceModel(Node source, string model) { none() }
 
