@@ -62,7 +62,7 @@ def test_a_directive_a_branch_skips_still_governs_what_follows_it() -> None:
                             "not": False,
                             "relation": {
                                 "left": {"kind": "ref", "name": "X"},
-                                "op": "=",
+                                "op": "==",
                                 "right": {"kind": "lit", "value": "1"},
                             },
                         },
@@ -154,11 +154,11 @@ def test_the_sqlcode_each_condition_tests_is_the_one_db2_defines() -> None:
     )
 
     assert [n.atom.text for n in cfg.nodes if "#test" in n.id] == [
-        "SQLCODE = 100",
+        "SQLCODE == 100",
         "SQLCODE < 0",
-        "SQLWARN0 = 'W'",
+        "SQLWARN0 == 'W'",
         "SQLCODE > 0",
-        "SQLCODE <> 100",
+        "SQLCODE != 100",
     ]
 
 

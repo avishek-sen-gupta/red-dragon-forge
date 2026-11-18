@@ -9,7 +9,8 @@ SQLCODE branching. Slice 1: SQLERROR / NOT FOUND with CONTINUE / GO TO.
 from __future__ import annotations
 
 import pytest
-
+from cobol_asg.cobol_expression import FieldRefNode, LiteralNode
+from cobol_asg.condition import RelationalOperator, RelationTest
 from squall.parser.parse import parse_exec_sql
 from squall.parser.sql_model import (
     Continue,
@@ -149,11 +150,14 @@ def test_a_condition_db2_does_not_define_does_not_raise() -> None:
 
 @pytest.mark.parametrize(
     ("condition", "op", "value"),
-    [(WheneverCondition.SQLERROR, "<", "0"), (WheneverCondition.NOT_FOUND, "=", "100")],
+    [
+        (WheneverCondition.SQLERROR, RelationalOperator.LESS, "0"),
+        (WheneverCondition.NOT_FOUND, RelationalOperator.EQUAL, "100"),
+    ],
     ids=["sqlerror", "not-found"],
 )
 def test_the_synthetic_sqlcode_test_compares_against_a_numeric_literal(
-    condition: WheneverCondition, op: str, value: str
+    condition: WheneverCondition, op: RelationalOperator, value: str
 ) -> None:
     """The lowering compares a relation numerically only when its literal is marked
     numeric, as the bridge marks one; unmarked, SQLCODE = 100 compared characters."""
@@ -161,11 +165,6 @@ def test_the_synthetic_sqlcode_test_compares_against_a_numeric_literal(
 
     statement = _sqlcode_if_stmt(condition, "ERR-PARA")
 
-    assert statement.condition == {
-        "not": False,
-        "relation": {
-            "left": {"kind": "ref", "name": "SQLCODE"},
-            "op": op,
-            "right": {"kind": "lit", "value": value, "numeric": True},
-        },
-    }
+    assert statement.condition == RelationTest(
+        FieldRefNode(name="SQLCODE"), op, LiteralNode(value=value, numeric=True)
+    )

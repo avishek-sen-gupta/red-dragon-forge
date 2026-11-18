@@ -19,10 +19,17 @@ from __future__ import annotations
 from collections.abc import Mapping
 from itertools import accumulate
 
-from cobble.dataflow.srccfg.conditions import ConditionData
 from cobble.dataflow.srccfg.statements import Entry, statement_entries
 from cobol_asg.asg_types import CobolASG
+from cobol_asg.cobol_expression import FieldRefNode, LiteralNode
 from cobol_asg.cobol_statements import CobolStatementType
+from cobol_asg.condition import (
+    Combination,
+    Condition,
+    Connective,
+    RelationalOperator,
+    RelationTest,
+)
 from squall.statements import (
     ExecSqlStatement,
     GoTo,
@@ -83,36 +90,28 @@ def _active_gotos(active: Active) -> Governing:
     )
 
 
-def _ref(name: str) -> Mapping[str, str]:
-    return {"kind": "ref", "name": name}
+def _relation(left: str, op: RelationalOperator, right: str) -> Condition:
+    return RelationTest(FieldRefNode(name=left), op, LiteralNode(value=right))
 
 
-def _lit(value: str) -> Mapping[str, str]:
-    return {"kind": "lit", "value": value}
+def _both(connective: Connective, left: Condition, right: Condition) -> Condition:
+    return Combination(connective, (left, right))
 
 
-def _relation(left: str, op: str, right: str) -> Mapping[str, ConditionData]:
-    return {"relation": {"left": _ref(left), "op": op, "right": _lit(right)}}
-
-
-def _both(op: str, left: ConditionData, right: ConditionData) -> ConditionData:
-    return {"op": op, "left": left, "right": right}
-
-
-# What each condition tests, as the raw shape conditions.read_condition already
-# reads, so the guard lowers through cobble's own AND/OR handling rather than a
-# second condition lowering of its own. Values per IBM's WHENEVER reference; the
-# SQLSTATE arms are omitted because squall populates only SQLCODE.
-SQLCA_CONDITIONS: Mapping[WheneverCondition, ConditionData] = {
-    WheneverCondition.NOT_FOUND: _relation("SQLCODE", "=", "100"),
-    WheneverCondition.SQLERROR: _relation("SQLCODE", "<", "0"),
+# What each condition tests, as a condition the ASG could have held, so the guard
+# lowers through cobble's own AND/OR handling rather than a second condition
+# lowering of its own. Values per IBM's WHENEVER reference; the SQLSTATE arms are
+# omitted because squall populates only SQLCODE.
+SQLCA_CONDITIONS: Mapping[WheneverCondition, Condition] = {
+    WheneverCondition.NOT_FOUND: _relation("SQLCODE", RelationalOperator.EQUAL, "100"),
+    WheneverCondition.SQLERROR: _relation("SQLCODE", RelationalOperator.LESS, "0"),
     WheneverCondition.SQLWARNING: _both(
-        "OR",
-        _relation("SQLWARN0", "=", "'W'"),
+        Connective.OR,
+        _relation("SQLWARN0", RelationalOperator.EQUAL, "'W'"),
         _both(
-            "AND",
-            _relation("SQLCODE", ">", "0"),
-            _relation("SQLCODE", "<>", "100"),
+            Connective.AND,
+            _relation("SQLCODE", RelationalOperator.GREATER, "0"),
+            _relation("SQLCODE", RelationalOperator.NOT_EQUAL, "100"),
         ),
     ),
 }

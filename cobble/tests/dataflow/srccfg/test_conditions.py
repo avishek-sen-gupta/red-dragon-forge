@@ -21,6 +21,7 @@ from cobble.dataflow.srccfg.conditions import (
 from cobol_asg.any_object import AnyObject
 from cobol_asg.selection_condition import SelectionCondition
 from cobol_asg.truth_value import TruthValue
+from cobol_asg.condition import ConditionNameTest, condition_from_dict
 
 
 def _rel(left: str, op: str, right: str, negated: bool = False) -> dict:
@@ -35,7 +36,7 @@ def _rel(left: str, op: str, right: str, negated: bool = False) -> dict:
 
 
 def test_a_relational_condition_becomes_one_atom_with_its_parts() -> None:
-    assert read_condition(_rel("WS-FLAG-A", "==", "'Y'")) == Atom(
+    assert read_condition(condition_from_dict(_rel("WS-FLAG-A", "==", "'Y'"))) == Atom(
         text="WS-FLAG-A == 'Y'",
         left="WS-FLAG-A",
         op="==",
@@ -56,7 +57,7 @@ def test_a_field_on_both_sides_keeps_both_names() -> None:
         },
     }
 
-    assert read_condition(raw) == Atom(
+    assert read_condition(condition_from_dict(raw)) == Atom(
         text="WS-FLAG-A == WS-FLAG-B",
         left="WS-FLAG-A",
         op="==",
@@ -69,7 +70,9 @@ def test_a_negated_relation_becomes_a_not_around_the_atom() -> None:
     """NOT stays a node rather than flipping the operator: the lowering pass
     implements it by swapping edges, and an operator flip would be wrong for a
     class test or an 88 name where there is no operator to flip."""
-    assert read_condition(_rel("WS-FLAG-A", "==", "'Y'", negated=True)) == Not(
+    assert read_condition(
+        condition_from_dict(_rel("WS-FLAG-A", "==", "'Y'", negated=True))
+    ) == Not(
         inner=Atom(
             text="WS-FLAG-A == 'Y'", left="WS-FLAG-A", op="==", right="'Y'", plain=True
         )
@@ -87,7 +90,7 @@ def test_and_and_or_nest_left_and_right() -> None:
         },
     }
 
-    assert read_condition(raw) == Or(
+    assert read_condition(condition_from_dict(raw)) == Or(
         left=Atom(
             text="WS-FLAG-A == 'Y'", left="WS-FLAG-A", op="==", right="'Y'", plain=True
         ),
@@ -113,7 +116,7 @@ def test_and_and_or_nest_left_and_right() -> None:
 def test_a_parenthesised_subcondition_is_read_through() -> None:
     raw = {"not": False, "condition": _rel("WS-FLAG-A", "==", "'Y'")}
 
-    assert read_condition(raw) == Atom(
+    assert read_condition(condition_from_dict(raw)) == Atom(
         text="WS-FLAG-A == 'Y'",
         left="WS-FLAG-A",
         op="==",
@@ -134,7 +137,7 @@ def test_a_negated_parenthesised_subcondition_negates_the_whole_group() -> None:
         },
     }
 
-    result = read_condition(raw)
+    result = read_condition(condition_from_dict(raw))
     assert isinstance(result, Not)
     assert isinstance(result.inner, And)
 
@@ -144,7 +147,7 @@ def test_a_condition_name_becomes_an_atom_naming_the_88() -> None:
     division is consulted the name is all there is, and it is a real dependency."""
     raw = {"not": False, "condition_name": "WS-FLAG-A-SET"}
 
-    assert read_condition(raw) == Atom(
+    assert read_condition(condition_from_dict(raw)) == Atom(
         text="WS-FLAG-A-SET",
         left="WS-FLAG-A-SET",
         op=EIGHTY_EIGHT,
@@ -160,7 +163,7 @@ def test_a_class_test_keeps_the_operand_and_the_class() -> None:
         "operand": {"kind": "ref", "name": "WS-AMOUNT"},
     }
 
-    assert read_condition(raw) == Atom(
+    assert read_condition(condition_from_dict(raw)) == Atom(
         text="WS-AMOUNT IS NUMERIC", left="WS-AMOUNT", op="CLASS", right="NUMERIC"
     )
 
@@ -177,7 +180,7 @@ def test_a_dfhresp_operand_reads_as_the_condition_it_names() -> None:
         },
     }
 
-    assert read_condition(raw) == Atom(
+    assert read_condition(condition_from_dict(raw)) == Atom(
         text="WS-RESP == DFHRESP(NORMAL)",
         left="WS-RESP",
         op="==",
@@ -189,7 +192,7 @@ def test_a_dfhresp_operand_reads_as_the_condition_it_names() -> None:
 def test_a_bare_string_condition_is_an_atom_of_that_text() -> None:
     """EVALUATE WHEN gives its subject as plain text when it is an 88 name or a
     literal, and SEARCH WHEN gives the whole predicate that way."""
-    assert read_condition("WS-FLAG-A-SET") == Atom(
+    assert read_condition(ConditionNameTest(name="WS-FLAG-A-SET")) == Atom(
         text="WS-FLAG-A-SET",
         left="WS-FLAG-A-SET",
         op=EIGHTY_EIGHT,
@@ -201,11 +204,11 @@ def test_a_bare_string_condition_is_an_atom_of_that_text() -> None:
 def test_a_shape_this_pass_does_not_know_is_unresolved_not_an_error() -> None:
     """One unreadable predicate must cost that predicate's parts, not the member.
     The leaf still exists, so the path through it still exists."""
-    assert read_condition({"something": "new"}) == UNRESOLVED
+    assert read_condition(condition_from_dict({"something": "new"})) == UNRESOLVED
 
 
 def test_an_empty_condition_is_unresolved() -> None:
-    assert read_condition(None) == UNRESOLVED
+    assert read_condition(condition_from_dict({})) == UNRESOLVED
 
 
 def test_negating_an_atom_for_a_report_flips_the_operator() -> None:
@@ -249,7 +252,9 @@ def test_a_figurative_constant_is_kept_as_the_right_operand() -> None:
     """SPACES and LOW-VALUES arrive with kind "figurative", not "lit". Dropping them
     printed the guard as "IRRA-ERR-CDE == " with nothing on the right, which names no
     condition a reader can check against the listing."""
-    assert read_condition(_fig("IRRA-ERR-CDE", "==", "SPACES")) == Atom(
+    assert read_condition(
+        condition_from_dict(_fig("IRRA-ERR-CDE", "==", "SPACES"))
+    ) == Atom(
         text="IRRA-ERR-CDE == SPACES",
         left="IRRA-ERR-CDE",
         op="==",
@@ -264,11 +269,13 @@ def test_two_figurative_constants_in_one_condition_stay_distinct() -> None:
     branch tested which -- the halves became indistinguishable rather than merely
     unlabelled."""
     both = read_condition(
-        {
-            "op": "OR",
-            "left": _fig("IRRA-ERR-CDE", "==", "SPACES"),
-            "right": _fig("IRRA-ERR-CDE", "==", "LOW-VALUES"),
-        }
+        condition_from_dict(
+            {
+                "op": "OR",
+                "left": _fig("IRRA-ERR-CDE", "==", "SPACES"),
+                "right": _fig("IRRA-ERR-CDE", "==", "LOW-VALUES"),
+            }
+        )
     )
 
     assert both == Or(
@@ -294,7 +301,7 @@ def test_a_figurative_constant_is_not_reported_as_a_field_dependency() -> None:
     filling it in must not turn SPACES into a field written nowhere."""
     from cobble.dataflow.srccfg.literals import is_literal
 
-    atom = read_condition(_fig("IRRA-ERR-CDE", "==", "SPACES"))
+    atom = read_condition(condition_from_dict(_fig("IRRA-ERR-CDE", "==", "SPACES")))
 
     assert isinstance(atom, Atom)
     assert is_literal(atom.right)
@@ -304,7 +311,7 @@ def test_under_evaluate_false_a_when_is_reached_when_its_condition_fails() -> No
     """EVALUATE FALSE selects the first WHEN whose condition is false, so the
     branch guard is the negation of what EVALUATE TRUE would test."""
     named = SelectionCondition(
-        condition={"not": False, "condition_name": "INPUT-ERROR"}
+        condition=condition_from_dict({"not": False, "condition_name": "INPUT-ERROR"})
     )
     tested = Atom(text="INPUT-ERROR", left="INPUT-ERROR", op=EIGHTY_EIGHT, plain=True)
 
@@ -354,7 +361,10 @@ def test_an_atom_is_plain_only_when_neither_operand_selects_part_of_a_field() ->
     whole_atom = Atom(text="F == 'Y'", left="F", op="==", right="'Y'", plain=True)
     part_atom = Atom(text="F == 'Y'", left="F", op="==", right="'Y'", plain=False)
 
-    assert [read_condition(raw) for raw in (whole, part, row, flag, flag_row)] == [
+    assert [
+        read_condition(condition_from_dict(raw))
+        for raw in (whole, part, row, flag, flag_row)
+    ] == [
         whole_atom,
         part_atom,
         Atom(text="T == 'Y'", left="T", op="==", right="'Y'", plain=False),

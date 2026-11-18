@@ -1,11 +1,11 @@
-"""ASG condition dicts to a tree of atoms.
+"""ASG conditions to a tree of atoms.
 
 Only reading happens here. AND/OR/NOT stay as nodes; turning them into TEST
 chains is desugar.py's job, and NOT in particular is implemented there as an edge
 swap, which is why it must survive as a node rather than being folded into the
 operator now -- an 88 name and a class test have no operator to fold into.
 
-A shape this module does not recognise yields UNRESOLVED rather than raising. The
+A test this module cannot take apart yields UNRESOLVED rather than raising. The
 leaf still exists, so no path is silently removed; what is lost is the parts, and
 that loss is visible in every report because ``resolved`` is False.
 """
@@ -14,8 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from functools import reduce
-from itertools import accumulate, repeat, takewhile
+from functools import reduce, singledispatch
 
 from cobble.dataflow.srccfg.cfg import UNRESOLVED, Atom
 from cobble.dataflow.srccfg.declared_condition import DeclaredCondition
@@ -23,10 +22,23 @@ from cobble.dataflow.srccfg.expression_text import expression_text
 from cobble.dataflow.srccfg.synthetic import dfhresp_operand
 from cobol_asg.any_object import AnyObject
 from cobol_asg.cobol_expression import (
+    AddressOfNode,
+    AllLiteralNode,
+    DfhRespNode,
     ExprNode,
     FieldRefNode,
     FigurativeNode,
     LiteralNode,
+    RefModNode,
+)
+from cobol_asg.condition import (
+    ClassTest,
+    Combination,
+    Condition,
+    ConditionNameTest,
+    Connective,
+    Parenthesised,
+    RelationTest,
 )
 from cobol_asg.condition_name import ConditionValue
 from cobol_asg.evaluate_selection import SelectionObject, SelectionSubject
@@ -65,142 +77,108 @@ class Not:
 Cond = Atom | And | Or | Not
 
 
-ConditionData = Mapping | str | None
-"""What the ASG hands over for a condition or an operand: ``IfStatement`` and
-``SelectionCondition`` type it ``dict``, a relation operand may be a name, and a
-missing key reads as None."""
+def read_condition(condition: Condition) -> Cond:
+    if isinstance(condition, Combination):
+        return _combined(condition)
+    return _negated_if(condition.negated, _test(condition))
 
 
-def read_condition(raw: ConditionData) -> Cond:
-    match raw:
-        case str():
-            return _named(raw, True)
-        case Mapping():
-            return _read_mapping(raw)
-        case _:
-            return UNRESOLVED
+@singledispatch
+def _test(condition: Condition) -> Cond:
+    """The test without its NOT. A user class, a sign test and text the bridge did
+    not structure have no parts to read."""
+    return UNRESOLVED
 
 
-def _read_mapping(raw: Mapping) -> Cond:
-    if _is_combination(raw):
-        return _combined(raw)
-    return _wrap(raw, _body(raw))
+@_test.register
+def _(condition: RelationTest) -> Cond:
+    return _relation(condition)
 
 
-def _wrap(raw: Mapping, inner: Cond) -> Cond:
-    return Not(inner=inner) if raw.get("not") else inner
+@_test.register
+def _(condition: Parenthesised) -> Cond:
+    return read_condition(condition.inner)
 
 
-def _body(raw: Mapping) -> Cond:
-    """The first shape the dict carries, in the order the bridge can nest them."""
-    return next(
-        (read(raw) for applies, read in _BODY_SHAPES if applies(raw)), UNRESOLVED
+@_test.register
+def _(condition: ConditionNameTest) -> Cond:
+    return _named(condition.name, not condition.subscripts)
+
+
+@_test.register
+def _(condition: ClassTest) -> Cond:
+    return _class_test(condition)
+
+
+_COMBINATIONS = {Connective.AND: And, Connective.OR: Or}
+
+
+def _combined(condition: Combination) -> Cond:
+    """The operands folded on the left, as the bridge nested them."""
+    join = _COMBINATIONS[condition.connective]
+    return reduce(
+        lambda left, operand: join(left=left, right=read_condition(operand)),
+        condition.operands[1:],
+        read_condition(condition.operands[0]),
     )
 
 
-def _is_combination(raw: Mapping) -> bool:
-    return "op" in raw and "left" in raw
-
-
-_BODY_SHAPES = (
-    (lambda raw: "relation" in raw, lambda raw: _relation(raw["relation"])),
-    (lambda raw: "condition" in raw, lambda raw: read_condition(raw["condition"])),
-    (
-        lambda raw: "condition_name" in raw,
-        lambda raw: _named(
-            str(raw["condition_name"]), not raw.get("condition_subscripts")
-        ),
-    ),
-    (lambda raw: "class" in raw, lambda raw: _class_test(raw)),
-)
-
-
-_COMBINATIONS = {"AND": And, "OR": Or}
-
-
-def _combined(raw: Mapping) -> Cond:
-    """A chain of combinations, read down its left side and folded back up.
-
-    The bridge nests ``A OR B OR C`` on the left, one level per operand, so a
-    recursive read costs a stack frame per operand and a long chain overflows.
-    """
-    spine = _left_spine(raw)
-    return reduce(_linked, reversed(spine), read_condition(spine[-1]["left"]))
-
-
-def _left_spine(raw: Mapping) -> tuple[Mapping, ...]:
-    """The combinations down the left side, outermost first."""
-    lefts = accumulate(repeat(None), lambda node, _: node["left"], initial=raw)
-    return tuple(takewhile(_is_combination_node, lefts))
-
-
-def _is_combination_node(node: ConditionData) -> bool:
-    return isinstance(node, Mapping) and _is_combination(node)
-
-
-def _linked(left: Cond, link: Mapping) -> Cond:
-    combination = _COMBINATIONS.get(str(link["op"]))
-    if not combination:
-        return _wrap(link, UNRESOLVED)
-    return _wrap(link, combination(left=left, right=read_condition(link["right"])))
-
-
-def _relation(raw: ConditionData) -> Cond:
-    if not isinstance(raw, Mapping):
-        return UNRESOLVED
-    left = _operand(raw.get("left"))
-    right = _operand(raw.get("right"))
-    op = str(raw.get("op", ""))
-    if not op or not left:
+def _relation(condition: RelationTest) -> Cond:
+    left = _operand(condition.left)
+    right = _operand(condition.right)
+    op = condition.operator.value
+    if not left:
         return UNRESOLVED
     return Atom(
         text=f"{left} {op} {right}",
         left=left,
         op=op,
         right=right,
-        plain=_whole(raw.get("left")) and _whole(raw.get("right")),
+        plain=_whole(condition.left) and _whole(condition.right),
     )
 
 
-SELECTORS = ("ref_mod_start", "ref_mod_length", "subscripts")
-
-
-def _whole(raw: ConditionData) -> bool:
+def _whole(node: ExprNode) -> bool:
     """A relation operand that names all of its field, or a literal."""
-    match raw:
-        case str():
-            return True
-        case Mapping():
-            return not any(raw.get(key) for key in SELECTORS)
-        case _:
+    match node:
+        case RefModNode():
             return False
-
-
-def _operand(raw: ConditionData) -> str:
-    match raw:
-        case str():
-            return raw
-        case Mapping():
-            return _operand_of_kind(raw)
+        case FieldRefNode() | AddressOfNode():
+            return not node.subscripts
         case _:
-            return ""
-
-
-def _operand_of_kind(raw: Mapping) -> str:
-    read = _OPERAND_KINDS.get(str(raw.get("kind", "")))
-    return read(raw) if read else ""
+            return True
 
 
 # A figurative constant is a literal that happens to have a name. Reading it as one
 # keeps `IF X = SPACES OR LOW-VALUES` two distinguishable predicates rather than two
 # copies of "X == "; is_literal already covers these names, so nothing downstream
 # mistakes SPACES for a field.
-_OPERAND_KINDS = {
-    "ref": lambda raw: str(raw.get("name", "")),
-    "lit": lambda raw: str(raw.get("value", "")),
-    "figurative": lambda raw: str(raw.get("value", "")),
-    "dfhresp": lambda raw: dfhresp_operand(str(raw.get("condition", ""))),
-}
+@singledispatch
+def _operand(node: ExprNode) -> str:
+    return ""
+
+
+@_operand.register
+def _(node: FieldRefNode | RefModNode) -> str:
+    return node.name
+
+
+@_operand.register
+def _(node: LiteralNode | FigurativeNode) -> str:
+    return node.value
+
+
+@_operand.register
+def _(node: AllLiteralNode) -> str:
+    return ALL
+
+
+@_operand.register
+def _(node: DfhRespNode) -> str:
+    return dfhresp_operand(node.condition)
+
+
+ALL = "ALL"
 
 
 def _named(name: str, plain: bool) -> Cond:
@@ -209,12 +187,11 @@ def _named(name: str, plain: bool) -> Cond:
     return Atom(text=name, left=name, op=EIGHTY_EIGHT, plain=plain)
 
 
-def _class_test(raw: Mapping) -> Cond:
-    operand = _operand(raw.get("operand"))
-    class_name = str(raw.get("class", ""))
+def _class_test(condition: ClassTest) -> Cond:
+    operand = _operand(condition.operand)
     if not operand:
         return UNRESOLVED
-    return class_atom(operand, class_name)
+    return class_atom(operand, condition.kind.value)
 
 
 def class_atom(operand: str, class_name: str) -> Atom:

@@ -21,6 +21,7 @@ from cobble.dataflow.srccfg.desugar import (
     lower_condition,
     lower_statements,
 )
+from cobol_asg.condition import ConditionNameTest, condition_from_dict
 
 
 def _ctx(asg) -> Ctx:
@@ -64,7 +65,12 @@ def _atom_texts(cfg: Cfg) -> list[str]:
 
 def test_one_atom_lowers_to_one_test_with_a_true_and_a_false_exit(program_of) -> None:
     asg = program_of([])
-    frag = lower_condition(read_condition(_rel("WS-FLAG-A", "'Y'")), _ctx(asg), "0", "")
+    frag = lower_condition(
+        read_condition(condition_from_dict(_rel("WS-FLAG-A", "'Y'"))),
+        _ctx(asg),
+        "0",
+        "",
+    )
 
     assert frag.nodes[0].kind == NodeKind.TEST
     assert frag.nodes[0].atom.left == "WS-FLAG-A"
@@ -89,7 +95,9 @@ def test_an_88_in_a_guard_is_resolved_to_its_parent_field(program_of) -> None:
         ],
     )
 
-    frag = lower_condition(read_condition("STATUS-ACTIVE"), _ctx(asg), "0", "")
+    frag = lower_condition(
+        read_condition(ConditionNameTest(name="STATUS-ACTIVE")), _ctx(asg), "0", ""
+    )
 
     assert frag.nodes[0].atom.left == "WS-STATUS"
 
@@ -120,7 +128,9 @@ def test_a_multi_valued_88_lowers_to_one_test_per_value_chained_as_or(
         ],
     )
 
-    frag = lower_condition(read_condition("NOT-FETCHED"), _ctx(asg), "0", "")
+    frag = lower_condition(
+        read_condition(ConditionNameTest(name="NOT-FETCHED")), _ctx(asg), "0", ""
+    )
 
     first, second = frag.nodes
     assert [(n.atom.left, n.atom.op, n.atom.right) for n in frag.nodes] == [
@@ -140,11 +150,13 @@ def test_and_chains_the_two_tests_on_the_true_edge(program_of) -> None:
     only way into B is A's TRUE edge."""
     asg = program_of([])
     cond = read_condition(
-        {
-            "op": "AND",
-            "left": _rel("WS-FLAG-A", "'Y'"),
-            "right": _rel("WS-TYPE-B", "'G'"),
-        }
+        condition_from_dict(
+            {
+                "op": "AND",
+                "left": _rel("WS-FLAG-A", "'Y'"),
+                "right": _rel("WS-TYPE-B", "'G'"),
+            }
+        )
     )
 
     frag = lower_condition(cond, _ctx(asg), "0", "")
@@ -161,11 +173,13 @@ def test_and_chains_the_two_tests_on_the_true_edge(program_of) -> None:
 def test_or_chains_the_two_tests_on_the_false_edge(program_of) -> None:
     asg = program_of([])
     cond = read_condition(
-        {
-            "op": "OR",
-            "left": _rel("WS-FLAG-A", "'Y'"),
-            "right": _rel("WS-TYPE-B", "'G'"),
-        }
+        condition_from_dict(
+            {
+                "op": "OR",
+                "left": _rel("WS-FLAG-A", "'Y'"),
+                "right": _rel("WS-TYPE-B", "'G'"),
+            }
+        )
     )
 
     frag = lower_condition(cond, _ctx(asg), "0", "")
@@ -186,10 +200,15 @@ def test_not_swaps_the_true_and_false_exits_and_emits_no_extra_node(
     normalise."""
     asg = program_of([])
     plain = lower_condition(
-        read_condition(_rel("WS-FLAG-A", "'Y'")), _ctx(asg), "0", ""
+        read_condition(condition_from_dict(_rel("WS-FLAG-A", "'Y'"))),
+        _ctx(asg),
+        "0",
+        "",
     )
     negated = lower_condition(
-        read_condition({"not": True, "condition": _rel("WS-FLAG-A", "'Y'")}),
+        read_condition(
+            condition_from_dict({"not": True, "condition": _rel("WS-FLAG-A", "'Y'")})
+        ),
         _ctx(asg),
         "0",
         "",
@@ -206,14 +225,16 @@ def test_not_of_an_and_reaches_its_true_side_by_two_paths(program_of) -> None:
     which IS the disjunction, expressed as two paths."""
     asg = program_of([])
     cond = read_condition(
-        {
-            "not": True,
-            "condition": {
-                "op": "AND",
-                "left": _rel("WS-FLAG-A", "'Y'"),
-                "right": _rel("WS-TYPE-B", "'G'"),
-            },
-        }
+        condition_from_dict(
+            {
+                "not": True,
+                "condition": {
+                    "op": "AND",
+                    "left": _rel("WS-FLAG-A", "'Y'"),
+                    "right": _rel("WS-TYPE-B", "'G'"),
+                },
+            }
+        )
     )
 
     frag = lower_condition(cond, _ctx(asg), "0", "")
@@ -228,11 +249,13 @@ def test_each_test_node_gets_its_own_id_within_the_statement(program_of) -> None
     atom was."""
     asg = program_of([])
     cond = read_condition(
-        {
-            "op": "AND",
-            "left": _rel("WS-FLAG-A", "'Y'"),
-            "right": _rel("WS-TYPE-B", "'G'"),
-        }
+        condition_from_dict(
+            {
+                "op": "AND",
+                "left": _rel("WS-FLAG-A", "'Y'"),
+                "right": _rel("WS-TYPE-B", "'G'"),
+            }
+        )
     )
 
     frag = lower_condition(cond, _ctx(asg), "0", "")
@@ -387,7 +410,12 @@ def test_as_fragment_places_true_exits_before_false_exits(program_of) -> None:
     """Converting a CondFragment to a Fragment merges the two exit sets with the
     true exits first, which is the only ordering promise it makes."""
     asg = program_of([])
-    cond = lower_condition(read_condition(_rel("WS-FLAG-A", "'Y'")), _ctx(asg), "0", "")
+    cond = lower_condition(
+        read_condition(condition_from_dict(_rel("WS-FLAG-A", "'Y'"))),
+        _ctx(asg),
+        "0",
+        "",
+    )
 
     fragment = as_fragment(cond)
 
@@ -405,7 +433,7 @@ def test_a_long_or_chain_lowers_to_tests_chained_on_the_false_edge(program_of) -
         _rel("WS-F0", "'Y'"),
     )
 
-    frag = lower_condition(read_condition(raw), _ctx(asg), "0", "")
+    frag = lower_condition(read_condition(condition_from_dict(raw)), _ctx(asg), "0", "")
 
     ids = [f"MAIN/0#test.{'L' * (length - 1)}"] + [
         f"MAIN/0#test.{'L' * (length - 1 - n)}R" for n in range(1, length)

@@ -91,6 +91,7 @@ from cobol_asg.cobol_statements import (
     SortStatement,
     WhenStatement,
 )
+from cobol_asg.condition import UnparsedCondition
 from cobol_asg.evaluate_selection import SelectionSubject
 from cobol_asg.exit_kind import ExitKind
 from cobol_asg.ref_mod import RefModOperand
@@ -587,7 +588,7 @@ def as_fragment(cond: CondFragment) -> Fragment:
 
 
 def _if(statement, ctx: Ctx, path: str) -> Fragment:
-    cond = lower_condition(read_condition(_raw_condition(statement)), ctx, path)
+    cond = lower_condition(read_condition(statement.condition), ctx, path)
     then_arm = lower_statements(getattr(statement, "children", ()), ctx, f"{path}.then")
     else_arm = lower_statements(
         getattr(statement, "else_children", ()), ctx, f"{path}.else"
@@ -617,17 +618,6 @@ def _attach(exits: tuple[Exit, ...], arm: Fragment) -> tuple[Edge, ...]:
     return tuple(
         Edge(source=exit_.node_id, target=arm.entry, kind=exit_.kind) for exit_ in exits
     )
-
-
-def _raw_condition(statement) -> Mapping:
-    """The ASG hands conditions back as the same dicts it was built from, and the
-    statement dataclasses keep them under ``condition``.
-
-    Unparameterised, because the values are what nesting the reader walks: a
-    sub-condition mapping, an operand mapping, a name, a flag. ``read_condition``
-    owns that descent and is where the shapes are named."""
-    raw = getattr(statement, "condition", {}) or {}
-    return raw
 
 
 def _evaluate(statement: EvaluateStatement, ctx: Ctx, path: str) -> Fragment:
@@ -837,10 +827,10 @@ def _search_condition(when, ctx: Ctx, path: str) -> CondFragment:
     is what puts the fields the guard depends on into a dependency report -- and
     what keeps a Python dict repr out of the predicate a person reads.
     """
-    raw = getattr(when, "condition", "")
-    if isinstance(raw, str):
-        return _exits_of(_opaque_test(ctx, path, raw))
-    return lower_condition(read_condition(raw), ctx, path)
+    condition = when.condition
+    if isinstance(condition, UnparsedCondition) and condition.text:
+        return _exits_of(_opaque_test(ctx, path, condition.text))
+    return lower_condition(read_condition(condition), ctx, path)
 
 
 def _opaque_test(ctx: Ctx, path: str, text: str) -> Node:
@@ -1054,9 +1044,7 @@ def _times_test(spec: PerformTimesSpec, ctx: Ctx, path: str) -> CondFragment:
 
 
 def _until_test(spec, ctx: Ctx, path: str) -> CondFragment:
-    return lower_condition(
-        read_condition(getattr(spec, "condition", {})), ctx, f"{path}#loop"
-    )
+    return lower_condition(read_condition(spec.condition), ctx, f"{path}#loop")
 
 
 def _exits_of(node: Node) -> CondFragment:
@@ -1156,9 +1144,7 @@ def _one_after_loop(
         (variable, *spec_reads(spec.varying_by)),
     )
     loop = _tested_loop(
-        lower_condition(
-            read_condition(getattr(spec, "condition", {})), ctx, f"{path}{suffix}#loop"
-        ),
+        lower_condition(read_condition(spec.condition), ctx, f"{path}{suffix}#loop"),
         _with_step(inner, step, ctx, f"{path}{suffix}"),
         before=_before(spec),
     )

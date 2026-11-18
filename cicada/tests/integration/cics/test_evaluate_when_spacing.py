@@ -10,8 +10,15 @@ figurative operands that the flat-string path could not represent.
 
 from __future__ import annotations
 
+from cobol_asg.cobol_expression import FieldRefNode, FigurativeNode
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.cobol_statements import EvaluateStatement, WhenStatement
+from cobol_asg.condition import (
+    Combination,
+    Connective,
+    RelationalOperator,
+    RelationTest,
+)
 from cobol_asg.selection_condition import SelectionCondition
 from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.features import CobolFeature
@@ -61,22 +68,27 @@ def _find_when_condition(asg):
 
 @covers(CobolFeature.EVALUATE)
 def test_evaluate_when_condition_is_structured(bridge_jar):
-    """EVALUATE WHEN condition is a structured dict matching the IF path."""
+    """EVALUATE WHEN condition is a structured condition matching the IF path."""
     parser = ProLeapCobolParser(RealSubprocessRunner(), bridge_jar)
     asg = parser.parse(EVALUATE_SOURCE.encode("utf-8")).first_program
 
     condition = _find_when_condition(asg)
 
     # Structured shape — the abbreviated "WS-X = SPACES OR LOW-VALUES" expands
-    # into an OR of two relations, with figurative operands sized downstream.
-    assert isinstance(condition, dict), f"expected structured dict, got {condition!r}"
-    assert condition.get("op") == "OR", condition
-    left = condition["left"]["relation"]
-    right = condition["right"]["relation"]
-    assert left["left"] == {"kind": "ref", "name": "WS-X"}
-    assert left["op"] == "=="
-    assert left["right"] == {"kind": "figurative", "value": "SPACES"}
-    # The trailing operand inherits the subject WS-X and operator "=".
-    assert right["left"] == {"kind": "ref", "name": "WS-X"}
-    assert right["op"] == "=="
-    assert right["right"] == {"kind": "figurative", "value": "LOW-VALUES"}
+    # into an OR of two relations; the trailing operand inherits the subject WS-X
+    # and the operator, and the figurative operands are sized downstream.
+    assert condition == Combination(
+        Connective.OR,
+        (
+            RelationTest(
+                FieldRefNode(name="WS-X"),
+                RelationalOperator.EQUAL,
+                FigurativeNode(value="SPACES"),
+            ),
+            RelationTest(
+                FieldRefNode(name="WS-X"),
+                RelationalOperator.EQUAL,
+                FigurativeNode(value="LOW-VALUES"),
+            ),
+        ),
+    )

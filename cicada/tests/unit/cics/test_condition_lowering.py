@@ -1,9 +1,10 @@
-"""Unit tests for condition_lowering's _lower_expr_dict: the unresolvable-ref
+"""Unit tests for condition_lowering's _lower_operand: the unresolvable-ref
 sentinel, and a numeric literal the bridge tagged as a ref."""
 
 from __future__ import annotations
 
-from interpreter.cobol.condition_lowering import _lower_expr_dict
+from cobol_asg.cobol_expression import FieldRefNode
+from interpreter.cobol.condition_lowering import _lower_operand
 from interpreter.cobol.lowering_scope import LoweringScope
 from interpreter.instructions import Const
 from interpreter.register import Register
@@ -11,7 +12,7 @@ from tests.covers import covers, NotLanguageFeature
 
 
 class _FakeCtx:
-    """Minimal EmitContext stub sufficient for testing _lower_expr_dict."""
+    """Minimal EmitContext stub sufficient for testing _lower_operand."""
 
     def __init__(self, fields: set[str]) -> None:
         self._fields = fields
@@ -53,7 +54,7 @@ class _FakeCtx:
 _MAT = object()  # materialised layout sentinel — not inspected by these tests
 
 
-# ── _lower_expr_dict: unresolvable ref ────────────────────────────────────────
+# ── _lower_operand: unresolvable ref ──────────────────────────────────────────
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -62,9 +63,7 @@ def test_unresolvable_ref_emits_sentinel_not_field_name_literal():
     sentinel constant ('UNRESOLVABLE__X'), not silently coerce the name to a
     literal via parse_literal."""
     ctx = _FakeCtx(fields=set())
-    _lower_expr_dict(
-        LoweringScope(ctx, _MAT, None), {"kind": "ref", "name": "MISSING_FIELD"}
-    )
+    _lower_operand(LoweringScope(ctx, _MAT, None), FieldRefNode(name="MISSING_FIELD"))
     consts = [i.value for i in ctx.emitted if isinstance(i, Const)]
     assert consts == [
         "UNRESOLVABLE__MISSING_FIELD"
@@ -76,6 +75,6 @@ def test_numeric_literal_tagged_as_ref_is_parsed_not_sentinelled():
     """The bridge sometimes tags a numeric literal as a ref (e.g. an abbreviated
     condition operand '1'). It must be parsed as the literal, NOT sentinelled."""
     ctx = _FakeCtx(fields=set())
-    _lower_expr_dict(LoweringScope(ctx, _MAT, None), {"kind": "ref", "name": "1"})
+    _lower_operand(LoweringScope(ctx, _MAT, None), FieldRefNode(name="1"))
     consts = [i.value for i in ctx.emitted if isinstance(i, Const)]
     assert consts == [1], f"expected literal int 1, got {consts}"

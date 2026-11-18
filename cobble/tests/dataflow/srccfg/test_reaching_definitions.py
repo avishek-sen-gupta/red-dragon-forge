@@ -128,7 +128,7 @@ def test_a_write_on_one_arm_only_does_not_kill_the_write_before_the_if() -> None
                     "statements": [
                         _move("'A'", "WS-FLAG-A"),
                         _if(
-                            _rel("WS-OTHER", "=", "'Y'"),
+                            _rel("WS-OTHER", "==", "'Y'"),
                             [_move("'B'", "WS-FLAG-A")],
                             [],
                         ),
@@ -160,7 +160,7 @@ def test_a_write_on_both_arms_kills_the_write_before_the_if() -> None:
                     "statements": [
                         _move("'A'", "WS-FLAG-A"),
                         _if(
-                            _rel("WS-OTHER", "=", "'Y'"),
+                            _rel("WS-OTHER", "==", "'Y'"),
                             [_move("'B'", "WS-FLAG-A")],
                             [_move("'C'", "WS-FLAG-A")],
                         ),
@@ -241,7 +241,7 @@ def test_a_loop_reaches_a_fixpoint_rather_than_iterating_forever() -> None:
                             "operands": ["STEP"],
                             "spec": {
                                 "kind": "until",
-                                "condition": _rel("WS-FLAG-A", "=", "'Y'"),
+                                "condition": _rel("WS-FLAG-A", "==", "'Y'"),
                                 "test_before": True,
                             },
                         }
@@ -316,7 +316,7 @@ def test_a_field_that_only_decides_a_branch_is_still_a_reader() -> None:
                     "name": "MAIN",
                     "statements": [
                         _if(
-                            _rel("WS-FLAG-A", "=", "'Y'"),
+                            _rel("WS-FLAG-A", "==", "'Y'"),
                             [_move("'B'", "WS-RESULT")],
                             [],
                         )

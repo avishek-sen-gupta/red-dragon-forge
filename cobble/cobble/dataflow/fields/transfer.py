@@ -69,7 +69,6 @@ from cobol_asg.cobol_expression import (
     FieldRefNode,
     LiteralNode,
     RefModNode,
-    expr_from_dict,
 )
 from cobol_asg.cobol_statements import (
     ArithmeticCorrespondingStatement,
@@ -264,9 +263,7 @@ def _function_reads(statement: MoveStatement) -> tuple[RefModOperand, ...]:
 
 def _argument_reads(function: FunctionCallOperand) -> tuple[RefModOperand, ...]:
     """The fields a FUNCTION's arguments read, as a COMPUTE reads them."""
-    return tuple(
-        read for arg in function.args for read in _expression_reads(expr_from_dict(arg))
-    )
+    return tuple(read for arg in function.args for read in _expression_reads(arg))
 
 
 def _sending_reads(sending: StringSending) -> tuple[RefModOperand, ...]:

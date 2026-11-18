@@ -52,7 +52,7 @@ _BUILTIN_NAME = "__exec_sql"
 # SQLWARNING is omitted: it needs SQLCA SQLWARN populated (squall-ud0).
 _WHENEVER_RELATION: dict[WheneverCondition, tuple[str, str]] = {
     WheneverCondition.SQLERROR: ("<", "0"),
-    WheneverCondition.NOT_FOUND: ("=", "100"),
+    WheneverCondition.NOT_FOUND: ("==", "100"),
 }
 
 

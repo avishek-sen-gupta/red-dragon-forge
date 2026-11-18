@@ -27,6 +27,7 @@ from cobol_asg.cobol_statements import (
 from cobol_asg.file_enums import OpenMode
 from cobble.knowledge_graph.graph_types import EdgeKind, NodeKind
 from cobble.jcl.cobol_file_graph import extract_cobol_file_graph
+from cobol_asg.condition import condition_from_dict
 
 _UNRESOLVED = NoFileLocation(FileLocationReason.UNRESOLVED)
 _NO_LOCATIONS: Mapping[tuple[NodeKind, str], FileLocation] = MappingProxyType({})
@@ -207,7 +208,7 @@ def test_an_open_nested_inside_an_if_is_found() -> None:
         file_control=[FileControlEntry(file_name="ACCTFILE", assign_to="WORK1")],
         statements=[
             IfStatement(
-                condition={},
+                condition=condition_from_dict({}),
                 children=[OpenStatement(mode_groups=[(OpenMode.INPUT, ["ACCTFILE"])])],
                 else_children=[
                     OpenStatement(mode_groups=[(OpenMode.OUTPUT, ["ACCTFILE"])])
