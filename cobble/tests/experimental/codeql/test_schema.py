@@ -195,6 +195,21 @@ module Generated {
   }
 
   class Part extends AstNode, @cobol_part { }
+
+  /** `child` is held at `index` of `parent`'s field `field`. */
+  predicate childOf(AstNode parent, string field, int index, AstNode child) {
+    field = "leaf" and child = parent.(Tree).getLeaf() and index = 0
+    or
+    field = "either" and child = parent.(Tree).getEither() and index = 0
+    or
+    field = "maybe" and child = parent.(Tree).getMaybe() and index = 0
+    or
+    field = "leaves" and child = parent.(Tree).getLeaves(index)
+    or
+    field = "pairs" and child = parent.(Tree).getPairs(index)
+    or
+    field = "options" and child = parent.(Tree).getOptions(index)
+  }
 }
 """
 

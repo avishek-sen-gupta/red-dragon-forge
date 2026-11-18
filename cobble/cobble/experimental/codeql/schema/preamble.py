@@ -56,6 +56,8 @@ units(
 /* The cells a data name denotes: every one of that name whose qualification path holds
    the qualifiers written, so a subscripted name denotes every occurrence. */
 names_cell(int node: @cobol_ast_node ref, int cell: @field ref);
+/* The cells a name a node holds as text denotes: a WRITE's record name, say. */
+field_names_cell(int node: @cobol_ast_node ref, string field: string ref, int cell: @field ref);
 /* The first and last unit an out-of-line PERFORM runs. */
 perform_range(int perform: @cobol_perform_statement ref, int first: @cobol_unit ref, int last: @cobol_unit ref);
 /* The unit a procedure name denotes: a paragraph so named, else a section's first. */

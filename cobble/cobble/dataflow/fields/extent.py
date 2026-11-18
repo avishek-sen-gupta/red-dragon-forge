@@ -101,12 +101,10 @@ def _combine(op: str, left: _Folded, right: _Folded) -> _Folded:
 def _const(node: ExprNode | RefModExpr) -> _Folded:
     """The integer an expression folds to, when it needs no runtime state."""
     match node:
-        case LiteralNode(value=text) | RefModLiteral(value=text):
-            return _literal(text)
-        case BinOpNode(op=op, left=left, right=right) | RefModBinOp(
-            op=op, left=left, right=right
-        ):
-            return _combine(op, _const(left), _const(right))
+        case LiteralNode() | RefModLiteral():
+            return _literal(node.value)
+        case BinOpNode() | RefModBinOp():
+            return _combine(node.op, _const(node.left), _const(node.right))
         case _:
             return _UNFOLDED
 
@@ -314,15 +312,21 @@ def _clamped(
     )
 
 
-def _selected(
-    subscripts: tuple[ExprNode, ...], candidates: tuple[Cell, ...], index: CellIndex
-) -> tuple[FieldExtent, ...]:
+def _selected_cells(
+    subscripts: tuple[ExprNode, ...], candidates: tuple[Cell, ...]
+) -> tuple[Cell, ...]:
     """The occurrence constant subscripts name, or nothing if they do not fold."""
     folded = tuple(_const(subscript) for subscript in subscripts)
     if not all(entry.known for entry in folded):
         return ()
     wanted = tuple(entry.value for entry in folded)
-    return tuple(index.extent_of(c) for c in candidates if c.index == wanted)
+    return tuple(c for c in candidates if c.index == wanted)
+
+
+def _selected(
+    subscripts: tuple[ExprNode, ...], candidates: tuple[Cell, ...], index: CellIndex
+) -> tuple[FieldExtent, ...]:
+    return tuple(index.extent_of(c) for c in _selected_cells(subscripts, candidates))
 
 
 def _base_extents(
@@ -380,7 +384,7 @@ def _ref_modified(extent: FieldExtent, start: _Folded, size: _Folded) -> FieldEx
     therefore keep the whole base extent, at CLAMPED.
     """
     match (extent.precision, start, size):
-        case (Precision.EXACT, _Folded(known=True) as start, _Folded(known=True)):
+        case (Precision.EXACT, _Folded(known=True), _Folded(known=True)):
             return _narrowed(extent, start.value, size.value)
         case _:
             return replace(extent, precision=Precision.CLAMPED)
@@ -414,11 +418,20 @@ def _field_extents(operand: RefModOperand, index: CellIndex) -> OperandExtents:
     return OperandExtents(extents=_sliced(base, operand, index))
 
 
-def _every_occurrence(
-    candidates: tuple[Cell, ...], index: CellIndex
-) -> tuple[FieldExtent, ...]:
-    return tuple(
-        index.extent_of(occurrence)
+def denoted_cells(
+    name: str,
+    qualifiers: tuple[str, ...],
+    subscripts: tuple[ExprNode, ...],
+    index: CellIndex,
+) -> tuple[Cell, ...]:
+    """Every cell a data reference can denote: the occurrence constant subscripts
+    select, else every occurrence of each declaration the name and qualifiers fit."""
+    candidates = index.cells_named(name, qualifiers, len(subscripts))
+    if not subscripts:
+        return candidates
+    selected = _selected_cells(subscripts, candidates)
+    return selected or tuple(
+        occurrence
         for cell in _one_per_declaration(candidates)
         for occurrence in index.occurrences_of(cell)
     )
@@ -440,17 +453,8 @@ def operand_occurrence_extents(
     Constant subscripts still select their one occurrence, via the same ``_selected``
     the clamped path falls back from, so a literal index loses no precision here.
     """
-    candidates = index.cells_named(
-        operand.name, operand.qualifiers, len(operand.subscripts)
-    )
-    if not candidates:
-        return ()
-    if not operand.subscripts:
-        return _sliced(
-            tuple(index.extent_of(cell) for cell in candidates), operand, index
-        )
-    selected = _selected(operand.subscripts, candidates, index)
-    return _sliced(selected or _every_occurrence(candidates, index), operand, index)
+    cells = denoted_cells(operand.name, operand.qualifiers, operand.subscripts, index)
+    return _sliced(tuple(index.extent_of(cell) for cell in cells), operand, index)
 
 
 def operand_extents(

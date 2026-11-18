@@ -23,7 +23,9 @@ Deleting the experiment means deleting both directories, the tests under
 ## The facts
 
 `cobble-experimental-codeql-facts --config <corpus.toml> --trap-dir <dir> --archive-dir <dir>`
-reads each member's first program from the config's ASG cache. It does not parse, so
+reads each member's first program from the config's ASG cache, with a cell for every name the
+program uses but never declares, as cobble's extents lay them out (`with_undeclared`). It does
+not parse, so
 `cobble-parse-corpus` must have run. For each member it writes one TRAP file in
 `cobol.dbscheme` and copies the source into the archive. A member with a parse-failure marker is
 skipped. `prefix.trap` holds the corpus directory.
@@ -35,7 +37,8 @@ skipped. `prefix.trap` holds the corpus directory.
 | `numeric_fields` | cell whose PIC parses as numeric |
 | `program_statements`, `program_sections`, `program_paragraphs` | the procedure division's statements before any section or paragraph, its sections, its paragraphs outside any section |
 | `units(program, index, unit, name, section)` | unit the program runs, in cobble's paragraph order: the program for the statements before any section or paragraph, a section for those at its head, each paragraph |
-| `names_cell(node, cell)` | cell a data name denotes, for a `RefModOperand` naming data, a `FieldRefNode`, `RefModNode`, `AddressOfNode`, `LengthOfNode` or `RefModReference` |
+| `names_cell(node, cell)` | cell a data name denotes, as cobble's dataflow resolves it (`denoted_cells`): the occurrence constant subscripts select, else every occurrence. For a `RefModOperand` naming data, a `FieldRefNode`, `RefModNode`, `AddressOfNode`, `LengthOfNode`, `RefModReference`, `ComputeTarget`, or a `SetOperand` naming data |
+| `field_names_cell(node, field, cell)` | cell a name held as text denotes: a WRITE, REWRITE or RELEASE's `record_name`, an XML GENERATE's `xml_document`, `from_record` and `count_in` |
 | `perform_range(perform, first, last)` | out-of-line PERFORM: its first and last unit (a section's are its first and last unit) |
 | `procedure_unit(target, unit)` | procedure name: the paragraph so named, else the section's first unit |
 
@@ -76,9 +79,18 @@ and `#d` start the program's statements, sections and paragraphs, `#f12` is the 
 
 ## What QL derives
 
-- **Reads and writes** (`Ast.qll`). A MOVE reads its source and writes its targets, an ACCEPT
-  writes its target, a DISPLAY reads its operands: each the cells `names_cell` gives. An access
-  through a reference modification or a subscript may touch only part of its cell.
+- **Transfers** (`Ast.qll`, `transfer`). The cells each verb builds a target from, as cobble's
+  fixpoint reads the verb: MOVE (from a FUNCTION, every name in its arguments), ADD, SUBTRACT,
+  MULTIPLY and DIVIDE (operands and in-place receivers into receivers, GIVING and REMAINDER),
+  COMPUTE (every name in the expression, subscripts included), STRING (each sending, or its
+  FUNCTION's arguments, into INTO), WRITE, REWRITE and RELEASE FROM, INSPECT (source and patterns
+  into tally targets, and into the source when it is rewritten), UNSTRING, SET (a value naming
+  data), SEARCH VARYING, MOVE and ADD CORRESPONDING, and XML GENERATE. `loopTransfer` gives a
+  PERFORM VARYING's `#init` and `#step`. A MOVE or a FROM copies byte k to byte k; every other
+  verb builds the whole target from every source.
+- **Reads and writes** (`Ast.qll`). A statement reads and writes what its transfers do, an ACCEPT
+  writes its target and a DISPLAY reads its operands. An access through a reference modification
+  or a subscript, or a STRING, INSPECT or UNSTRING target, may touch only part of its cell.
 - **CFG** (`Cfg.qll`). Each PERFORM range is a scope with its own copy of every statement it can
   reach. Reaching the end of the range's last paragraph leaves the scope; the end of any other
   paragraph falls through to the next. The main scope starts at the first paragraph. A PERFORM
@@ -108,18 +120,24 @@ The extractor's `autobuild.sh` runs `cobble-parse-corpus` and then this command.
 config's are. A QL test directory carries its own config; `ql/test/flows/` caches its ASG in
 `cobble/out-codeql-test/`.
 
+`ql/src/diagnostics/` holds two tables for comparing with cobble's fixpoint: `Transfers.ql`
+(each transfer at cobble's node id, with both cells' records and bytes) and `StatementPaths.ql`
+(every statement's node id and class). `stmtPath` builds the id as desugar does:
+`<unit>/<position>`, then `.then.`, `.else.`, `.body.`, `.when.<branch>.` or the clause's
+field name for each nesting.
+
 `ql/test/flows/` checks one invented program for flow through a PERFORM called twice, through a
 REDEFINES, through a group MOVE, and for a value overwritten in full; `Ast.ql` there reads every
 MOVE's source and first target from the generated tree.
 
 ## Limits
 
-- The tree holds every statement, but QL gives meaning only to MOVE, ACCEPT, DISPLAY, PERFORM,
-  GO TO, IF, STOP RUN and GOBACK. Every other statement reads and writes nothing and falls
-  through, and its nested statements are not in the CFG: EVALUATE and its bodies, COMPUTE and the
-  other arithmetic, STRING, INITIALIZE, file I/O, EXEC CICS and EXEC SQL. Conditions and the
-  DEPENDING ON index are not reads.
-- `names_cell` has no rows for a COMPUTE target, a SET operand or an EXEC CICS operand.
+- The CFG follows IF, inline and out-of-line PERFORM, GO TO, STOP RUN and GOBACK. Every other
+  statement falls through, and the statements nested in it (EVALUATE's WHENs, ON SIZE ERROR,
+  AT END, INVALID KEY, SEARCH) are not in the CFG; a PERFORM VARYING's `#init` and `#step` are
+  not CFG nodes. Conditions and the DEPENDING ON index are not reads.
+- `names_cell` has no rows for an EXEC CICS operand, and nothing records a write whose source is
+  not a field (a literal, a file, CICS, a CALL, a map).
 - Each member's first program only. No CALL, LINK or XCTL between programs.
 - PERFORM ranges are assumed to nest.
 - A name resolves to every cell of that name whose qualification path contains the operand's

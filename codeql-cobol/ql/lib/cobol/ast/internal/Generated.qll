@@ -912,4 +912,361 @@ module Generated {
   class SortSource extends AstNode, @cobol_sort_source { }
   class Statement extends AstNode, @cobol_statement { }
   class WriteAdvancing extends AstNode, @cobol_write_advancing { }
+
+  /** `child` is held at `index` of `parent`'s field `field`. */
+  predicate childOf(AstNode parent, string field, int index, AstNode child) {
+    field = "paragraphs" and child = parent.(CobolSection).getParagraphs(index)
+    or
+    field = "statements" and child = parent.(CobolSection).getStatements(index)
+    or
+    field = "use" and child = parent.(CobolSection).getUse() and index = 0
+    or
+    field = "statements" and child = parent.(CobolParagraph).getStatements(index)
+    or
+    field = "source" and child = parent.(MoveStatement).getSource() and index = 0
+    or
+    field = "targets" and child = parent.(MoveStatement).getTargets(index)
+    or
+    field = "source" and child = parent.(MoveCorrespondingStatement).getSource() and index = 0
+    or
+    field = "targets" and child = parent.(MoveCorrespondingStatement).getTargets(index)
+    or
+    field = "operands" and child = parent.(ArithmeticStatement).getOperands(index)
+    or
+    field = "targets" and child = parent.(ArithmeticStatement).getTargets(index)
+    or
+    field = "giving" and child = parent.(ArithmeticStatement).getGiving(index)
+    or
+    field = "remainder" and child = parent.(ArithmeticStatement).getRemainder() and index = 0
+    or
+    field = "on_size_error" and child = parent.(ArithmeticStatement).getOnSizeError(index)
+    or
+    field = "not_on_size_error" and child = parent.(ArithmeticStatement).getNotOnSizeError(index)
+    or
+    field = "expression" and child = parent.(ComputeStatement).getExpression() and index = 0
+    or
+    field = "targets" and child = parent.(ComputeStatement).getTargets(index)
+    or
+    field = "on_size_error" and child = parent.(ComputeStatement).getOnSizeError(index)
+    or
+    field = "not_on_size_error" and child = parent.(ComputeStatement).getNotOnSizeError(index)
+    or
+    field = "condition" and child = parent.(IfStatement).getCondition() and index = 0
+    or
+    field = "children" and child = parent.(IfStatement).getChildren(index)
+    or
+    field = "else_children" and child = parent.(IfStatement).getElseChildren(index)
+    or
+    field = "subjects" and child = parent.(EvaluateStatement).getSubjects(index)
+    or
+    field = "children" and child = parent.(EvaluateStatement).getChildren(index)
+    or
+    field = "operands" and child = parent.(DisplayStatement).getOperands(index)
+    or
+    field = "form" and child = parent.(GotoStatement).getForm() and index = 0
+    or
+    field = "children" and child = parent.(PerformStatement).getChildren(index)
+    or
+    field = "spec" and child = parent.(PerformStatement).getSpec() and index = 0
+    or
+    field = "objects" and child = parent.(WhenStatement).getObjects(index)
+    or
+    field = "children" and child = parent.(WhenStatement).getChildren(index)
+    or
+    field = "alternatives" and child = parent.(WhenStatement).getAlternatives(index)
+    or
+    field = "children" and child = parent.(WhenOtherStatement).getChildren(index)
+    or
+    field = "operands" and child = parent.(InitializeStatement).getOperands(index)
+    or
+    field = "replacing" and child = parent.(InitializeStatement).getReplacing(index)
+    or
+    field = "source" and child = parent.(ArithmeticCorrespondingStatement).getSource() and index = 0
+    or
+    field = "target" and child = parent.(ArithmeticCorrespondingStatement).getTarget() and index = 0
+    or
+    field = "on_size_error" and child = parent.(ArithmeticCorrespondingStatement).getOnSizeError(index)
+    or
+    field = "not_on_size_error" and child = parent.(ArithmeticCorrespondingStatement).getNotOnSizeError(index)
+    or
+    field = "targets" and child = parent.(SetStatement).getTargets(index)
+    or
+    field = "values" and child = parent.(SetStatement).getValues(index)
+    or
+    field = "sendings" and child = parent.(StringStatement).getSendings(index)
+    or
+    field = "into" and child = parent.(StringStatement).getInto() and index = 0
+    or
+    field = "pointer" and child = parent.(StringStatement).getPointer() and index = 0
+    or
+    field = "on_overflow" and child = parent.(StringStatement).getOnOverflow(index)
+    or
+    field = "not_on_overflow" and child = parent.(StringStatement).getNotOnOverflow(index)
+    or
+    field = "source" and child = parent.(UnstringStatement).getSource() and index = 0
+    or
+    field = "delimiters" and child = parent.(UnstringStatement).getDelimiters(index)
+    or
+    field = "into" and child = parent.(UnstringStatement).getInto(index)
+    or
+    field = "tallying_target" and child = parent.(UnstringStatement).getTallyingTarget() and index = 0
+    or
+    field = "pointer" and child = parent.(UnstringStatement).getPointer() and index = 0
+    or
+    field = "on_overflow" and child = parent.(UnstringStatement).getOnOverflow(index)
+    or
+    field = "not_on_overflow" and child = parent.(UnstringStatement).getNotOnOverflow(index)
+    or
+    field = "source" and child = parent.(InspectStatement).getSource() and index = 0
+    or
+    field = "tallying_groups" and child = parent.(InspectStatement).getTallyingGroups(index)
+    or
+    field = "replacings" and child = parent.(InspectStatement).getReplacings(index)
+    or
+    field = "converting_from" and child = parent.(InspectStatement).getConvertingFrom() and index = 0
+    or
+    field = "converting_to" and child = parent.(InspectStatement).getConvertingTo() and index = 0
+    or
+    field = "converting_after" and child = parent.(InspectStatement).getConvertingAfter() and index = 0
+    or
+    field = "converting_before" and child = parent.(InspectStatement).getConvertingBefore() and index = 0
+    or
+    field = "table" and child = parent.(SearchStatement).getTable() and index = 0
+    or
+    field = "varying" and child = parent.(SearchStatement).getVarying() and index = 0
+    or
+    field = "whens" and child = parent.(SearchStatement).getWhens(index)
+    or
+    field = "at_end" and child = parent.(SearchStatement).getAtEnd(index)
+    or
+    field = "target" and child = parent.(CallStatement).getTarget() and index = 0
+    or
+    field = "using" and child = parent.(CallStatement).getUsing(index)
+    or
+    field = "giving" and child = parent.(CallStatement).getGiving() and index = 0
+    or
+    field = "on_exception" and child = parent.(CallStatement).getOnException(index)
+    or
+    field = "not_on_exception" and child = parent.(CallStatement).getNotOnException(index)
+    or
+    field = "proceed_tos" and child = parent.(AlterStatement).getProceedTos(index)
+    or
+    field = "programs" and child = parent.(CancelStatement).getPrograms(index)
+    or
+    field = "target" and child = parent.(AcceptStatement).getTarget() and index = 0
+    or
+    field = "mode_groups" and child = parent.(OpenStatement).getModeGroups(index)
+    or
+    field = "into" and child = parent.(ReadStatement).getInto() and index = 0
+    or
+    field = "key" and child = parent.(ReadStatement).getKey() and index = 0
+    or
+    field = "at_end" and child = parent.(ReadStatement).getAtEnd(index)
+    or
+    field = "not_at_end" and child = parent.(ReadStatement).getNotAtEnd(index)
+    or
+    field = "invalid_key" and child = parent.(ReadStatement).getInvalidKey(index)
+    or
+    field = "not_invalid_key" and child = parent.(ReadStatement).getNotInvalidKey(index)
+    or
+    field = "from_field" and child = parent.(WriteStatement).getFromField() and index = 0
+    or
+    field = "invalid_key" and child = parent.(WriteStatement).getInvalidKey(index)
+    or
+    field = "not_invalid_key" and child = parent.(WriteStatement).getNotInvalidKey(index)
+    or
+    field = "advancing" and child = parent.(WriteStatement).getAdvancing() and index = 0
+    or
+    field = "at_end_of_page" and child = parent.(WriteStatement).getAtEndOfPage(index)
+    or
+    field = "not_at_end_of_page" and child = parent.(WriteStatement).getNotAtEndOfPage(index)
+    or
+    field = "from_field" and child = parent.(RewriteStatement).getFromField() and index = 0
+    or
+    field = "invalid_key" and child = parent.(RewriteStatement).getInvalidKey(index)
+    or
+    field = "not_invalid_key" and child = parent.(RewriteStatement).getNotInvalidKey(index)
+    or
+    field = "key" and child = parent.(StartStatement).getKey() and index = 0
+    or
+    field = "invalid_key" and child = parent.(StartStatement).getInvalidKey(index)
+    or
+    field = "not_invalid_key" and child = parent.(StartStatement).getNotInvalidKey(index)
+    or
+    field = "invalid_key" and child = parent.(DeleteStatement).getInvalidKey(index)
+    or
+    field = "not_invalid_key" and child = parent.(DeleteStatement).getNotInvalidKey(index)
+    or
+    field = "on_exception" and child = parent.(XmlGenerateStatement).getOnException(index)
+    or
+    field = "not_on_exception" and child = parent.(XmlGenerateStatement).getNotOnException(index)
+    or
+    field = "keys" and child = parent.(SortStatement).getKeys(index)
+    or
+    field = "collating_sequence" and child = parent.(SortStatement).getCollatingSequence() and index = 0
+    or
+    field = "source" and child = parent.(SortStatement).getSource() and index = 0
+    or
+    field = "sink" and child = parent.(SortStatement).getSink() and index = 0
+    or
+    field = "keys" and child = parent.(MergeStatement).getKeys(index)
+    or
+    field = "collating_sequence" and child = parent.(MergeStatement).getCollatingSequence() and index = 0
+    or
+    field = "using" and child = parent.(MergeStatement).getUsing() and index = 0
+    or
+    field = "sink" and child = parent.(MergeStatement).getSink() and index = 0
+    or
+    field = "from_field" and child = parent.(ReleaseStatement).getFromField() and index = 0
+    or
+    field = "into" and child = parent.(ReturnStatement).getInto() and index = 0
+    or
+    field = "at_end" and child = parent.(ReturnStatement).getAtEnd(index)
+    or
+    field = "not_at_end" and child = parent.(ReturnStatement).getNotAtEnd(index)
+    or
+    field = "options" and child = parent.(ExecCicsStatement).getOptions(index)
+    or
+    field = "whenever_action" and child = parent.(ExecSqlStatement).getWheneverAction() and index = 0
+    or
+    field = "ref_mod_start" and child = parent.(RefModOperand).getRefModStart() and index = 0
+    or
+    field = "ref_mod_length" and child = parent.(RefModOperand).getRefModLength() and index = 0
+    or
+    field = "length_of" and child = parent.(RefModOperand).getLengthOf() and index = 0
+    or
+    field = "subscripts" and child = parent.(RefModOperand).getSubscripts(index)
+    or
+    field = "args" and child = parent.(FunctionCallOperand).getArgs(index)
+    or
+    field = "subscripts" and child = parent.(AddressOfNode).getSubscripts(index)
+    or
+    field = "subscripts" and child = parent.(FieldRefNode).getSubscripts(index)
+    or
+    field = "ref_mod_start" and child = parent.(RefModNode).getRefModStart() and index = 0
+    or
+    field = "ref_mod_length" and child = parent.(RefModNode).getRefModLength() and index = 0
+    or
+    field = "subscripts" and child = parent.(RefModNode).getSubscripts(index)
+    or
+    field = "left" and child = parent.(BinOpNode).getLeft() and index = 0
+    or
+    field = "right" and child = parent.(BinOpNode).getRight() and index = 0
+    or
+    field = "args" and child = parent.(FunctionNode).getArgs(index)
+    or
+    field = "subscripts" and child = parent.(ComputeTarget).getSubscripts(index)
+    or
+    field = "operands" and child = parent.(Combination).getOperands(index)
+    or
+    field = "left" and child = parent.(RelationTest).getLeft() and index = 0
+    or
+    field = "right" and child = parent.(RelationTest).getRight() and index = 0
+    or
+    field = "subscripts" and child = parent.(ConditionNameTest).getSubscripts(index)
+    or
+    field = "operand" and child = parent.(ClassTest).getOperand() and index = 0
+    or
+    field = "operand" and child = parent.(UserClassTest).getOperand() and index = 0
+    or
+    field = "operand" and child = parent.(SignTest).getOperand() and index = 0
+    or
+    field = "inner" and child = parent.(Parenthesised).getInner() and index = 0
+    or
+    field = "expr" and child = parent.(ExpressionSubject).getExpr() and index = 0
+    or
+    field = "condition" and child = parent.(SelectionCondition).getCondition() and index = 0
+    or
+    field = "target" and child = parent.(SimpleGoto).getTarget() and index = 0
+    or
+    field = "targets" and child = parent.(ComputedGoto).getTargets(index)
+    or
+    field = "index" and child = parent.(ComputedGoto).getIndex() and index = 0
+    or
+    field = "times" and child = parent.(PerformTimesSpec).getTimes() and index = 0
+    or
+    field = "condition" and child = parent.(PerformUntilSpec).getCondition() and index = 0
+    or
+    field = "varying_var" and child = parent.(PerformVaryingSpec).getVaryingVar() and index = 0
+    or
+    field = "varying_from" and child = parent.(PerformVaryingSpec).getVaryingFrom() and index = 0
+    or
+    field = "varying_by" and child = parent.(PerformVaryingSpec).getVaryingBy() and index = 0
+    or
+    field = "condition" and child = parent.(PerformVaryingSpec).getCondition() and index = 0
+    or
+    field = "after_specs" and child = parent.(PerformVaryingSpec).getAfterSpecs(index)
+    or
+    field = "value" and child = parent.(ValueObject).getValue() and index = 0
+    or
+    field = "low" and child = parent.(RangeObject).getLow() and index = 0
+    or
+    field = "high" and child = parent.(RangeObject).getHigh() and index = 0
+    or
+    field = "by" and child = parent.(InitializeReplacing).getBy() and index = 0
+    or
+    field = "subscripts" and child = parent.(SetOperand).getSubscripts(index)
+    or
+    field = "value" and child = parent.(StringSending).getValue() and index = 0
+    or
+    field = "delimiter" and child = parent.(StringSending).getDelimiter() and index = 0
+    or
+    field = "function" and child = parent.(StringSending).getFunction() and index = 0
+    or
+    field = "operand" and child = parent.(UnstringDelimiter).getOperand() and index = 0
+    or
+    field = "target" and child = parent.(UnstringReceiver).getTarget() and index = 0
+    or
+    field = "delimiter_in" and child = parent.(UnstringReceiver).getDelimiterIn() and index = 0
+    or
+    field = "count_in" and child = parent.(UnstringReceiver).getCountIn() and index = 0
+    or
+    field = "target" and child = parent.(TallyingGroup).getTarget() and index = 0
+    or
+    field = "patterns" and child = parent.(TallyingGroup).getPatterns(index)
+    or
+    field = "from_pattern" and child = parent.(Replacing).getFromPattern() and index = 0
+    or
+    field = "to_pattern" and child = parent.(Replacing).getToPattern() and index = 0
+    or
+    field = "after" and child = parent.(Replacing).getAfter() and index = 0
+    or
+    field = "before" and child = parent.(Replacing).getBefore() and index = 0
+    or
+    field = "condition" and child = parent.(SearchWhen).getCondition() and index = 0
+    or
+    field = "children" and child = parent.(SearchWhen).getChildren(index)
+    or
+    field = "identifier" and child = parent.(CallTarget).getIdentifier() and index = 0
+    or
+    field = "subscripts" and child = parent.(CallUsingParam).getSubscripts(index)
+    or
+    field = "ref_mod" and child = parent.(CallUsingParam).getRefMod() and index = 0
+    or
+    field = "lines" and child = parent.(AdvancingLines).getLines() and index = 0
+    or
+    field = "key" and child = parent.(SortKey).getKey() and index = 0
+    or
+    field = "target" and child = parent.(ProcedureRange).getTarget() and index = 0
+    or
+    field = "thru" and child = parent.(ProcedureRange).getThru() and index = 0
+    or
+    field = "subscripts" and child = parent.(CicsOperand).getSubscripts(index)
+    or
+    field = "ref_mod_start" and child = parent.(CicsOperand).getRefModStart() and index = 0
+    or
+    field = "ref_mod_length" and child = parent.(CicsOperand).getRefModLength() and index = 0
+    or
+    field = "args" and child = parent.(RefModFunction).getArgs(index)
+    or
+    field = "left" and child = parent.(RefModBinOp).getLeft() and index = 0
+    or
+    field = "right" and child = parent.(RefModBinOp).getRight() and index = 0
+    or
+    field = "pattern" and child = parent.(TallyingFor).getPattern() and index = 0
+    or
+    field = "after" and child = parent.(TallyingFor).getAfter() and index = 0
+    or
+    field = "before" and child = parent.(TallyingFor).getBefore() and index = 0
+  }
 }

@@ -141,6 +141,55 @@ def _location(schema: Schema) -> str:
     return f"    L::Location getLocation() {{\n      {body}\n    }}\n"
 
 
+def _node_valued(shape: Shape) -> bool:
+    return isinstance(shape, NodeRef) or (
+        isinstance(shape, (Absent, Repeated, Keyed))
+        and isinstance(_held(shape), NodeRef)
+    )
+
+
+@singledispatch
+def _held(shape: Shape) -> Shape:
+    """What a field of this shape holds, element by element."""
+    return shape
+
+
+@_held.register
+def _(shape: Absent) -> Shape:
+    return shape.inner
+
+
+@_held.register
+def _(shape: Repeated) -> Shape:
+    return shape.element
+
+
+@_held.register
+def _(shape: Keyed) -> Shape:
+    return present(shape.value)
+
+
+def _child(node: NodeType, field: NodeField) -> str:
+    """One field's children: a list's at their positions, any other's at 0."""
+    getter = f"parent.({node.name}).get{_pascal(field.name)}"
+    listed = isinstance(field.shape, (Repeated, Keyed))
+    call = f"{getter}(index)" if listed else f"{getter}() and index = 0"
+    return f'field = "{field.name}" and child = {call}'
+
+
+def _children(schema: Schema) -> str:
+    found = tuple(
+        _child(n, f) for n in schema.nodes for f in n.fields if _node_valued(f.shape)
+    )
+    body = "\n    or\n    ".join(found) if found else "none()"
+    return (
+        "  /** `child` is held at `index` of `parent`'s field `field`. */\n"
+        "  predicate childOf(AstNode parent, string field, int index, AstNode child) {\n"
+        f"    {body}\n"
+        "  }\n"
+    )
+
+
 def ql_text(schema: Schema) -> str:
     classes = _classes(schema)
     unions = "".join(
@@ -157,5 +206,7 @@ def ql_text(schema: Schema) -> str:
         + "\n".join(_node_class(n, classes) for n in schema.nodes)
         + "\n"
         + unions
+        + "\n"
+        + _children(schema)
         + "}\n"
     )

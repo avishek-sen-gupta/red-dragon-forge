@@ -1,32 +1,38 @@
-"""One program's names, resolved to the labels of its fields and paragraphs."""
+"""One program's names, resolved to the labels of its cells and units."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from cobble.dataflow.fields.extent import CellIndex, denoted_cells
+from cobble.dataflow.layout import Cell
 from cobble.dataflow.srccfg.cfg import SourceSpan
 from cobble.experimental.codeql.label import Label
 from cobble.experimental.codeql.trap_row import TrapRow, define
+from cobol_asg.cobol_expression import ExprNode
 
 Ends = tuple[Label, Label]
 
 
 @dataclass(frozen=True)
 class Scope:
-    """``fields`` maps a name to each field so named and the names qualifying it;
-    ``sections`` maps a section to its first and last paragraph. A procedure name
-    is a paragraph if one is so named, else a section."""
+    """``cells`` labels each cell ``index`` holds; ``sections`` maps a section to
+    its first and last unit. A procedure name is a paragraph if one is so named,
+    else a section."""
 
     file: Label
     source: str
-    fields: Mapping[str, tuple[tuple[Label, frozenset[str]], ...]]
+    index: CellIndex
+    cells: Mapping[Cell, Label]
     paragraphs: Mapping[str, Label]
     sections: Mapping[str, Ends]
 
-    def cells_named(self, name: str, qualifiers: tuple[str, ...]) -> tuple[Label, ...]:
-        """Every cell of that name whose qualification path holds the qualifiers."""
-        wanted = frozenset(q.upper() for q in qualifiers)
+    def cells_named(
+        self, name: str, qualifiers: tuple[str, ...], subscripts: tuple[ExprNode, ...]
+    ) -> tuple[Label, ...]:
+        """The cells a data reference can denote, as cobble's dataflow resolves it."""
         return tuple(
-            label for label, path in self.fields.get(name.upper(), ()) if wanted <= path
+            self.cells[cell]
+            for cell in denoted_cells(name, qualifiers, subscripts, self.index)
         )
 
     def procedure(self, name: str, section: str) -> tuple[Ends, ...]:

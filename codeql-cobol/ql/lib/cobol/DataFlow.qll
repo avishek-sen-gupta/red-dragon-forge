@@ -109,12 +109,11 @@ private module SsaInput implements SsaImpl::InputSig<Location, Cfg::BasicBlock> 
 
 module Ssa = SsaImpl::Make<Location, Cfg, SsaInput>;
 
-/** Bytes `a` of the sending field land in bytes `b` of the receiving field. */
+/** Bytes `a` of the sending field land in bytes `b` of the receiving field: at the same offset for a copy, anywhere for a target a verb builds. */
 private predicate moved(Stmt s, Atom a, Atom b) {
-  s instanceof Generated::MoveStatement and
-  exists(Field src, Field dst |
-    src = s.getARead() and dst = s.getAWrite() and fieldAtom(src, a) and fieldAtom(dst, b)
-  |
+  exists(Field src, Field dst | transfer(s, src, dst) and fieldAtom(src, a) and fieldAtom(dst, b) |
+    not s.copies()
+    or
     src.isNumeric()
     or
     dst.isNumeric()

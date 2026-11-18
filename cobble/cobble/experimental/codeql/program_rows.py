@@ -3,6 +3,8 @@
 from collections.abc import Mapping
 from itertools import groupby
 
+from cobble.dataflow.fields.extent import cell_index
+from cobble.dataflow.fields.undeclared import with_undeclared
 from cobble.dataflow.layout import Cell, program_records
 from cobble.dataflow.srccfg.cfg import NO_SPAN, span_of
 from cobble.dataflow.srccfg.paragraphs import ParagraphRef, paragraph_order
@@ -20,11 +22,22 @@ FILE = Label("file")
 PROGRAM = Label("program")
 
 
-def program_rows(asg: CobolASG, source: str) -> Rows:
-    cells = tuple(cell for record in program_records(asg) for cell in record.cells)
+def program_rows(parsed: CobolASG, source: str) -> Rows:
+    """A name the program uses but never declares gets a cell, as cobble's dataflow
+    lays it out."""
+    asg, _ = with_undeclared(parsed)
+    records = program_records(asg)
+    cells = tuple(cell for record in records for cell in record.cells)
     schema = cobol_schema()
     units = tuple(zip(_unit_labels(asg, schema), paragraph_order(asg), strict=True))
-    scope = Scope(FILE, source, _named(cells), _paragraphs(units), _sections(units))
+    scope = Scope(
+        FILE,
+        source,
+        cell_index(records),
+        {cell: Label(f"f{n}") for n, cell in enumerate(cells)},
+        _paragraphs(units),
+        _sections(units),
+    )
     writer = AstWriter(schema, FILE, ProgramFacts(scope).rows)
     location, located = scope.location(PROGRAM, span_of(asg, source))
     return (
@@ -99,24 +112,6 @@ def _field_rows(scope: Scope, n: int, cell: Cell) -> Rows:
 
 def _numeric(cell: Cell) -> bool:
     return bool(cell.pic) and parse_pic(cell.pic, cell.usage).is_numeric
-
-
-def _named(
-    cells: tuple[Cell, ...],
-) -> Mapping[str, tuple[tuple[Label, frozenset[str]], ...]]:
-    labelled = sorted(
-        (
-            (cell.name.upper(), Label(f"f{n}"), cell.path)
-            for n, cell in enumerate(cells)
-        ),
-        key=lambda one: one[0],
-    )
-    return {
-        name: tuple(
-            (label, frozenset(p.upper() for p in path)) for _, label, path in group
-        )
-        for name, group in groupby(labelled, key=lambda one: one[0])
-    }
 
 
 Unit = tuple[Label, ParagraphRef]
