@@ -1,0 +1,5 @@
+/tools/
+/db*/
+.codeql/
+*.testproj/
+codeql-pack.lock.yml

@@ -1,0 +1,4 @@
+name: forge/cobol-queries
+version: 0.0.1
+dependencies:
+  forge/cobol-all: "*"

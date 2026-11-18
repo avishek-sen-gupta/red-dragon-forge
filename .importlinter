@@ -133,6 +133,14 @@ protected_modules =
 allowed_importers =
     cobble.experimental.horn
 
+[importlinter:contract:codeql-is-a-leaf]
+name = Nothing outside the CodeQL facts imports them, so the experiment can be deleted whole
+type = protected
+protected_modules =
+    cobble.experimental.codeql
+allowed_importers =
+    cobble.experimental.codeql
+
 [importlinter:contract:z3-only-in-horn]
 name = Only the Horn lowering uses z3
 type = protected

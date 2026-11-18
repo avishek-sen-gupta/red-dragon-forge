@@ -1,0 +1,7 @@
+[corpus]
+cobol_dir = "../codeql-cobol/ql/test/flows"
+cobol_globs = ["*.cbl"]
+jcl_dir = "../codeql-cobol/ql/test/flows"
+jcl_globs = []
+copybook_dirs = []
+asg_dir = "out-codeql-test/flows"

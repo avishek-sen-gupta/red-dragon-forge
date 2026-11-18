@@ -1,0 +1,10 @@
+name: forge/cobol-all
+version: 0.0.1
+dbscheme: cobol.dbscheme
+extractor: cobol
+library: true
+dependencies:
+  codeql/controlflow: "*"
+  codeql/dataflow: "*"
+  codeql/ssa: "*"
+  codeql/util: "*"

@@ -38,6 +38,7 @@ Commands and file shapes here can change without notice.
 | Domain aggregates | [Domain aggregates](reference/cobble/aggregates.md): fields unified across programs, the field co-occurrence matrix, and NMF in rounds from strict to loose thresholds |
 | Datalog facts | [Datalog facts](reference/cobble/datalog.md): a run written as Soufflé facts and their schema, and the rule library a question may include |
 | Horn clauses | [Horn clause lowering](reference/cobble/horn.md): one program's CFG as constrained Horn clauses, and reachability questions answered by Z3 Spacer |
+| CodeQL facts | [CodeQL facts](reference/cobble/codeql.md): COBOL as a CodeQL language, with cobble's parse and layout as the facts and CodeQL's libraries doing CFG basic blocks, SSA and dataflow |
 
 ## Roadmaps
 

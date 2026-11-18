@@ -1,0 +1,6 @@
+name: forge/cobol-tests
+version: 0.0.1
+extractor: cobol
+dependencies:
+  forge/cobol-all: "*"
+  forge/cobol-queries: "*"

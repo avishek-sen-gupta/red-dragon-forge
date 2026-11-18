@@ -579,4 +579,12 @@ fileignoreconfig:
   checksum: 011b6e2881d7458f955b84fd9b2538acb4f4125975457bbad3ed1d82794507f9
 - filename: cobble/tests/experimental/horn/test_reaching_conditions.py
   checksum: 063a8dde6d278b32d7a9df8edeea4a14c05d8bfe318f129edd1e50448b386165
+- filename: cobble/cobble/experimental/codeql/scope.py
+  checksum: 0b7d932312d70814cc6ffc82c9a22dfcbeef4de9af7c4f3cf2232fdd73832a21
+- filename: cobble/tests/experimental/codeql/test_facts_cli.py
+  checksum: d804cdaf48b9a4d21c09a1a8073299a1a754c3fc33418ffcc23ba0d6490554d9
+- filename: docs/reference/cobble/codeql.md
+  checksum: 0f6ebc5b462efccdee3a2c3b084db053d06a19fa46e69cb9dd98dd7f13282cb0
+- filename: cobble/cobble/experimental/codeql/program_rows.py
+  checksum: 3915e8f5222bdd671170603f00dfa732e1e03d2273387809c60aa5c2ee5ec088
 version: "1.0"

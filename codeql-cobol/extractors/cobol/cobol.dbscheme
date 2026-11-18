@@ -1,0 +1,62 @@
+/* Facts the COBOL extractor writes. Everything derived (CFG, SSA, flow) is QL. */
+
+sourceLocationPrefix(string prefix: string ref);
+
+files(unique int id: @file, string name: string ref);
+folders(unique int id: @folder, string name: string ref);
+@container = @file | @folder;
+containerparent(int parent: @container ref, unique int child: @container ref);
+
+locations_default(
+  unique int id: @location_default,
+  int file: @file ref,
+  int beginLine: int ref,
+  int beginColumn: int ref,
+  int endLine: int ref,
+  int endColumn: int ref
+);
+
+programs(unique int id: @program, string name: string ref, int location: @location_default ref);
+
+paragraphs(
+  unique int id: @paragraph,
+  int program: @program ref,
+  string name: string ref,
+  string section: string ref,
+  int index: int ref,
+  int location: @location_default ref
+);
+
+@stmt_parent = @paragraph | @stmt;
+
+/* kind: 0 other, 1 move, 2 accept, 3 display, 4 perform, 5 goto, 6 if, 7 stop run, 8 goback, 9 inline perform
+   slot: 0 body, 1 then / inline body, 2 else */
+stmts(
+  unique int id: @stmt,
+  int kind: int ref,
+  int parent: @stmt_parent ref,
+  int slot: int ref,
+  int index: int ref,
+  int location: @location_default ref
+);
+
+perform_ranges(unique int stmt: @stmt ref, int first: @paragraph ref, int last: @paragraph ref);
+perform_repeats(unique int stmt: @stmt ref);
+goto_targets(int stmt: @stmt ref, int target: @paragraph ref);
+
+/* One row per storage cell: an occurrence of a declared item, placed in its record. */
+fields(
+  unique int id: @field,
+  int program: @program ref,
+  string name: string ref,
+  string record: string ref,
+  int start: int ref,
+  int length: int ref,
+  int location: @location_default ref
+);
+numeric_fields(unique int field: @field ref);
+
+stmt_reads(int stmt: @stmt ref, int field: @field ref);
+stmt_writes(int stmt: @stmt ref, int field: @field ref);
+/* reference modification or a subscript: the access may touch only part of the field */
+partial_accesses(int stmt: @stmt ref, int field: @field ref);
