@@ -121,12 +121,29 @@ def corpus(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return root
 
 
+def _under(generated: Tables, label: str) -> set[tuple[str, ...]]:
+    """The rows of the node ``label`` names and of every node below it, other
+    than their locations."""
+    return {
+        (table, *row)
+        for table, rows in generated.items()
+        for row in rows
+        if row[0] == label or row[0].startswith(label + "_")
+        if not table.endswith("_span")
+    }
+
+
 def test_a_member_is_written_as_its_fields_paragraphs_and_statements(
     corpus: Path,
 ) -> None:
     tables = _tables((corpus / "trap" / "SHAPES.trap").read_text(encoding="utf-8"))
     source = str((corpus / "src" / "SHAPES.cbl").resolve())
     locations = tables.pop("locations_default")
+    generated = {
+        table: tables.pop(table)
+        for table in tuple(tables)
+        if table.startswith(("cobol_", "program_"))
+    }
     assert {
         row for row in locations if row[0] in {"#lprogram", "#lp0", "#ls0_0_1"}
     } == {
@@ -212,6 +229,47 @@ def test_a_member_is_written_as_its_fields_paragraphs_and_statements(
             ("#s0_0_9", "#p2"),
             ("#s0_0_10", "#p3"),
         },
+    }
+    assert generated["program_sections"] == {
+        ("#program", "0", "#c0"),
+        ("#program", "1", "#c1"),
+    }
+    until = "#c0_1_0_1_7"
+    assert _under(generated, until) == {
+        ("cobol_perform_statement_def", until, '""', '""', '""', '""'),
+        ("cobol_perform_statement_spec", until, f"{until}_3"),
+        ("cobol_perform_until_spec_def", f"{until}_3", f"{until}_3_0", "true"),
+        (
+            "cobol_relation_test_def",
+            f"{until}_3_0",
+            f"{until}_3_0_0",
+            '"=="',
+            f"{until}_3_0_2",
+            "false",
+        ),
+        ("cobol_field_ref_node_def", f"{until}_3_0_0", '"N"'),
+        ("cobol_literal_node_def", f"{until}_3_0_2", '"1"', "true"),
+        ("cobol_perform_statement_children", until, "0", f"{until}_2_0"),
+        ("cobol_move_statement_def", f"{until}_2_0", f"{until}_2_0_0"),
+        (
+            "cobol_ref_mod_operand_def",
+            f"{until}_2_0_0",
+            '"1"',
+            f"{until}_2_0_0_3",
+            "false",
+            '"lit"',
+        ),
+        ("cobol_ref_mod_length_of_def", f"{until}_2_0_0_3", '""'),
+        ("cobol_move_statement_targets", f"{until}_2_0", "0", f"{until}_2_0_1_0"),
+        (
+            "cobol_ref_mod_operand_def",
+            f"{until}_2_0_1_0",
+            '"N"',
+            f"{until}_2_0_1_0_3",
+            "false",
+            '"ref"',
+        ),
+        ("cobol_ref_mod_length_of_def", f"{until}_2_0_1_0_3", '""'),
     }
 
 

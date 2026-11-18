@@ -584,7 +584,23 @@ fileignoreconfig:
 - filename: cobble/tests/experimental/codeql/test_facts_cli.py
   checksum: d804cdaf48b9a4d21c09a1a8073299a1a754c3fc33418ffcc23ba0d6490554d9
 - filename: docs/reference/cobble/codeql.md
-  checksum: 0f6ebc5b462efccdee3a2c3b084db053d06a19fa46e69cb9dd98dd7f13282cb0
+  checksum: 385a9c1fcfbd81823f28a7768e3b8f150a8ea4194ca41410df21b5f7a8c3377d
 - filename: cobble/cobble/experimental/codeql/program_rows.py
   checksum: 3915e8f5222bdd671170603f00dfa732e1e03d2273387809c60aa5c2ee5ec088
+- filename: cobble/cobble/experimental/codeql/schema/ast_rows.py
+  checksum: d7f1ff2834c3f4f0b032470362a9bf77f560394f02aa9ddecdba14c0f5b2ca7f
+- filename: cobble/cobble/experimental/codeql/schema/dbscheme.py
+  checksum: 35f72011a98a26542bae7dae9066dbbcbce478a807b105b3965faed14276a566
+- filename: cobble/tests/experimental/codeql/test_schema.py
+  checksum: 7150f78428c8a03f7a8ee9c1d23a24de47ee3060bd33fbf7bb9401ddd5e4d640
+- filename: docs/superpowers/specs/cobble/2026-11-18-codeql-generated-ast-design.md
+  checksum: ce0e8b22317ec380718f8804f729cf97373f43cbede333066315dafc25d11e8c
+- filename: cobble/cobble/experimental/codeql/schema/schema.py
+  checksum: 635869201340d435d6534ffe3c690bb7715572d13989415bc640c81fcd526d5f
+- filename: cobble/cobble/experimental/codeql/schema/ql.py
+  checksum: b0db4ff7df02c1e322870391d3172763e87abe4f8fc5576e0a2e9df1a1bcf8f8
+- filename: codeql-cobol/extractors/cobol/cobol.dbscheme
+  checksum: 9f37f41ef8d27b642a025bd7667c78eec1fead615461e21c083b93f01cf1e535
+- filename: codeql-cobol/ql/lib/cobol/ast/internal/Generated.qll
+  checksum: 0494719c87bbf29f516989a8b13a079536d441c4ac8fdb3de2496f7acb618f18
 version: "1.0"

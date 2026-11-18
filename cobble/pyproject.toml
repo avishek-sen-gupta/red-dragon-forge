@@ -86,6 +86,7 @@ cobble-experimental-aggregate-class-share = "cobble.experimental.aggregates.clas
 cobble-experimental-aggregate-scorecard = "cobble.experimental.aggregates.scorecard_cli:main"
 cobble-experimental-datalog-facts = "cobble.experimental.datalog.facts_cli:main"
 cobble-experimental-codeql-facts = "cobble.experimental.codeql.facts_cli:main"
+cobble-experimental-codeql-schema = "cobble.experimental.codeql.schema.schema_cli:main"
 cobble-experimental-reaching-conditions = "cobble.experimental.horn.reaching_conditions_cli:main"
 cobble-experimental-reaching-conditions-fast = "cobble.experimental.horn.reaching_conditions_cli:fast_main"
 

@@ -1,0 +1,13 @@
+| MAIN | 2 | IN-1 | ref | T | 26 |
+| MAIN | 4 | U | ref | X1 | 28 |
+| MAIN | 6 | 'CLEAN' | lit | T | 30 |
+| MAIN | 8 | U | ref | X2 | 32 |
+| MAIN | 10 | IN-1 | ref | A | 34 |
+| MAIN | 11 | IN-2 | ref | B | 35 |
+| MAIN | 12 | C | ref | Z | 36 |
+| MAIN | 14 | REC | ref | REC2 | 38 |
+| MAIN | 17 | SPACES | figurative | REC | 41 |
+| MAIN | 18 | C | ref | W | 42 |
+| MAIN | 20 | IN-2 | ref | T | 44 |
+| P-ID | 0 | T | ref | U | 47 |
+| P-NEXT | 0 | U | ref | Y | 49 |

@@ -7,6 +7,9 @@ from cobble.dataflow.layout import Cell, program_records
 from cobble.dataflow.srccfg.cfg import NO_SPAN, span_of
 from cobble.dataflow.srccfg.paragraphs import ParagraphRef, paragraph_order
 from cobble.experimental.codeql.label import Label
+from cobble.experimental.codeql.schema.ast_rows import AstWriter, Value
+from cobble.experimental.codeql.schema.cobol_schema import cobol_schema
+from cobble.experimental.codeql.schema.schema import table_of
 from cobble.experimental.codeql.scope import Ends, Scope
 from cobble.experimental.codeql.slot import Slot
 from cobble.experimental.codeql.statement_rows import Rows, body_rows
@@ -31,6 +34,31 @@ def program_rows(asg: CobolASG, source: str) -> Rows:
         TrapRow("programs", (PROGRAM, asg.program_id, location)),
         *(row for n, cell in enumerate(cells) for row in _field_rows(scope, n, cell)),
         *(row for n, p in enumerate(order) for row in _paragraph_rows(scope, n, p)),
+        *_procedure_rows(asg),
+    )
+
+
+def _procedure_rows(asg: CobolASG) -> Rows:
+    """The procedure division in the generated tables: sections, then the
+    paragraphs outside any section."""
+    writer = AstWriter(cobol_schema(), FILE)
+    return (
+        *_contained(writer, "program_sections", "c", tuple(asg.sections)),
+        *_contained(writer, "program_paragraphs", "d", tuple(asg.paragraphs)),
+    )
+
+
+def _contained(
+    writer: AstWriter, table: str, prefix: str, parts: tuple[Value, ...]
+) -> Rows:
+    return tuple(
+        row
+        for n, part in enumerate(parts)
+        for label in (Label(f"{prefix}{n}"),)
+        for row in (
+            *writer.rows(part, table_of(type(part).__name__), label),
+            TrapRow(table, (PROGRAM, n, label)),
+        )
     )
 
 

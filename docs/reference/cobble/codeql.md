@@ -5,10 +5,16 @@ the paragraphs in declaration order. CodeQL's shared libraries supply basic bloc
 dataflow solver. What stays COBOL-specific is the language model in QL: the control flow of
 PERFORM, and how fields map to the bytes the solver tracks.
 
+The parse is written as a syntax tree generated from the parser's types: a table per dataclass,
+so a statement the parser gains needs no extractor code (see [The generated AST](#the-generated-ast)).
+`Cfg.qll` and `DataFlow.qll` still read the hand-written statement tables below; moving them onto
+the generated tree is the next step.
+
 Two parts:
 
-- `cobble/experimental/codeql/` is the command `cobble-experimental-codeql-facts`. The
-  `.importlinter` contract `codeql-is-a-leaf` lets nothing outside the package import it.
+- `cobble/experimental/codeql/` holds the commands `cobble-experimental-codeql-facts` and
+  `cobble-experimental-codeql-schema`. The `.importlinter` contract `codeql-is-a-leaf` lets
+  nothing outside the package import it.
 - `codeql-cobol/` holds the extractor pack (`extractors/cobol/`), the QL library
   (`ql/lib/`, `forge/cobol-all`), the queries (`ql/src/`) and the QL tests (`ql/test/`). It has
   no Python, so nothing imports cobble.
@@ -38,6 +44,40 @@ skipped. `prefix.trap` holds the corpus directory.
 Labels name entities by position, so a file is readable without a counter: `#p3` is the fourth
 paragraph, `#s3_0_1_2_0` is the first statement in the ELSE of the second statement of that
 paragraph, `#f12` is the thirteenth cell.
+
+## The generated AST
+
+`cobble-experimental-codeql-schema --dbscheme <file> --ql <file>` walks the type hints of every
+dataclass reachable from `CobolSection` and `CobolParagraph`, with cicada's `ExecCicsStatement`
+and squall's `ExecSqlStatement` added to the statement union. It writes
+`extractors/cobol/cobol.dbscheme` (the hand-written tables, then the generated ones) and
+`ql/lib/cobol/ast/internal/Generated.qll` (module `Generated`: a class per dataclass with a getter
+per field, a class per union, `AstNode` over all of them). Both are committed; after the parser's
+types change, regenerate them from `cobble/`:
+
+```bash
+uv run cobble-experimental-codeql-schema --dbscheme ../codeql-cobol/extractors/cobol/cobol.dbscheme \
+  --ql ../codeql-cobol/ql/lib/cobol/ast/internal/Generated.qll
+```
+
+A test in cobble's suite regenerates both and fails when the committed files differ.
+
+| field type | tables |
+|---|---|
+| `str`, `int`, `bool`, an enum (as its value) | a column of `cobol_<type>_def` |
+| a dataclass, or a union of them | a column naming the child node |
+| `X \| None` | `cobol_<type>_<field>(id, value)`, a row only when present |
+| a list, or a tuple of any length | `cobol_<type>_<field>(id, index, value)` |
+| a fixed tuple `tuple[A, B]` | a node `<Type><Field>Item` with `element0`, `element1` |
+| `dict[str, X \| None]` | `cobol_<type>_<field>(id, index, entry_key)`, and `..._value(id, index, value)` for present values |
+| `SourceSpan` | a `@location_default` in the program's file |
+
+A union gets the name of the parser's alias for it (`Statement`, `ExprNode`, `Condition`, …), or
+`<Type><Field>Type` when it has none. A field named after a dbscheme keyword (`key`) gets a
+trailing underscore. A node's label is its parent's and the field's position, so `#c0_1_0_1_7` is
+section 0, field 1 (`paragraphs`), paragraph 0, field 1 (`statements`), statement 7.
+`program_sections` and `program_paragraphs` tie each program to its sections and to the
+paragraphs outside any section.
 
 ## What QL derives
 
@@ -71,7 +111,8 @@ config's are. A QL test directory carries its own config; `ql/test/flows/` cache
 `cobble/out-codeql-test/`.
 
 `ql/test/flows/` checks one invented program for flow through a PERFORM called twice, through a
-REDEFINES, through a group MOVE, and for a value overwritten in full.
+REDEFINES, through a group MOVE, and for a value overwritten in full; `Ast.ql` there reads every
+MOVE's source and first target from the generated tree.
 
 ## Limits
 
