@@ -55,8 +55,16 @@ units(
 /* The cells a data name denotes: every one of that name whose qualification path holds
    the qualifiers written, so a subscripted name denotes every occurrence. */
 names_cell(int node: @cobol_ast_node ref, int cell: @field ref);
-/* The cells a name a node holds as text denotes: a WRITE's record name, say. */
+/* The cells a name a node holds as text denotes: a WRITE's record name, an XML
+   GENERATE's names, the symbolic input record (`map_input`) a RECEIVE MAP with no
+   INTO fills. */
 field_names_cell(int node: @cobol_ast_node ref, string field: string ref, int cell: @field ref);
+/* The cells a READ or RETURN fills besides INTO: every 01 record of its file, which
+   share the record area. */
+file_record_cell(int read: @cobol_statement ref, int cell: @field ref);
+/* The cells a SET ... TO TRUE moves its conditions' first values into, when every
+   condition name it sets resolves to one declaration. */
+condition_set_cell(int set: @cobol_set_statement ref, int cell: @field ref);
 /* The first and last unit an out-of-line PERFORM runs. */
 perform_range(int perform: @cobol_perform_statement ref, int first: @cobol_unit ref, int last: @cobol_unit ref);
 /* The unit a procedure name denotes: a paragraph so named, else a section's first. */

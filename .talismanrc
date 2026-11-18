@@ -603,4 +603,6 @@ fileignoreconfig:
   checksum: 9f37f41ef8d27b642a025bd7667c78eec1fead615461e21c083b93f01cf1e535
 - filename: codeql-cobol/ql/lib/cobol/ast/internal/Generated.qll
   checksum: ead2806d30500807ad4ac809bfd96a45a2f7f7eba1b45d1081aeb12d8555cac8
+- filename: codeql-cobol/ql/lib/cobol/Ast.qll
+  checksum: 4aa0011fe3c0f60e12d219868fcd035878e31acf9ecfc033a0373f0811b79cae
 version: "1.0"

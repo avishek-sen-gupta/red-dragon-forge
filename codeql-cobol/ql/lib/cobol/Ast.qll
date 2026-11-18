@@ -320,6 +320,123 @@ predicate loopTransfer(Stmt s, string site, Field src, Field dst) {
   )
 }
 
+/** An operand the program writes as a literal or a figurative constant. */
+private predicate isLiteral(Generated::RefModOperand o) {
+  o.getKind() in ["lit", "figurative", "all_literal"]
+}
+
+/** A verb that builds its target from every source reads a literal among them. */
+private predicate readsLiteral(Stmt s) {
+  exists(Generated::ArithmeticStatement a | a = s |
+    isLiteral(a.getOperands(_)) or isLiteral(a.getTargets(_))
+  )
+  or
+  exists(within(s.(Generated::ComputeStatement).getExpression()).(Generated::LiteralNode))
+  or
+  isLiteral(s.(Generated::StringStatement).getSendings(_).getValue())
+}
+
+private Field unionTarget(Stmt s) {
+  result = cellsOf(s.(Generated::ArithmeticStatement).getTargets(_)) or
+  result = cellsOf(s.(Generated::ArithmeticStatement).getGiving(_)) or
+  result = cellsOf(s.(Generated::ArithmeticStatement).getRemainder()) or
+  result = cellsOf(s.(Generated::ComputeStatement).getTargets(_)) or
+  result = cellsOf(s.(Generated::StringStatement).getInto())
+}
+
+/** The CICS option `name` of `s`. */
+private Generated::CicsOperand option(Generated::ExecCicsStatement s, string name) {
+  exists(int i | s.getOptionsKey(i) = name and result = s.getOptions(i))
+}
+
+private predicate cicsCall(Generated::ExecCicsStatement s, string origin) {
+  s.getVerb() in ["LINK", "XCTL"] and
+  if option(s, "PROGRAM").getIsLiteral() = true then origin = "CALL" else origin = "DYNAMIC_CALL"
+}
+
+/** The cells an EXEC CICS command receives into, and the origin it credits them to. */
+private predicate cicsReceived(Generated::ExecCicsStatement s, string origin, Field dst) {
+  cicsCall(s, origin) and dst = cellsOf(option(s, "COMMAREA"))
+  or
+  s.getVerb() in ["ASKTIME", "ASSIGN"] and origin = "CICS_STATE" and dst = cellsOf(s.getOptions(_))
+  or
+  not s.getVerb() in ["LINK", "XCTL", "ASKTIME", "ASSIGN"] and
+  (
+    if s.getVerb() in ["READ", "READNEXT", "READPREV"]
+    then origin = "FILE"
+    else
+      if s.getVerb() = "RECEIVE MAP" then origin = "MAP" else origin = "CICS_STATE"
+  ) and
+  (
+    dst = cellsOf(option(s, "INTO"))
+    or
+    not exists(option(s, "INTO")) and dst = cellsOf(option(s, "SET"))
+    or
+    not exists(option(s, "INTO")) and
+    not exists(option(s, "SET")) and
+    field_names_cell(s, "map_input", dst)
+  )
+}
+
+/** A CALL's argument the callee can write back through: BY REFERENCE, not omitted, not a literal. */
+private Generated::CallUsingParam byReference(Generated::CallStatement c) {
+  result = c.getUsing(_) and
+  result.getParamType().toUpperCase() = "REFERENCE" and
+  result.getOmitted() = false and
+  result.getIsLiteral() = false
+}
+
+/**
+ * `s` writes `dst` from outside the program's storage: `origin` is the kind cobble's
+ * fixpoint credits it to (LITERAL, UNKNOWN_FIELD, FUNCTION, FILE, MAP, CICS_STATE, CALL,
+ * DYNAMIC_CALL, UNMODELLED). LENGTH OF is a constant, so a LITERAL.
+ */
+predicate originWrite(Stmt s, string origin, Field dst) {
+  exists(Generated::MoveStatement m | m = s and dst = cellsOf(m.getTargets(_)) |
+    (isLiteral(m.getSource()) or m.getSource().(Generated::RefModOperand).getKind() = "length_of") and
+    origin = "LITERAL"
+    or
+    m.getSource().(Generated::RefModOperand).getKind() = "ref" and
+    not exists(cellsOf(m.getSource())) and
+    origin = "UNKNOWN_FIELD"
+    or
+    m.getSource() instanceof Generated::FunctionCallOperand and
+    not exists(moveSource(m)) and
+    origin = "FUNCTION"
+  )
+  or
+  readsLiteral(s) and origin = "LITERAL" and dst = unionTarget(s)
+  or
+  origin = "LITERAL" and dst = cellsOf(s.(Generated::InitializeStatement).getOperands(_))
+  or
+  origin = "LITERAL" and condition_set_cell(s, dst)
+  or
+  origin = "FILE" and (dst = cellsOf(s.(Generated::ReadStatement).getInto()) or file_record_cell(s, dst))
+  or
+  exists(Generated::CallStatement c | c = s |
+    (dst = cellsOf(byReference(c)) or dst = cellsOf(c.getGiving())) and
+    if exists(c.getTarget().getIdentifier()) then origin = "DYNAMIC_CALL" else origin = "CALL"
+  )
+  or
+  cicsReceived(s, origin, dst)
+  or
+  origin = "CICS_STATE" and
+  (dst = cellsOf(option(s, "RESP")) or dst = cellsOf(option(s, "RESP2")))
+  or
+  origin = "UNMODELLED" and dst = cellsOf(s.(Generated::AcceptStatement).getTarget())
+}
+
+/** The origin writes of a PERFORM VARYING's own sites: a literal FROM or BY. */
+predicate loopOriginWrite(Stmt s, string site, string origin, Field dst) {
+  exists(Generated::PerformVaryingSpec spec, string at |
+    varying(s, spec, at) and dst = cellsOf(spec.getVaryingVar()) and origin = "LITERAL"
+  |
+    site = at + "#init" and not spec.getVaryingFrom() instanceof Generated::FieldRefNode
+    or
+    site = at + "#step" and not spec.getVaryingBy() instanceof Generated::FieldRefNode
+  )
+}
+
 /** The unit a statement is written in, however deeply it is nested. */
 ProcedureUnit unitOf(Stmt s) {
   s = result.getStmt(_)

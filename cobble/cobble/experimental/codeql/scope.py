@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from cobble.dataflow.fields.extent import CellIndex, denoted_cells
 from cobble.dataflow.layout import Cell
 from cobble.dataflow.srccfg.cfg import SourceSpan
+from cobble.dataflow.srccfg.declared_condition import DeclaredCondition
 from cobble.experimental.codeql.label import Label
 from cobble.experimental.codeql.trap_row import TrapRow, define
 from cobol_asg.cobol_expression import ExprNode
@@ -17,7 +18,8 @@ Ends = tuple[Label, Label]
 class Scope:
     """``cells`` labels each cell ``index`` holds; ``sections`` maps a section to
     its first and last unit. A procedure name is a paragraph if one is so named,
-    else a section."""
+    else a section. ``file_of_record`` names the file each FD record belongs to,
+    ``declared`` every level-88 declaration by name."""
 
     file: Label
     source: str
@@ -25,6 +27,8 @@ class Scope:
     cells: Mapping[Cell, Label]
     paragraphs: Mapping[str, Label]
     sections: Mapping[str, Ends]
+    file_of_record: Mapping[str, str]
+    declared: Mapping[str, tuple[DeclaredCondition, ...]]
 
     def cells_named(
         self, name: str, qualifiers: tuple[str, ...], subscripts: tuple[ExprNode, ...]

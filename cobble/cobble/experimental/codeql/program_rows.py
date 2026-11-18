@@ -7,6 +7,7 @@ from cobble.dataflow.fields.extent import cell_index
 from cobble.dataflow.fields.undeclared import with_undeclared
 from cobble.dataflow.layout import Cell, program_records
 from cobble.dataflow.srccfg.cfg import NO_SPAN, span_of
+from cobble.dataflow.srccfg.conditions import declared_conditions
 from cobble.dataflow.srccfg.paragraphs import ParagraphRef, paragraph_order
 from cobble.experimental.codeql.label import Label
 from cobble.experimental.codeql.program_facts import ProgramFacts
@@ -37,6 +38,8 @@ def program_rows(parsed: CobolASG, source: str) -> Rows:
         {cell: Label(f"f{n}") for n, cell in enumerate(cells)},
         _paragraphs(units),
         _sections(units),
+        asg.file_record_to_select,
+        declared_conditions(asg),
     )
     writer = AstWriter(schema, FILE, ProgramFacts(scope).rows)
     location, located = scope.location(PROGRAM, span_of(asg, source))

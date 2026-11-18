@@ -37,8 +37,10 @@ skipped. `prefix.trap` holds the corpus directory.
 | `numeric_fields` | cell whose PIC parses as numeric |
 | `program_statements`, `program_sections`, `program_paragraphs` | the procedure division's statements before any section or paragraph, its sections, its paragraphs outside any section |
 | `units(program, index, unit, name, section)` | unit the program runs, in cobble's paragraph order: the program for the statements before any section or paragraph, a section for those at its head, each paragraph |
-| `names_cell(node, cell)` | cell a data name denotes, as cobble's dataflow resolves it (`denoted_cells`): the occurrence constant subscripts select, else every occurrence. For a `RefModOperand` naming data, a `FieldRefNode`, `RefModNode`, `AddressOfNode`, `LengthOfNode`, `RefModReference`, `ComputeTarget`, or a `SetOperand` naming data |
-| `field_names_cell(node, field, cell)` | cell a name held as text denotes: a WRITE, REWRITE or RELEASE's `record_name`, an XML GENERATE's `xml_document`, `from_record` and `count_in` |
+| `names_cell(node, cell)` | cell a data name denotes, as cobble's dataflow resolves it (`denoted_cells`): the occurrence constant subscripts select, else every occurrence. For a `RefModOperand` naming data, a `FieldRefNode`, `RefModNode`, `AddressOfNode`, `LengthOfNode`, `RefModReference`, `ComputeTarget`, a `SetOperand` naming data, a CALL argument or an EXEC CICS operand that is not a literal |
+| `field_names_cell(node, field, cell)` | cell a name held as text denotes: a WRITE, REWRITE or RELEASE's `record_name`, an XML GENERATE's `xml_document`, `from_record` and `count_in`, a RECEIVE MAP's `map_input` (the map's symbolic input record) when it has no INTO |
+| `file_record_cell(read, cell)` | cell a READ or RETURN fills besides INTO: each 01 record of its file |
+| `condition_set_cell(set, cell)` | cell a SET ... TO TRUE moves its conditions' first values into, as cobble's fixpoint rewrites it (`with_condition_sets`): only when every condition name resolves |
 | `perform_range(perform, first, last)` | out-of-line PERFORM: its first and last unit (a section's are its first and last unit) |
 | `procedure_unit(target, unit)` | procedure name: the paragraph so named, else the section's first unit |
 
@@ -88,6 +90,13 @@ and `#d` start the program's statements, sections and paragraphs, `#f12` is the 
   data), SEARCH VARYING, MOVE and ADD CORRESPONDING, and XML GENERATE. `loopTransfer` gives a
   PERFORM VARYING's `#init` and `#step`. A MOVE or a FROM copies byte k to byte k; every other
   verb builds the whole target from every source.
+- **Origin writes** (`Ast.qll`, `originWrite`, `loopOriginWrite`). A write whose source is no
+  field, with the origin cobble's fixpoint credits it to: LITERAL (a literal, figurative or LENGTH
+  OF moved or among a verb's sources, INITIALIZE, SET ... TO TRUE, a literal VARYING FROM or BY),
+  UNKNOWN_FIELD, FUNCTION (a FUNCTION reading no field), FILE (READ, and EXEC CICS READ, READNEXT
+  and READPREV), MAP (RECEIVE MAP), CICS_STATE (RESP, RESP2, ASKTIME, ASSIGN and every other
+  receiver), CALL and DYNAMIC_CALL (CALL BY REFERENCE arguments and GIVING, a LINK or XCTL
+  COMMAREA), UNMODELLED (ACCEPT).
 - **Reads and writes** (`Ast.qll`). A statement reads and writes what its transfers do, an ACCEPT
   writes its target and a DISPLAY reads its operands. An access through a reference modification
   or a subscript, or a STRING, INSPECT or UNSTRING target, may touch only part of its cell.
@@ -120,9 +129,10 @@ The extractor's `autobuild.sh` runs `cobble-parse-corpus` and then this command.
 config's are. A QL test directory carries its own config; `ql/test/flows/` caches its ASG in
 `cobble/out-codeql-test/`.
 
-`ql/src/diagnostics/` holds two tables for comparing with cobble's fixpoint: `Transfers.ql`
-(each transfer at cobble's node id, with both cells' records and bytes) and `StatementPaths.ql`
-(every statement's node id and class). `stmtPath` builds the id as desugar does:
+`ql/src/diagnostics/` holds three tables for comparing with cobble's fixpoint: `Transfers.ql`
+(each transfer at cobble's node id, with both cells' records and bytes), `OriginWrites.ql` (each
+origin write, with its origin and target cell) and `StatementPaths.ql` (every statement's node id
+and class). `stmtPath` builds the id as desugar does:
 `<unit>/<position>`, then `.then.`, `.else.`, `.body.`, `.when.<branch>.` or the clause's
 field name for each nesting.
 
@@ -136,8 +146,6 @@ MOVE's source and first target from the generated tree.
   statement falls through, and the statements nested in it (EVALUATE's WHENs, ON SIZE ERROR,
   AT END, INVALID KEY, SEARCH) are not in the CFG; a PERFORM VARYING's `#init` and `#step` are
   not CFG nodes. Conditions and the DEPENDING ON index are not reads.
-- `names_cell` has no rows for an EXEC CICS operand, and nothing records a write whose source is
-  not a field (a literal, a file, CICS, a CALL, a map).
 - Each member's first program only. No CALL, LINK or XCTL between programs.
 - PERFORM ranges are assumed to nest.
 - A name resolves to every cell of that name whose qualification path contains the operand's

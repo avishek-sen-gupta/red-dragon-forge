@@ -61,6 +61,35 @@ SHAPES = """\
            GOBACK.
 """
 
+ORIGINS = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. ORIGINS.
+       ENVIRONMENT DIVISION.
+       INPUT-OUTPUT SECTION.
+       FILE-CONTROL.
+           SELECT IN-FILE ASSIGN TO INFILE.
+       DATA DIVISION.
+       FILE SECTION.
+       FD IN-FILE.
+       01 IN-REC PIC X(4).
+       WORKING-STORAGE SECTION.
+       01 FLAG PIC X.
+          88 IS-ON VALUE 'Y'.
+       01 ARG PIC X(4).
+       01 RESP-CD PIC S9(8) COMP.
+       01 ACCT PIC X(4).
+       01 MAPI.
+          05 FLD PIC X(4).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           READ IN-FILE.
+           SET IS-ON TO TRUE.
+           CALL 'SUB' USING ARG.
+           EXEC CICS RECEIVE MAP('MAP') RESP(RESP-CD) END-EXEC.
+           EXEC CICS READ FILE('ACCTS') INTO(ACCT) RIDFLD(ARG) END-EXEC.
+           GOBACK.
+"""
+
 ROW = re.compile(r"^(\w+)\((.*)\)$")
 Tables = dict[str, set[tuple[str, ...]]]
 
@@ -90,6 +119,12 @@ def corpus(tmp_path_factory: pytest.TempPathFactory) -> Path:
     source.write_text(SHAPES, encoding="utf-8")
     parsed = parse_one(
         Job(source, root / "asg" / "SHAPES.json"), str(_bridge_jar()), (), ("cpy",)
+    )
+    assert parsed.ok, parsed.error
+    origins = root / "src" / "ORIGINS.cbl"
+    origins.write_text(ORIGINS, encoding="utf-8")
+    parsed = parse_one(
+        Job(origins, root / "asg" / "ORIGINS.json"), str(_bridge_jar()), (), ("cpy",)
     )
     assert parsed.ok, parsed.error
     (root / "src" / "BROKEN.cbl").write_text("not cobol\n", encoding="utf-8")
@@ -249,11 +284,44 @@ def test_a_member_is_written_as_its_fields_paragraphs_and_statements(
     }
 
 
+def test_a_read_a_condition_set_a_call_and_cics_operands_name_their_cells(
+    corpus: Path,
+) -> None:
+    """READ fills its file's records, SET ... TO TRUE the field its condition tests;
+    a CALL argument and a CICS operand that is not a literal name cells, and a
+    RECEIVE MAP with no INTO names its map's input record."""
+    tables = _tables((corpus / "trap" / "ORIGINS.trap").read_text(encoding="utf-8"))
+    main = "#d0_1"
+    named = ("names_cell", "field_names_cell", "file_record_cell", "condition_set_cell")
+    assert {table: tables[table] for table in named} == {
+        "file_record_cell": {(f"{main}_0", "#f7")},
+        "condition_set_cell": {(f"{main}_1", "#f0")},
+        "names_cell": {
+            (f"{main}_2_1_0", "#f1"),
+            (f"{main}_3_1_1", "#f2"),
+            (f"{main}_4_1_1", "#f3"),
+            (f"{main}_4_1_2", "#f1"),
+        },
+        "field_names_cell": {(f"{main}_3", '"map_input"', "#f4")},
+    }
+    assert {row[0]: row[2] for row in tables["fields"]} == {
+        "#f0": '"FLAG"',
+        "#f1": '"ARG"',
+        "#f2": '"RESP-CD"',
+        "#f3": '"ACCT"',
+        "#f4": '"MAPI"',
+        "#f5": '"FLD"',
+        "#f6": '"%HANDLER[ANY]"',
+        "#f7": '"IN-REC"',
+    }
+
+
 def test_the_corpus_writes_its_prefix_skips_failures_and_archives_sources(
     corpus: Path,
 ) -> None:
     source = (corpus / "src" / "SHAPES.cbl").resolve()
     assert sorted(p.name for p in (corpus / "trap").iterdir()) == [
+        "ORIGINS.trap",
         "SHAPES.trap",
         "prefix.trap",
     ]
