@@ -176,7 +176,7 @@ watched name that is not exactly one field. The answer is one of:
 
 - `UNSAT`: no run does;
 - `SAT`: some run of the encoding does, which is a real run only as far as the encoding is exact;
-- `UNKNOWN`: Spacer gave up, or ran past the 180-second limit every query runs under
+- `UNKNOWN`: Spacer gave up, or ran past the 600-second limit every query runs under
   (`QUERY_TIMEOUT_MS`).
 
 `Verdict.seconds` is the solver's time, from the clock passed in.
@@ -230,7 +230,7 @@ parsed from (after copybook expansion). Further lines, when they apply: `dropped
 proved impossible`, and `(cut at 64 ways: this list is incomplete)`.
 
 On sign-on each query takes under a second. On the largest CardDemo programs a way's check
-can run to the limit: COACTUPC's account REWRITE gives up on its first way at 180 s.
+can run for minutes: COACTUPC's account REWRITE gave up on its first way under an earlier 180 s limit.
 
 ## One formula
 

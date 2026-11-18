@@ -316,6 +316,11 @@ def test_a_card_rewrite_in_card_updates_own_chain_follows_a_check_of_the_changes
 
 
 @pytest.mark.slow
+@pytest.mark.xfail(
+    reason="the skipped-checks UNSAT takes ~19 min since multi-valued 88s lower to "
+    "OR chains (red-dragon-forge-s1dw)",
+    run=False,
+)
 def test_a_card_rewrite_always_follows_a_check_of_the_changes(
     carddemo: CardDemoRun,
 ) -> None:

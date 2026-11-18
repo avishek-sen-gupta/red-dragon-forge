@@ -9,7 +9,7 @@ from cobble.experimental.horn.verdict import Verdict
 
 logger = logging.getLogger(__name__)
 
-QUERY_TIMEOUT_MS = 180_000
+QUERY_TIMEOUT_MS = 600_000
 CANCELED = "canceled"
 
 ANSWERS: Mapping[str, Answer] = {
