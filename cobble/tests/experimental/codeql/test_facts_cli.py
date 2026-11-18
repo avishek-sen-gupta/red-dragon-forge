@@ -80,6 +80,10 @@ ORIGINS = """\
        01 ACCT PIC X(4).
        01 MAPI.
           05 FLD PIC X(4).
+       01 GRP.
+          05 G1 PIC X(2).
+          05 FILLER PIC X(1).
+          05 G2 PIC X(2).
        PROCEDURE DIVISION.
        MAIN-PARA.
            READ IN-FILE.
@@ -87,6 +91,7 @@ ORIGINS = """\
            CALL 'SUB' USING ARG.
            EXEC CICS RECEIVE MAP('MAP') RESP(RESP-CD) END-EXEC.
            EXEC CICS READ FILE('ACCTS') INTO(ACCT) RIDFLD(ARG) END-EXEC.
+           INITIALIZE GRP.
            GOBACK.
 """
 
@@ -178,7 +183,7 @@ def test_a_member_is_written_as_its_fields_paragraphs_and_statements(
     generated = {
         table: tables.pop(table)
         for table in tuple(tables)
-        if table.startswith(("cobol_", "program_"))
+        if table.startswith(("cobol_", "program_", "cfg_", "statement_ids"))
     }
     assert {
         row
@@ -235,12 +240,36 @@ def test_a_member_is_written_as_its_fields_paragraphs_and_statements(
             (f"{main}_5", "#c1_1_0", "#c1_1_1"),
             (f"{main}_6", "#c0_1_1", "#c0_1_1"),
         },
+        "names_slice": {(f"{main}_2_0", "#f10", "0", "2")},
         "procedure_unit": {
             (f"{main}_9_0_0_0", "#c0_1_1"),
             (f"{main}_9_0_0_1", "#c0_1_2"),
             (f"{main}_10_0_0", "#c0_1_3"),
         },
     }
+    assert {
+        table: generated[table] for table in ("cfg_entry", "cfg_call", "cfg_resume")
+    } == {
+        "cfg_entry": {("#program", "#n0")},
+        "cfg_call": {
+            ("#n5", "#n19", "#n24"),
+            ("#n6", "#n36", "#n37"),
+            ("#n8", "#n19", "#n21"),
+        },
+        "cfg_resume": {("#n5", "#n6"), ("#n6", "#n7"), ("#n8", "#n7")},
+    }
+    assert generated["cfg_site"] == {
+        ("#n7", f"{main}_6", '"#loop"'),
+        ("#n9", f"{main}_7", '"#loop#test"'),
+        ("#n11", f"{main}_8", '"#test"'),
+        ("#n15", f"{main}_9", '"#goto.0"'),
+        ("#n16", f"{main}_9", '"#goto.1"'),
+    }
+    assert {
+        row
+        for row in generated["statement_ids"]
+        if row[0] in (f"{main}_7", f"{main}_7_2_0")
+    } == {(f"{main}_7", '"MAIN-PARA/7"'), (f"{main}_7_2_0", '"MAIN-PARA/7.body.0"')}
     assert generated["program_sections"] == {
         ("#program", "0", "#c0"),
         ("#program", "1", "#c1"),
@@ -248,6 +277,8 @@ def test_a_member_is_written_as_its_fields_paragraphs_and_statements(
     until = f"{main}_7"
     assert _under(generated, until) == {
         ("cobol_perform_statement_def", until, '""', '""', '""', '""'),
+        ("statement_ids", until, '"MAIN-PARA/7"'),
+        ("statement_ids", f"{until}_2_0", '"MAIN-PARA/7.body.0"'),
         ("cobol_perform_statement_spec", until, f"{until}_3"),
         ("cobol_perform_until_spec_def", f"{until}_3", f"{until}_3_0", "true"),
         (
@@ -287,22 +318,31 @@ def test_a_member_is_written_as_its_fields_paragraphs_and_statements(
 def test_a_read_a_condition_set_a_call_and_cics_operands_name_their_cells(
     corpus: Path,
 ) -> None:
-    """READ fills its file's records, SET ... TO TRUE the field its condition tests;
-    a CALL argument and a CICS operand that is not a literal name cells, and a
-    RECEIVE MAP with no INTO names its map's input record."""
+    """READ fills its file's records, SET ... TO TRUE the field its condition tests,
+    INITIALIZE its items but the FILLER; a CALL argument and a CICS operand that is
+    not a literal name cells, and a RECEIVE MAP with no INTO names its map's input
+    record."""
     tables = _tables((corpus / "trap" / "ORIGINS.trap").read_text(encoding="utf-8"))
     main = "#d0_1"
-    named = ("names_cell", "field_names_cell", "file_record_cell", "condition_set_cell")
+    named = (
+        "names_cell",
+        "field_names_cell",
+        "file_record_cell",
+        "condition_set_cell",
+        "initialized_cell",
+    )
     assert {table: tables[table] for table in named} == {
-        "file_record_cell": {(f"{main}_0", "#f7")},
+        "file_record_cell": {(f"{main}_0", "#f11")},
         "condition_set_cell": {(f"{main}_1", "#f0")},
         "names_cell": {
             (f"{main}_2_1_0", "#f1"),
             (f"{main}_3_1_1", "#f2"),
             (f"{main}_4_1_1", "#f3"),
             (f"{main}_4_1_2", "#f1"),
+            (f"{main}_5_0_0", "#f6"),
         },
         "field_names_cell": {(f"{main}_3", '"map_input"', "#f4")},
+        "initialized_cell": {(f"{main}_5", "#f7"), (f"{main}_5", "#f9")},
     }
     assert {row[0]: row[2] for row in tables["fields"]} == {
         "#f0": '"FLAG"',
@@ -311,8 +351,12 @@ def test_a_read_a_condition_set_a_call_and_cics_operands_name_their_cells(
         "#f3": '"ACCT"',
         "#f4": '"MAPI"',
         "#f5": '"FLD"',
-        "#f6": '"%HANDLER[ANY]"',
-        "#f7": '"IN-REC"',
+        "#f6": '"GRP"',
+        "#f7": '"G1"',
+        "#f8": '"FILLER_1"',
+        "#f9": '"G2"',
+        "#f10": '"%HANDLER[ANY]"',
+        "#f11": '"IN-REC"',
     }
 
 

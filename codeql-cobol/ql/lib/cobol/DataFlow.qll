@@ -14,7 +14,9 @@ private import codeql.util.Unit
 import cobol.Cfg
 
 private predicate boundary(Program p, string rec, int b) {
-  exists(Field f | f.getProgram() = p and f.getRecord() = rec | b = f.getStart() or b = f.getEnd())
+  exists(Field f | f.getProgram() = p and f.getRecord() = rec |
+    b = f.getStart() or b = f.getEnd() or slicedAccess(_, f, b, _) or slicedAccess(_, f, _, b)
+  )
 }
 
 private int boundaryRank(Program p, string rec, int b) {
@@ -49,6 +51,15 @@ class Atom extends TAtom {
   Location getLocation() { result = this.getProgram().getLocation() }
 }
 
+/** An atom of `f` that `s` reaches: all of them, or those inside a constant slice of it. */
+predicate stmtAtom(Stmt s, Field f, Atom a) {
+  (f = s.getARead() or f = s.getAWrite() or originWrite(s, _, f)) and
+  fieldAtom(f, a) and
+  if slicedAccess(s, f, _, _)
+  then exists(int lo, int hi | slicedAccess(s, f, lo, hi) | lo <= a.getLo() and a.getHi() <= hi)
+  else any()
+}
+
 predicate fieldAtom(Field f, Atom a) {
   exists(Program p, string rec |
     p = f.getProgram() and
@@ -60,7 +71,7 @@ predicate fieldAtom(Field f, Atom a) {
 private predicate directAccess(Scope sc, Atom a) {
   exists(CfgNode n, Field f |
     n.getScope() = sc and
-    (f = n.getStmt().getARead() or f = n.getStmt().getAWrite()) and
+    (graphReads(n.getGraphNode(), f) or graphWrites(n.getGraphNode(), f, _)) and
     fieldAtom(f, a)
   )
 }
@@ -72,9 +83,50 @@ predicate modRef(Scope sc, Atom a) {
   exists(PerformCall c | c.getScope() = sc and modRef(c.getCallee(), a))
 }
 
+/**
+ * The cells the node `g` writes, and whether the write is weak: it may leave some of
+ * their bytes, or all of them, as they were.
+ */
+predicate graphWrites(GraphNode g, Field f, boolean weak) {
+  exists(Stmt s | s = g.getStmt() |
+    (f = s.getAWrite() or originWrite(s, _, f)) and
+    if clampedAccess(s, f) or s.isWeak() then weak = true else weak = false
+  )
+  or
+  exists(Stmt s, string site | s = g.getSiteOf(site) |
+    (loopTransfer(s, site, _, f) or loopOriginWrite(s, site, _, f)) and weak = false
+  )
+}
+
+/** The cells the node `g` copies from: the sources of the writes it makes. */
+predicate graphCopies(GraphNode g, Field f) {
+  transfer(g.getStmt(), f, _)
+  or
+  exists(Stmt s, string site | s = g.getSiteOf(site) | loopTransfer(s, site, f, _))
+}
+
+/** The cells the node `g` reads. */
+predicate graphReads(GraphNode g, Field f) {
+  f = g.getStmt().getARead()
+  or
+  exists(Stmt s, string site | s = g.getSiteOf(site) | loopTransfer(s, site, f, _))
+}
+
+/** An atom of `f` the node `g` reaches. */
+private predicate graphAtom(GraphNode g, Field f, Atom a) {
+  stmtAtom(g.getStmt(), f, a)
+  or
+  exists(Stmt s, string site | s = g.getSiteOf(site) |
+    (loopTransfer(s, site, f, _) or loopTransfer(s, site, _, f) or loopOriginWrite(s, site, _, f)) and
+    fieldAtom(f, a)
+  )
+}
+
 predicate nodeWrites(CfgNode n, Atom a, boolean certain) {
-  exists(Stmt s, Field f | s = n.getStmt() and s.getAWrite() = f and fieldAtom(f, a) |
-    if s.isPartial(f) then certain = false else certain = true
+  exists(Field f, boolean weak, GraphNode g |
+    g = n.getGraphNode() and graphWrites(g, f, weak) and graphAtom(g, f, a)
+  |
+    certain = weak.booleanNot()
   )
   or
   (
@@ -86,7 +138,7 @@ predicate nodeWrites(CfgNode n, Atom a, boolean certain) {
 }
 
 predicate nodeReads(CfgNode n, Atom a) {
-  exists(Field f | n.getStmt().getARead() = f and fieldAtom(f, a))
+  exists(Field f, GraphNode g | g = n.getGraphNode() and graphReads(g, f) and graphAtom(g, f, a))
   or
   (
     modRef(n.(PerformCall).getCallee(), a)
@@ -111,7 +163,7 @@ module Ssa = SsaImpl::Make<Location, Cfg, SsaInput>;
 
 /** Bytes `a` of the sending field land in bytes `b` of the receiving field: at the same offset for a copy, anywhere for a target a verb builds. */
 private predicate moved(Stmt s, Atom a, Atom b) {
-  exists(Field src, Field dst | transfer(s, src, dst) and fieldAtom(src, a) and fieldAtom(dst, b) |
+  exists(Field src, Field dst | transfer(s, src, dst) and stmtAtom(s, src, a) and stmtAtom(s, dst, b) |
     not s.copies()
     or
     src.isNumeric()
@@ -341,3 +393,4 @@ module DataFlow {
   import SharedDataFlow::DataFlowMake<Location, CobolDataFlow>
   import CobolDataFlow
 }
+

@@ -67,6 +67,12 @@ each cell's qualification path, so QL resolves names the way COBOL does.
 
 ## Calls made without the user
 
+- The control-flow graph is cobble's, supplied as facts (`cfg_*`): the graph cobble's fixpoint
+  walks, with its node ids. Lowering COBOL's control flow (sentences, EXIT PERFORM, conditional
+  phrases, CICS handlers and raises, WHENEVER) is COBOL's rules, which the user ruled stay in
+  cobble alone for names; QL splits the graph into PERFORM scopes and CodeQL's libraries do the
+  rest. Reversible: a CFG lowered in QL from the tree is a separate unit.
+
 - Labels are positions (parent label, field position, element index), not counters, so a
   label is stable across runs and readable in a TRAP file.
 - A map always gets a key table and a value table, whether or not its values are optional, so

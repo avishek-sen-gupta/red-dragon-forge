@@ -1,153 +1,111 @@
 /**
- * The control-flow graph over the generated syntax tree.
+ * The control-flow graph cobble's fixpoint walks, as cobble writes it, split into
+ * scopes.
  *
- * Every PERFORM range is a scope of its own, holding a copy of each statement it can
- * reach. The end of the range's last unit is that scope's exit; the end of any other
- * unit falls through to the next one. The main scope starts at the first unit and has
- * no exit but the end of the program. So a paragraph that is both performed and
- * reached by GO TO or fall-through returns in the first case and falls through in the
- * second. Ranges are assumed well nested: only a scope's own range end returns.
+ * Every PERFORM range is a scope of its own, holding a copy of each node it can reach
+ * from its first node along every edge but PERFORM and RETURN. The range's last node is
+ * that scope's exit; reaching the end of any other range falls through, as the edges
+ * say. The main scope starts at the program's entry. A PERFORM is a call into its
+ * range's scope, and control in the caller continues where the call resumes, once some
+ * path through the range reaches its end: a range that only ever leaves the program,
+ * through CICS RETURN or XCTL, does not come back.
+ * Ranges are assumed well nested: only a scope's own range end returns.
  */
 
 private import codeql.controlflow.SuccessorType
 private import codeql.controlflow.BasicBlock as BB
 import cobol.Ast
 
-private newtype TPoint =
-  TStmtPoint(Stmt s) or
-  TEndPoint(ProcedureUnit p)
+/** A node of cobble's graph. */
+class GraphNode extends @cfg_node {
+  Program getProgram() { cfg_nodes(this, result, _, _, _) }
 
-/** A statement, or the end of a paragraph. */
-class Point extends TPoint {
-  Stmt asStmt() { this = TStmtPoint(result) }
+  /** cobble's id for the node. */
+  string getId() { cfg_nodes(this, _, result, _, _) }
 
-  ProcedureUnit asEnd() { this = TEndPoint(result) }
+  string getKind() { cfg_nodes(this, _, _, result, _) }
 
-  string toString() {
-    result = this.asStmt().toString()
-    or
-    result = "end of " + this.asEnd().getName()
+  Location getLocation() { cfg_nodes(this, _, _, _, result) }
+
+  string toString() { result = this.getId() }
+
+  GraphNode getASuccessor(string kind) { cfg_edges(this, result, kind) }
+
+  /** The statement this node lowers. */
+  Stmt getStmt() { cfg_statement(this, result) }
+
+  /** The statement this node is a further node of, as `#init` or `#test` is, and the suffix naming it. */
+  Stmt getSiteOf(string suffix) { cfg_site(this, result, suffix) }
+
+  /** A node control goes to next along an edge within one scope, PERFORM and RETURN aside. */
+  GraphNode getAPlainSuccessor() {
+    exists(string kind | result = this.getASuccessor(kind) | not kind in ["PERFORM", "RETURN"])
   }
-
-  Location getLocation() {
-    result = this.asStmt().getLocation() or result = this.asEnd().getLocation()
-  }
-}
-
-Point entryOf(ProcedureUnit p) {
-  result = TStmtPoint(p.getStmt(0))
-  or
-  not exists(p.getStmt(0)) and result = TEndPoint(p)
-}
-
-/** Where control goes when `s` completes normally. */
-Point after(Stmt s) {
-  exists(@cobol_body p, int slot, int i | inBody(s, p, slot, i) |
-    exists(Stmt n | inBody(n, p, slot, i + 1) and result = TStmtPoint(n))
-    or
-    not inBody(_, p, slot, i + 1) and
-    (
-      result = TEndPoint(p.(ProcedureUnit))
-      or
-      p instanceof Generated::IfStatement and result = after(p)
-      or
-      isInlinePerform(p) and result = TStmtPoint(p)
-    )
-  )
-}
-
-predicate isInlinePerform(Stmt s) { exists(s.(Generated::PerformStatement).getChildren(0)) }
-
-private predicate isOutOfLinePerform(Stmt s) {
-  s instanceof Generated::PerformStatement and not isInlinePerform(s)
-}
-
-/** A unit a GO TO can jump to: its target, or any of a DEPENDING ON's. */
-ProcedureUnit gotoTarget(Stmt s) {
-  exists(Generated::GotoStatementFormType form, Generated::ProcedureRef r |
-    form = s.(Generated::GotoStatement).getForm() and
-    (r = form.(Generated::SimpleGoto).getTarget() or r = form.(Generated::ComputedGoto).getTargets(_)) and
-    procedure_unit(r, result)
-  )
-}
-
-private Point bodyEntry(Stmt s, int slot) {
-  result = TStmtPoint(s.getChild(slot, 0))
-  or
-  slot in [1, 2] and not exists(s.getChild(slot, 0)) and result = after(s)
-}
-
-/** Successors of a statement that do not depend on the scope. */
-private predicate stmtSucc(Stmt s, Point q) {
-  s instanceof Generated::IfStatement and (q = bodyEntry(s, 1) or q = bodyEntry(s, 2))
-  or
-  isInlinePerform(s) and (q = bodyEntry(s, 1) or q = after(s))
-  or
-  q = entryOf(gotoTarget(s))
-  or
-  isOutOfLinePerform(s) and
-  (q = after(s) or exists(s.(Generated::PerformStatement).getSpec()) and q = TStmtPoint(s))
-  or
-  not s instanceof Generated::PerformStatement and
-  not s instanceof Generated::GotoStatement and
-  not s instanceof Generated::IfStatement and
-  not s instanceof Generated::StopRunStatement and
-  not s instanceof Generated::GobackStatement and
-  q = after(s)
 }
 
 private newtype TScope =
   TMain(Program p) or
-  TRange(ProcedureUnit first, ProcedureUnit last) { perform_range(_, first, last) }
+  TRange(GraphNode first, GraphNode last) { cfg_call(_, first, last) }
 
 /** The main line of a program, or one PERFORM range. */
 class Scope extends TScope {
   Program getProgram() {
-    this = TMain(result) or this = TRange(any(ProcedureUnit f | f.getProgram() = result), _)
+    this = TMain(result) or this = TRange(any(GraphNode f | f.getProgram() = result), _)
   }
 
-  ProcedureUnit getFirst() {
-    this = TMain(result.getProgram()) and result.getIndex() = 0
+  GraphNode getFirst() {
+    exists(Program p | this = TMain(p) | cfg_entry(p, result))
     or
     this = TRange(result, _)
   }
 
-  predicate exitsAt(ProcedureUnit p) { this = TRange(_, p) }
+  predicate exitsAt(GraphNode n) { this = TRange(_, n) }
 
   string toString() {
     exists(Program p | this = TMain(p) and result = p.getName())
     or
-    exists(ProcedureUnit f, ProcedureUnit l | this = TRange(f, l) |
-      if f = l then result = f.getName() else result = f.getName() + " THRU " + l.getName()
+    exists(GraphNode f, GraphNode l | this = TRange(f, l) |
+      result = f.getId() + " THRU " + l.getId()
     )
   }
 
   Location getLocation() { result = this.getFirst().getLocation() }
 }
 
-private predicate reach(Scope sc, Point p) {
-  p = entryOf(sc.getFirst())
+/** A range some path through reaches its end, so a PERFORM of it comes back. */
+private predicate returns(Scope sc) { exists(GraphNode last | sc.exitsAt(last) and reach(sc, last)) }
+
+/** The range a PERFORM at `call` runs. */
+private Scope callee(GraphNode call) {
+  exists(GraphNode f, GraphNode l | cfg_call(call, f, l) | result = TRange(f, l))
+}
+
+/** Where control goes next from `m` within one scope: a PERFORM resumes once a range it runs comes back. */
+private GraphNode localSuccessor(GraphNode m) {
+  result = m.getAPlainSuccessor()
   or
-  exists(Stmt s | reach(sc, TStmtPoint(s)) and stmtSucc(s, p))
+  cfg_resume(m, result) and returns(callee(m))
+}
+
+private predicate reach(Scope sc, GraphNode n) {
+  n = sc.getFirst()
   or
-  exists(ProcedureUnit para |
-    reach(sc, TEndPoint(para)) and not sc.exitsAt(para) and p = entryOf(para.getNext())
-  )
+  exists(GraphNode m | reach(sc, m) and not sc.exitsAt(m) and n = localSuccessor(m))
 }
 
 private newtype TNode =
   TEntryNode(Scope sc) or
-  TExitNode(Scope sc) or
-  TPointNode(Scope sc, Point p) { reach(sc, p) }
+  TExitNode(Scope sc) { sc = TRange(_, _) } or
+  TGraphNode(Scope sc, GraphNode g) { reach(sc, g) }
 
 class CfgNode extends TNode {
   Scope getScope() {
-    this = TEntryNode(result) or this = TExitNode(result) or this = TPointNode(result, _)
+    this = TEntryNode(result) or this = TExitNode(result) or this = TGraphNode(result, _)
   }
 
-  Point getPoint() { this = TPointNode(_, result) }
+  GraphNode getGraphNode() { this = TGraphNode(_, result) }
 
-  Stmt getStmt() { result = this.getPoint().asStmt() }
+  Stmt getStmt() { result = this.getGraphNode().getStmt() }
 
   predicate isEntry() { this = TEntryNode(_) }
 
@@ -158,45 +116,33 @@ class CfgNode extends TNode {
     or
     this = TExitNode(_) and result = "exit of " + this.getScope()
     or
-    result = this.getPoint().toString() + " in " + this.getScope()
+    result = this.getGraphNode().toString() + " in " + this.getScope()
   }
 
   Location getLocation() {
-    result = this.getPoint().getLocation()
+    result = this.getGraphNode().getLocation()
     or
-    not exists(this.getPoint()) and result = this.getScope().getLocation()
+    not exists(this.getGraphNode()) and result = this.getScope().getLocation()
   }
 
   CfgNode getASuccessor() {
     exists(Scope sc |
-      this = TEntryNode(sc) and result = TPointNode(sc, entryOf(sc.getFirst()))
+      this = TEntryNode(sc) and result = TGraphNode(sc, sc.getFirst())
       or
-      exists(Stmt s, Point p |
-        this = TPointNode(sc, TStmtPoint(s)) and stmtSucc(s, p) and result = TPointNode(sc, p)
-      )
-      or
-      exists(ProcedureUnit para | this = TPointNode(sc, TEndPoint(para)) |
-        sc.exitsAt(para) and result = TExitNode(sc)
+      exists(GraphNode g | this = TGraphNode(sc, g) |
+        sc.exitsAt(g) and result = TExitNode(sc)
         or
-        not sc.exitsAt(para) and result = TPointNode(sc, entryOf(para.getNext()))
-        or
-        not sc.exitsAt(para) and not exists(para.getNext()) and result = TExitNode(sc)
+        not sc.exitsAt(g) and result = TGraphNode(sc, localSuccessor(g))
       )
     )
   }
 }
 
-/** A PERFORM of a range, in one scope's copy of the statement. */
+/** A PERFORM, in one scope's copy of the node. */
 class PerformCall extends CfgNode {
-  Scope callee;
+  PerformCall() { cfg_call(this.getGraphNode(), _, _) }
 
-  PerformCall() {
-    exists(ProcedureUnit f, ProcedureUnit l |
-      perform_range(this.getStmt(), f, l) and callee = TRange(f, l)
-    )
-  }
-
-  Scope getCallee() { result = callee }
+  Scope getCallee() { result = callee(this.getGraphNode()) }
 }
 
 private module BbInput implements BB::InputSig<Location> {

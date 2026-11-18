@@ -39,6 +39,11 @@ skipped. `prefix.trap` holds the corpus directory.
 | `units(program, index, unit, name, section)` | unit the program runs, in cobble's paragraph order: the program for the statements before any section or paragraph, a section for those at its head, each paragraph |
 | `names_cell(node, cell)` | cell a data name denotes, as cobble's dataflow resolves it (`denoted_cells`): the occurrence constant subscripts select, else every occurrence. For a `RefModOperand` naming data, a `FieldRefNode`, `RefModNode`, `AddressOfNode`, `LengthOfNode`, `RefModReference`, `ComputeTarget`, a `SetOperand` naming data, a CALL argument or an EXEC CICS operand that is not a literal |
 | `field_names_cell(node, field, cell)` | cell a name held as text denotes: a WRITE, REWRITE or RELEASE's `record_name`, an XML GENERATE's `xml_document`, `from_record` and `count_in`, a RECEIVE MAP's `map_input` (the map's symbolic input record) when it has no INTO |
+| `names_slice(node, cell, offset, length)`, `names_clamped(node)` | how exactly a name locates its bytes, as `operand_extents` does: a constant reference modification's bytes of the cell; a computed subscript or bound, which locates them only approximately |
+| `initialized_cell(initialize, cell)` | elementary cell an INITIALIZE sets: its operands' items but FILLERs and the items under a REDEFINES below an operand (`initialized_extents`) |
+| `cfg_nodes(id, program, node, kind, loc)`, `cfg_edges(source, target, kind)`, `cfg_entry` | the control-flow graph cobble's fixpoint walks: `program_cfg`, with the fall-throughs no path takes pruned (`fallthroughs_pruned`), cobble's node ids and edge kinds, entered at the first unit's label |
+| `cfg_call(call, first, last)`, `cfg_resume(call, resume)` | a PERFORM: the nodes its range starts and ends at, and where control goes once it returns |
+| `statement_ids(statement, id)`, `cfg_statement(node, statement)`, `cfg_site(node, statement, suffix)` | cobble's id for every statement; the node it lowers to when it has one of its own; the further nodes it lowers to, named by a suffix on its id (`#init`, `#step`, `#loop`, `#test`, `#goto.<n>`) |
 | `file_record_cell(read, cell)` | cell a READ or RETURN fills besides INTO: each 01 record of its file |
 | `condition_set_cell(set, cell)` | cell a SET ... TO TRUE moves its conditions' first values into, as cobble's fixpoint rewrites it (`with_condition_sets`): only when every condition name resolves |
 | `perform_range(perform, first, last)` | out-of-line PERFORM: its first and last unit (a section's are its first and last unit) |
@@ -100,13 +105,17 @@ and `#d` start the program's statements, sections and paragraphs, `#f12` is the 
 - **Reads and writes** (`Ast.qll`). A statement reads and writes what its transfers do, an ACCEPT
   writes its target and a DISPLAY reads its operands. An access through a reference modification
   or a subscript, or a STRING, INSPECT or UNSTRING target, may touch only part of its cell.
-- **CFG** (`Cfg.qll`). Each PERFORM range is a scope with its own copy of every statement it can
-  reach. Reaching the end of the range's last paragraph leaves the scope; the end of any other
-  paragraph falls through to the next. The main scope starts at the first paragraph. A PERFORM
-  is a call into its range's scope.
-- **Atoms** (`DataFlow.qll`). The largest byte ranges of a record that no field boundary splits.
-  A field is a union of atoms; each atom is one SSA variable. A whole-field write is certain, a
-  partial one uncertain.
+- **CFG** (`Cfg.qll`). cobble's graph, as its fixpoint walks it (`cfg_*`, below), split into
+  scopes: each PERFORM range is a scope with its own copy of every node it reaches along every
+  edge but PERFORM and RETURN. The range's last node leaves the scope; the end of any other range
+  falls through as the edges say. The main scope starts at the program's entry. A PERFORM is a
+  call into its range's scope, and the caller resumes only when some path through the range
+  reaches its end, so a range that only leaves the program (CICS RETURN, XCTL) never comes back.
+- **Atoms** (`DataFlow.qll`). The largest byte ranges of a record that no field boundary or
+  constant slice splits. A field is a union of atoms; each atom is one SSA variable. A write
+  reaches all of a cell's atoms, or only those inside a constant slice; it is uncertain through a
+  clamped name or by a verb whose writes cobble's fixpoint makes weak (INSPECT, UNSTRING, SET,
+  SEARCH, the CORRESPONDING forms, XML GENERATE, ACCEPT).
 - **Dataflow.** A MOVE flows from source atoms to target atoms at the same offset within their
   fields; a numeric field, or a partial access, flows from every source atom to every target
   atom. A PERFORM passes in and out only the atoms its range, or a range it performs, reads or
@@ -129,12 +138,11 @@ The extractor's `autobuild.sh` runs `cobble-parse-corpus` and then this command.
 config's are. A QL test directory carries its own config; `ql/test/flows/` caches its ASG in
 `cobble/out-codeql-test/`.
 
-`ql/src/diagnostics/` holds three tables for comparing with cobble's fixpoint: `Transfers.ql`
+`ql/src/diagnostics/` holds four tables for comparing with cobble's fixpoint: `Transfers.ql`
 (each transfer at cobble's node id, with both cells' records and bytes), `OriginWrites.ql` (each
-origin write, with its origin and target cell) and `StatementPaths.ql` (every statement's node id
-and class). `stmtPath` builds the id as desugar does:
-`<unit>/<position>`, then `.then.`, `.else.`, `.body.`, `.when.<branch>.` or the clause's
-field name for each nesting.
+origin write, with its origin and target cell), `ReachingDefinitions.ql` (for each node's copy
+from a cell, the nodes whose writes reach it, through CodeQL's dataflow with a barrier after
+every read) and `StatementPaths.ql` (every statement's node id and class).
 
 `ql/test/flows/` checks one invented program for flow through a PERFORM called twice, through a
 REDEFINES, through a group MOVE, and for a value overwritten in full; `Ast.ql` there reads every
@@ -142,14 +150,12 @@ MOVE's source and first target from the generated tree.
 
 ## Limits
 
-- The CFG follows IF, inline and out-of-line PERFORM, GO TO, STOP RUN and GOBACK. Every other
-  statement falls through, and the statements nested in it (EVALUATE's WHENs, ON SIZE ERROR,
-  AT END, INVALID KEY, SEARCH) are not in the CFG; a PERFORM VARYING's `#init` and `#step` are
-  not CFG nodes. Conditions and the DEPENDING ON index are not reads.
+- Conditions, keys and subscripts are not reads: what a test consults is not compared yet.
+- A computed subscript names every occurrence. cobble's fixpoint writes it as one span from the
+  first occurrence to the last, which also covers the other fields between them, so it finds
+  definers CodeQL does not (COCRDLIC's screen rows).
 - Each member's first program only. No CALL, LINK or XCTL between programs.
 - PERFORM ranges are assumed to nest.
-- A name resolves to every cell of that name whose qualification path contains the operand's
-  qualifiers, so a subscripted name resolves to every occurrence.
 - Cells have no source location.
 - An online CardDemo program is about 135,000 rows, most of them layout cells; all of CardDemo
   extracts in about 77 s.

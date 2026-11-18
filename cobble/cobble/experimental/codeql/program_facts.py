@@ -5,6 +5,8 @@ from functools import singledispatchmethod
 
 from cics.statements import CicsOperand, ExecCicsStatement, operand_reference
 from cobble.dataflow.fields.condition_set import ConditionSet
+from cobble.dataflow.fields.extent import denoted_cells, operand_extents
+from cobble.dataflow.fields.initialized import initialized_extents
 from cobble.dataflow.fixpoint.fixpoint import with_condition_sets
 from cobble.experimental.codeql.label import Label
 from cobble.experimental.codeql.schema.ast_rows import Rows, Value
@@ -20,6 +22,7 @@ from cobol_asg.cobol_expression import (
 from cobol_asg.cobol_statements import (
     CallUsingParam,
     ComputeTarget,
+    InitializeStatement,
     PerformStatement,
     ProcedureRef,
     ReadStatement,
@@ -33,6 +36,7 @@ from cobol_asg.cobol_statements import (
 from cobol_asg.operand_kind import OperandKind
 from cobol_asg.ref_mod import RefModOperand, RefModReference
 from cobol_asg.set_operand import SetOperand
+from cobol_memory.field_extent import Precision
 
 RECEIVE_MAP = "RECEIVE MAP"
 MAP_INPUT_SUFFIX = "I"
@@ -54,25 +58,36 @@ class ProgramFacts:
     def _(self, value: RefModOperand, label: Label) -> Rows:
         if value.kind is not OperandKind.REF:
             return ()
-        return self._named(label, value.name, value.qualifiers, value.subscripts)
+        return (
+            *self._named(label, value.name, value.qualifiers, value.subscripts),
+            *self._exactness(label, value),
+        )
 
     @rows.register
     def _(self, value: FieldRefNode | RefModNode | AddressOfNode, label: Label) -> Rows:
-        return self._named(label, value.name, value.qualifiers, value.subscripts)
+        reference = RefModOperand(
+            name=value.name, qualifiers=value.qualifiers, subscripts=value.subscripts
+        )
+        return (
+            *self._named(label, value.name, value.qualifiers, value.subscripts),
+            *self._exactness(label, reference),
+        )
 
     @rows.register
     def _(self, value: LengthOfNode | RefModReference, label: Label) -> Rows:
         return self._named(label, value.name, value.qualifiers, ())
 
     @rows.register
-    def _(self, value: ComputeTarget, label: Label) -> Rows:
-        return self._named(label, value.name, value.qualifiers, value.subscripts)
-
-    @rows.register
-    def _(self, value: SetOperand, label: Label) -> Rows:
-        if value.kind not in _NAMED_SET_OPERANDS:
+    def _(self, value: ComputeTarget | SetOperand, label: Label) -> Rows:
+        if isinstance(value, SetOperand) and value.kind not in _NAMED_SET_OPERANDS:
             return ()
-        return self._named(label, value.name, value.qualifiers, value.subscripts)
+        reference = RefModOperand(
+            name=value.name, qualifiers=value.qualifiers, subscripts=value.subscripts
+        )
+        return (
+            *self._named(label, value.name, value.qualifiers, value.subscripts),
+            *self._exactness(label, reference),
+        )
 
     @rows.register
     def _(
@@ -99,7 +114,10 @@ class ProgramFacts:
         if value.is_literal:
             return ()
         reference = operand_reference(value)
-        return self._named(label, reference.name, (), reference.subscripts)
+        return (
+            *self._named(label, reference.name, (), reference.subscripts),
+            *self._exactness(label, reference),
+        )
 
     @rows.register
     def _(self, value: ExecCicsStatement, label: Label) -> Rows:
@@ -119,6 +137,19 @@ class ProgramFacts:
             for record, owner in self.scope.file_of_record.items()
             if owner == value.file_name.upper()
             for cell in self.scope.cells_named(record, (), ())
+        )
+
+    @rows.register
+    def _(self, value: InitializeStatement, label: Label) -> Rows:
+        """INITIALIZE sets its operands' items but their FILLERs and the items under
+        a REDEFINES below them, as cobble's ``initialized_extents`` runs give them."""
+        index = self.scope.index
+        return tuple(
+            TrapRow("initialized_cell", (label, self.scope.cells[cell]))
+            for operand in value.operands
+            for extent in operand_extents(operand, index).extents
+            for run in initialized_extents(operand, extent, index)
+            for cell in dict.fromkeys(index.elementary_within(run))
         )
 
     @rows.register
@@ -158,6 +189,29 @@ class ProgramFacts:
         return tuple(
             TrapRow("procedure_unit", (label, first))
             for first, _end in self.scope.procedure(value.paragraph, value.section)
+        )
+
+    def _exactness(self, label: Label, reference: RefModOperand) -> Rows:
+        """How exactly a name locates its bytes, as cobble's ``operand_extents``
+        does: a computed subscript or bound is clamped, a constant slice exact."""
+        index = self.scope.index
+        extents = operand_extents(reference, index).extents
+        if any(e.precision is Precision.CLAMPED for e in extents):
+            return (TrapRow("names_clamped", (label,)),)
+        return tuple(
+            TrapRow(
+                "names_slice",
+                (label, self.scope.cells[cell], e.start - whole.start, e.length),
+            )
+            for e in extents
+            for cell in denoted_cells(
+                reference.name, reference.qualifiers, reference.subscripts, index
+            )
+            for whole in (index.extent_of(cell),)
+            if whole.region is e.region
+            and whole.start <= e.start
+            and e.end <= whole.end
+            and (e.start, e.length) != (whole.start, whole.length)
         )
 
     def _field_named(self, label: Label, field: str, name: str) -> Rows:

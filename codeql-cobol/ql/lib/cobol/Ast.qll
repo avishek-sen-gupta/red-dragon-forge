@@ -66,27 +66,35 @@ class Field extends @field {
   string toString() { result = this.getName() }
 }
 
-/** `s` is statement `i` of the list `slot` of `owner`: 0 a unit's body, 1 a THEN or an inline PERFORM's body, 2 an ELSE. */
-predicate inBody(Stmt s, @cobol_body owner, int slot, int i) {
-  s = owner.(ProcedureUnit).getStmt(i) and slot = 0
-  or
-  s = owner.(Generated::IfStatement).getChildren(i) and slot = 1
-  or
-  s = owner.(Generated::IfStatement).getElseChildren(i) and slot = 2
-  or
-  s = owner.(Generated::PerformStatement).getChildren(i) and slot = 1
-}
-
 /** A data name, and the storage it may touch only part of. */
 private class Operand extends Generated::RefModOperand {
   Field getACell() { names_cell(this, result) }
 
-  predicate isPartial() { exists(this.getRefModStart()) or exists(this.getSubscripts(_)) }
+  predicate isPartial() { names_clamped(this) or names_slice(this, _, _, _) }
+}
+
+/** A node of `s` itself: its operands and expressions, not the statements nested in its clauses. */
+Generated::AstNode ownNode(Stmt s) {
+  Generated::childOf(s, _, _, result) and not result instanceof Generated::Statement
+  or
+  Generated::childOf(ownNode(s), _, _, result) and not result instanceof Generated::Statement
+}
+
+/** `s` reaches `f` through a name located only approximately: a computed subscript or bound. */
+predicate clampedAccess(Stmt s, Field f) {
+  exists(Generated::AstNode o | o = ownNode(s) | names_cell(o, f) and names_clamped(o))
+}
+
+/** `s` reaches only bytes `lo` up to `hi` of `f`'s record through a constant slice of it. */
+predicate slicedAccess(Stmt s, Field f, int lo, int hi) {
+  exists(Generated::AstNode o, int offset, int length |
+    o = ownNode(s) and names_slice(o, f, offset, length)
+  |
+    lo = f.getStart() + offset and hi = lo + length
+  )
 }
 
 class Stmt extends Generated::Statement {
-  Stmt getChild(int slot, int i) { inBody(result, this, slot, i) }
-
   private Operand aRead() {
     result = this.(Generated::MoveStatement).getSource()
     or
@@ -103,21 +111,22 @@ class Stmt extends Generated::Statement {
 
   Field getAWrite() { result = this.aWrite().getACell() or transfer(this, _, result) }
 
+  /** `f` is reached through a slice of it or through a name located only approximately. */
+  predicate isPartial(Field f) { clampedAccess(this, f) or slicedAccess(this, f, _, _) }
+
   /**
-   * `f` is read or written through a reference modification or a subscript, or written
-   * by a verb that may leave some of its bytes as they were.
+   * A verb cobble's fixpoint has no transfer for: its writes are weak, keeping what the
+   * target held before as a possible definition.
    */
-  predicate isPartial(Field f) {
-    exists(Operand o | o = this.aRead() or o = this.aWrite() |
-      o.isPartial() and f = o.getACell()
-    )
-    or
-    (
-      this instanceof Generated::StringStatement or
-      this instanceof Generated::InspectStatement or
-      this instanceof Generated::UnstringStatement
-    ) and
-    transfer(this, _, f)
+  predicate isWeak() {
+    this instanceof Generated::InspectStatement or
+    this instanceof Generated::UnstringStatement or
+    this instanceof Generated::SetStatement and not condition_set_cell(this, _) or
+    this instanceof Generated::SearchStatement or
+    this instanceof Generated::MoveCorrespondingStatement or
+    this instanceof Generated::ArithmeticCorrespondingStatement or
+    this instanceof Generated::XmlGenerateStatement or
+    this instanceof Generated::AcceptStatement
   }
 
   /** A MOVE, or the move a WRITE, REWRITE or RELEASE FROM makes: byte k lands at byte k. */
@@ -129,48 +138,11 @@ class Stmt extends Generated::Statement {
   }
 }
 
-/** How cobble's node ids name a statement list: IF's as THEN and ELSE, an inline PERFORM's as its body, any other by its field. */
-private string clause(Stmt parent, string field) {
-  Generated::childOf(parent, field, _, _) and
-  if parent instanceof Generated::IfStatement and field = "children"
-  then result = "then"
-  else
-    if parent instanceof Generated::IfStatement and field = "else_children"
-    then result = "else"
-    else
-      if parent instanceof Generated::PerformStatement and field = "children"
-      then result = "body"
-      else result = field
-}
-
-/** A branch of an EVALUATE or a SEARCH: its statements are numbered within `.when.<position>`. */
-private predicate branch(Stmt owner, int position, Generated::AstNode branch) {
-  Generated::childOf(owner.(Generated::EvaluateStatement), "children", position, branch)
-  or
-  Generated::childOf(owner.(Generated::SearchStatement), "whens", position, branch)
-}
-
-/** cobble's id for a statement: its unit's name, then its position in each list holding it. */
-string stmtPath(Stmt s) {
-  exists(ProcedureUnit u, int i | s = u.getStmt(i) | result = u.getName() + "/" + i)
-  or
-  exists(Stmt owner, int position, Generated::AstNode b, int i |
-    branch(owner, position, b) and Generated::childOf(b, "children", i, s)
-  |
-    result = stmtPath(owner) + ".when." + position + "." + i
-  )
-  or
-  exists(Stmt owner, string field, int i |
-    Generated::childOf(owner, field, i, s) and
-    not owner instanceof Generated::EvaluateStatement and
-    not branch(_, _, owner)
-  |
-    result = stmtPath(owner) + "." + clause(owner, field) + "." + i
-  )
-}
+/** cobble's id for a statement. */
+string stmtPath(Stmt s) { statement_ids(s, result) }
 
 /** `n`, and every node below it. */
-private Generated::AstNode within(Generated::AstNode n) {
+Generated::AstNode within(Generated::AstNode n) {
   result = n
   or
   Generated::childOf(within(n), _, _, result)
@@ -407,7 +379,7 @@ predicate originWrite(Stmt s, string origin, Field dst) {
   or
   readsLiteral(s) and origin = "LITERAL" and dst = unionTarget(s)
   or
-  origin = "LITERAL" and dst = cellsOf(s.(Generated::InitializeStatement).getOperands(_))
+  origin = "LITERAL" and initialized_cell(s, dst)
   or
   origin = "LITERAL" and condition_set_cell(s, dst)
   or

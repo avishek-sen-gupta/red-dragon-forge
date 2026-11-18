@@ -9,6 +9,7 @@ from cobble.dataflow.layout import Cell, program_records
 from cobble.dataflow.srccfg.cfg import NO_SPAN, span_of
 from cobble.dataflow.srccfg.conditions import declared_conditions
 from cobble.dataflow.srccfg.paragraphs import ParagraphRef, paragraph_order
+from cobble.experimental.codeql.cfg_rows import cfg_facts, cfg_rows, walked_cfg
 from cobble.experimental.codeql.label import Label
 from cobble.experimental.codeql.program_facts import ProgramFacts
 from cobble.experimental.codeql.schema.ast_rows import AstWriter, Rows, Value
@@ -41,7 +42,17 @@ def program_rows(parsed: CobolASG, source: str) -> Rows:
         asg.file_record_to_select,
         declared_conditions(asg),
     )
-    writer = AstWriter(schema, FILE, ProgramFacts(scope).rows)
+    cfg = walked_cfg(asg)
+    lowered = cfg_facts(asg, cfg)
+    facts = ProgramFacts(scope)
+    writer = AstWriter(
+        schema,
+        FILE,
+        lambda value, label: (
+            *facts.rows(value, label),
+            *lowered.statement_rows(id(value), label),
+        ),
+    )
     location, located = scope.location(PROGRAM, span_of(asg, source))
     return (
         define(FILE),
@@ -57,6 +68,7 @@ def program_rows(parsed: CobolASG, source: str) -> Rows:
             TrapRow("units", (PROGRAM, n, label, unit.name, unit.section))
             for n, (label, unit) in enumerate(units)
         ),
+        *cfg_rows(asg, cfg, lowered, scope, PROGRAM),
     )
 
 
