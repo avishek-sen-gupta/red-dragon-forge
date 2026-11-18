@@ -586,7 +586,7 @@ fileignoreconfig:
 - filename: docs/reference/cobble/codeql.md
   checksum: 385a9c1fcfbd81823f28a7768e3b8f150a8ea4194ca41410df21b5f7a8c3377d
 - filename: cobble/cobble/experimental/codeql/program_rows.py
-  checksum: 3915e8f5222bdd671170603f00dfa732e1e03d2273387809c60aa5c2ee5ec088
+  checksum: cb9484084464458801baf1b172879086d3dac31b3bdcff3d4aeda711237e38cf
 - filename: cobble/cobble/experimental/codeql/schema/ast_rows.py
   checksum: d7f1ff2834c3f4f0b032470362a9bf77f560394f02aa9ddecdba14c0f5b2ca7f
 - filename: cobble/cobble/experimental/codeql/schema/dbscheme.py

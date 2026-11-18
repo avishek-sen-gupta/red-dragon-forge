@@ -7,9 +7,9 @@
 import cobol.DataFlow
 
 module Config implements DataFlow::ConfigSig {
-  predicate isSource(DataFlow::Node n) { n.isWrite() and n.getCfgNode().getStmt().getKind() = 2 }
+  predicate isSource(DataFlow::Node n) { n.isWrite() and n.getCfgNode().getStmt() instanceof Generated::AcceptStatement }
 
-  predicate isSink(DataFlow::Node n) { n.isRead() and n.getCfgNode().getStmt().getKind() = 3 }
+  predicate isSink(DataFlow::Node n) { n.isRead() and n.getCfgNode().getStmt() instanceof Generated::DisplayStatement }
 }
 
 module Flow = DataFlow::Global<Config>;

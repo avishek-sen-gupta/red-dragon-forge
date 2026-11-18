@@ -138,6 +138,7 @@ def test_a_member_is_written_as_its_fields_paragraphs_and_statements(
 ) -> None:
     tables = _tables((corpus / "trap" / "SHAPES.trap").read_text(encoding="utf-8"))
     source = str((corpus / "src" / "SHAPES.cbl").resolve())
+    main = "#c0_1_0_1"
     locations = tables.pop("locations_default")
     generated = {
         table: tables.pop(table)
@@ -145,11 +146,13 @@ def test_a_member_is_written_as_its_fields_paragraphs_and_statements(
         if table.startswith(("cobol_", "program_"))
     }
     assert {
-        row for row in locations if row[0] in {"#lprogram", "#lp0", "#ls0_0_1"}
+        row
+        for row in locations
+        if row[0] in {"#lprogram", "#lc0_1_0_2", "#lc0_1_0_1_1_2"}
     } == {
         ("#lprogram", "#file", "0", "0", "0", "0"),
-        ("#lp0", "#file", "16", "7", "33", "26"),
-        ("#ls0_0_1", "#file", "18", "11", "18", "33"),
+        ("#lc0_1_0_2", "#file", "16", "7", "33", "26"),
+        ("#lc0_1_0_1_1_2", "#file", "18", "11", "18", "33"),
     }
     assert tables == {
         "files": {("#file", f'"{source}"')},
@@ -168,73 +171,47 @@ def test_a_member_is_written_as_its_fields_paragraphs_and_statements(
             ("#f10", "#program", '"IN-1"', '"IN-1"', "0", "4", "#lf10"),
         },
         "numeric_fields": {("#f2",), ("#f9",)},
-        "paragraphs": {
-            ("#p0", "#program", '"MAIN-PARA"', '"MAIN-SECTION"', "0", "#lp0"),
-            ("#p1", "#program", '"STEP-1"', '"MAIN-SECTION"', "1", "#lp1"),
-            ("#p2", "#program", '"STEP-2"', '"MAIN-SECTION"', "2", "#lp2"),
-            ("#p3", "#program", '"DONE-PARA"', '"MAIN-SECTION"', "3", "#lp3"),
-            ("#p4", "#program", '"WORK-1"', '"WORK-SECTION"', "4", "#lp4"),
-            ("#p5", "#program", '"WORK-2"', '"WORK-SECTION"', "5", "#lp5"),
+        "units": {
+            ("#program", "0", "#c0_1_0", '"MAIN-PARA"', '"MAIN-SECTION"'),
+            ("#program", "1", "#c0_1_1", '"STEP-1"', '"MAIN-SECTION"'),
+            ("#program", "2", "#c0_1_2", '"STEP-2"', '"MAIN-SECTION"'),
+            ("#program", "3", "#c0_1_3", '"DONE-PARA"', '"MAIN-SECTION"'),
+            ("#program", "4", "#c1_1_0", '"WORK-1"', '"WORK-SECTION"'),
+            ("#program", "5", "#c1_1_1", '"WORK-2"', '"WORK-SECTION"'),
         },
-        "stmts": {
-            ("#s0_0_0", "2", "#p0", "0", "0", "#ls0_0_0"),
-            ("#s0_0_1", "1", "#p0", "0", "1", "#ls0_0_1"),
-            ("#s0_0_2", "1", "#p0", "0", "2", "#ls0_0_2"),
-            ("#s0_0_3", "1", "#p0", "0", "3", "#ls0_0_3"),
-            ("#s0_0_4", "4", "#p0", "0", "4", "#ls0_0_4"),
-            ("#s0_0_5", "4", "#p0", "0", "5", "#ls0_0_5"),
-            ("#s0_0_6", "4", "#p0", "0", "6", "#ls0_0_6"),
-            ("#s0_0_7", "9", "#p0", "0", "7", "#ls0_0_7"),
-            ("#s0_0_7_1_0", "1", "#s0_0_7", "1", "0", "#ls0_0_7_1_0"),
-            ("#s0_0_8", "6", "#p0", "0", "8", "#ls0_0_8"),
-            ("#s0_0_8_1_0", "3", "#s0_0_8", "1", "0", "#ls0_0_8_1_0"),
-            ("#s0_0_8_2_0", "0", "#s0_0_8", "2", "0", "#ls0_0_8_2_0"),
-            ("#s0_0_9", "5", "#p0", "0", "9", "#ls0_0_9"),
-            ("#s0_0_10", "5", "#p0", "0", "10", "#ls0_0_10"),
-            ("#s1_0_0", "3", "#p1", "0", "0", "#ls1_0_0"),
-            ("#s2_0_0", "3", "#p2", "0", "0", "#ls2_0_0"),
-            ("#s3_0_0", "7", "#p3", "0", "0", "#ls3_0_0"),
-            ("#s4_0_0", "3", "#p4", "0", "0", "#ls4_0_0"),
-            ("#s5_0_0", "8", "#p5", "0", "0", "#ls5_0_0"),
+        "names_cell": {
+            (f"{main}_0_0", "#f10"),
+            (f"{main}_1_0", "#f10"),
+            (f"{main}_1_1_0", "#f1"),
+            (f"{main}_2_0", "#f10"),
+            (f"{main}_2_1_0", "#f6"),
+            (f"{main}_2_1_0", "#f7"),
+            (f"{main}_2_1_0", "#f8"),
+            (f"{main}_3_1_0", "#f4"),
+            (f"{main}_7_2_0_1_0", "#f9"),
+            (f"{main}_7_3_0_0", "#f9"),
+            (f"{main}_8_0_0", "#f9"),
+            (f"{main}_8_1_0_0_0", "#f1"),
+            (f"{main}_8_2_0_0_1", "#f2"),
+            (f"{main}_9_0_1", "#f9"),
+            ("#c1_1_0_1_0_0_0", "#f9"),
         },
-        "stmt_reads": {
-            ("#s0_0_1", "#f10"),
-            ("#s0_0_2", "#f10"),
-            ("#s0_0_8_1_0", "#f1"),
-            ("#s4_0_0", "#f9"),
+        "perform_range": {
+            (f"{main}_4", "#c0_1_1", "#c0_1_2"),
+            (f"{main}_5", "#c1_1_0", "#c1_1_1"),
+            (f"{main}_6", "#c0_1_1", "#c0_1_1"),
         },
-        "stmt_writes": {
-            ("#s0_0_0", "#f10"),
-            ("#s0_0_1", "#f1"),
-            ("#s0_0_2", "#f6"),
-            ("#s0_0_2", "#f7"),
-            ("#s0_0_2", "#f8"),
-            ("#s0_0_3", "#f4"),
-            ("#s0_0_7_1_0", "#f9"),
-        },
-        "partial_accesses": {
-            ("#s0_0_2", "#f10"),
-            ("#s0_0_2", "#f6"),
-            ("#s0_0_2", "#f7"),
-            ("#s0_0_2", "#f8"),
-        },
-        "perform_ranges": {
-            ("#s0_0_4", "#p1", "#p2"),
-            ("#s0_0_5", "#p4", "#p5"),
-            ("#s0_0_6", "#p1", "#p1"),
-        },
-        "perform_repeats": {("#s0_0_6",)},
-        "goto_targets": {
-            ("#s0_0_9", "#p1"),
-            ("#s0_0_9", "#p2"),
-            ("#s0_0_10", "#p3"),
+        "procedure_unit": {
+            (f"{main}_9_0_0_0", "#c0_1_1"),
+            (f"{main}_9_0_0_1", "#c0_1_2"),
+            (f"{main}_10_0_0", "#c0_1_3"),
         },
     }
     assert generated["program_sections"] == {
         ("#program", "0", "#c0"),
         ("#program", "1", "#c1"),
     }
-    until = "#c0_1_0_1_7"
+    until = f"{main}_7"
     assert _under(generated, until) == {
         ("cobol_perform_statement_def", until, '""', '""', '""', '""'),
         ("cobol_perform_statement_spec", until, f"{until}_3"),

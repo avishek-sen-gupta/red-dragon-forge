@@ -111,7 +111,7 @@ module Ssa = SsaImpl::Make<Location, Cfg, SsaInput>;
 
 /** Bytes `a` of the sending field land in bytes `b` of the receiving field. */
 private predicate moved(Stmt s, Atom a, Atom b) {
-  s.getKind() = 1 and
+  s instanceof Generated::MoveStatement and
   exists(Field src, Field dst |
     src = s.getARead() and dst = s.getAWrite() and fieldAtom(src, a) and fieldAtom(dst, b)
   |

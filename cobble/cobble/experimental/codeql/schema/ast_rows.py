@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import Field, dataclass
 from enum import Enum
 from functools import singledispatchmethod
@@ -56,13 +56,22 @@ class _Written:
 _NOTHING = _Written((), ())
 
 
+Facts = Callable[[Value, Label], Rows]
+
+
+def no_facts(value: Value, label: Label) -> Rows:
+    return ()
+
+
 @dataclass(frozen=True)
 class AstWriter:
     """A node's label is its parent's label and the field's position, so labels
-    are stable without a counter."""
+    are stable without a counter. ``facts`` adds the rows a language derives for
+    a node beyond its fields -- which storage a name denotes, say."""
 
     schema: Schema
     file: Label
+    facts: Facts = no_facts
 
     def rows(self, value: Value, table: str, label: Label) -> Rows:
         node = self._node(value, table)
@@ -72,7 +81,8 @@ class AstWriter:
         )
         columns = tuple(c for w in written for c in w.columns)
         rows = tuple(r for w in written for r in w.rows)
-        return (define(label), *rows, TrapRow(f"{node.table}_def", (label, *columns)))
+        own = TrapRow(f"{node.table}_def", (label, *columns))
+        return (define(label), *rows, own, *self.facts(value, label))
 
     def _node(self, value: Value, table: str) -> NodeType:
         if isinstance(value, tuple):

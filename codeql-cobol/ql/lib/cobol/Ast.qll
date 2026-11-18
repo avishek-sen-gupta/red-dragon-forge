@@ -1,32 +1,10 @@
-/** The extracted COBOL facts as classes. */
+/**
+ * Programs, their storage cells and the units they run, over the generated syntax tree,
+ * with the storage each statement reads and writes.
+ */
 
-class File extends @file {
-  string getAbsolutePath() { files(this, result) }
-
-  string toString() { result = this.getAbsolutePath() }
-}
-
-class Location extends @location_default {
-  File getFile() { locations_default(this, result, _, _, _, _) }
-
-  int getStartLine() { locations_default(this, _, result, _, _, _) }
-
-  int getStartColumn() { locations_default(this, _, _, result, _, _) }
-
-  int getEndLine() { locations_default(this, _, _, _, result, _) }
-
-  int getEndColumn() { locations_default(this, _, _, _, _, result) }
-
-  string toString() { result = "line " + this.getStartLine() }
-
-  predicate hasLocationInfo(string fp, int sl, int sc, int el, int ec) {
-    fp = this.getFile().getAbsolutePath() and
-    sl = this.getStartLine() and
-    sc = this.getStartColumn() and
-    el = this.getEndLine() and
-    ec = this.getEndColumn()
-  }
-}
+import cobol.Locations
+import cobol.ast.internal.Generated
 
 class Program extends @program {
   string getName() { programs(this, result, _) }
@@ -36,66 +14,40 @@ class Program extends @program {
   string toString() { result = this.getName() }
 }
 
-class Paragraph extends @paragraph {
-  Program getProgram() { paragraphs(this, result, _, _, _, _) }
+/**
+ * A run of statements executed in declaration order: a paragraph, the statements at the
+ * head of a section, or those before any section or paragraph (the program itself).
+ */
+class ProcedureUnit extends @cobol_unit {
+  Program getProgram() { units(result, _, this, _, _) }
 
-  string getName() { paragraphs(this, _, result, _, _, _) }
+  int getIndex() { units(_, result, this, _, _) }
 
-  int getIndex() { paragraphs(this, _, _, _, result, _) }
+  string getName() { units(_, _, this, result, _) }
 
-  Location getLocation() { paragraphs(this, _, _, _, _, result) }
-
-  string toString() { result = this.getName() }
-
-  Paragraph getNext() {
+  /** The unit declared next, which the end of this one falls through to. */
+  ProcedureUnit getNext() {
     result.getProgram() = this.getProgram() and result.getIndex() = this.getIndex() + 1
   }
 
-  Stmt getStmt(int i) { stmts(result, _, this, 0, i, _) }
-}
-
-class Stmt extends @stmt {
-  int getKind() { stmts(this, result, _, _, _, _) }
-
-  predicate hasParent(@stmt_parent p, int slot, int i) { stmts(this, _, p, slot, i, _) }
-
-  Stmt getChild(int slot, int i) { result.hasParent(this, slot, i) }
-
-  Location getLocation() { stmts(this, _, _, _, _, result) }
-
-  Field getARead() { stmt_reads(this, result) }
-
-  Field getAWrite() { stmt_writes(this, result) }
-
-  predicate isPartial(Field f) { partial_accesses(this, f) }
-
-  string getKindName() {
-    exists(int k | k = this.getKind() |
-      k = 0 and result = "stmt"
-      or
-      k = 1 and result = "MOVE"
-      or
-      k = 2 and result = "ACCEPT"
-      or
-      k = 3 and result = "DISPLAY"
-      or
-      k = 4 and result = "PERFORM"
-      or
-      k = 5 and result = "GO TO"
-      or
-      k = 6 and result = "IF"
-      or
-      k = 7 and result = "STOP RUN"
-      or
-      k = 8 and result = "GOBACK"
-      or
-      k = 9 and result = "PERFORM (inline)"
-    )
+  Stmt getStmt(int i) {
+    result = this.(Generated::CobolParagraph).getStatements(i)
+    or
+    result = this.(Generated::CobolSection).getStatements(i)
+    or
+    program_statements(this, i, result)
   }
 
-  string toString() { result = this.getKindName() + " (" + this.getLocation() + ")" }
+  string toString() { result = this.getName() }
+
+  Location getLocation() {
+    result = this.(Generated::AstNode).getLocation()
+    or
+    result = this.(Program).getLocation()
+  }
 }
 
+/** One storage cell: an occurrence of a declared item, at its bytes in its record. */
 class Field extends @field {
   Program getProgram() { fields(this, result, _, _, _, _, _) }
 
@@ -112,4 +64,49 @@ class Field extends @field {
   predicate isNumeric() { numeric_fields(this) }
 
   string toString() { result = this.getName() }
+}
+
+/** `s` is statement `i` of the list `slot` of `owner`: 0 a unit's body, 1 a THEN or an inline PERFORM's body, 2 an ELSE. */
+predicate inBody(Stmt s, @cobol_body owner, int slot, int i) {
+  s = owner.(ProcedureUnit).getStmt(i) and slot = 0
+  or
+  s = owner.(Generated::IfStatement).getChildren(i) and slot = 1
+  or
+  s = owner.(Generated::IfStatement).getElseChildren(i) and slot = 2
+  or
+  s = owner.(Generated::PerformStatement).getChildren(i) and slot = 1
+}
+
+/** A data name, and the storage it may touch only part of. */
+private class Operand extends Generated::RefModOperand {
+  Field getACell() { names_cell(this, result) }
+
+  predicate isPartial() { exists(this.getRefModStart()) or exists(this.getSubscripts(_)) }
+}
+
+class Stmt extends Generated::Statement {
+  Stmt getChild(int slot, int i) { inBody(result, this, slot, i) }
+
+  private Operand aRead() {
+    result = this.(Generated::MoveStatement).getSource()
+    or
+    result = this.(Generated::DisplayStatement).getOperands(_)
+  }
+
+  private Operand aWrite() {
+    result = this.(Generated::MoveStatement).getTargets(_)
+    or
+    result = this.(Generated::AcceptStatement).getTarget()
+  }
+
+  Field getARead() { result = this.aRead().getACell() }
+
+  Field getAWrite() { result = this.aWrite().getACell() }
+
+  /** `f` is read or written through a reference modification or a subscript. */
+  predicate isPartial(Field f) {
+    exists(Operand o | o = this.aRead() or o = this.aWrite() |
+      o.isPartial() and f = o.getACell()
+    )
+  }
 }

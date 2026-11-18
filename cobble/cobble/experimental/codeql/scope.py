@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from cobble.dataflow.srccfg.cfg import SourceSpan
 from cobble.experimental.codeql.label import Label
 from cobble.experimental.codeql.trap_row import TrapRow, define
-from cobol_asg.ref_mod import OperandKind, RefModOperand
 
 Ends = tuple[Label, Label]
 
@@ -23,14 +22,11 @@ class Scope:
     paragraphs: Mapping[str, Label]
     sections: Mapping[str, Ends]
 
-    def fields_of(self, operand: RefModOperand) -> tuple[Label, ...]:
-        if operand.kind is not OperandKind.REF:
-            return ()
-        qualifiers = frozenset(q.upper() for q in operand.qualifiers)
+    def cells_named(self, name: str, qualifiers: tuple[str, ...]) -> tuple[Label, ...]:
+        """Every cell of that name whose qualification path holds the qualifiers."""
+        wanted = frozenset(q.upper() for q in qualifiers)
         return tuple(
-            label
-            for label, path in self.fields.get(operand.name.upper(), ())
-            if qualifiers <= path
+            label for label, path in self.fields.get(name.upper(), ()) if wanted <= path
         )
 
     def procedure(self, name: str, section: str) -> tuple[Ends, ...]:

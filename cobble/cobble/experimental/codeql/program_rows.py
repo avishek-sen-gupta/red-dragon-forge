@@ -1,4 +1,4 @@
-"""One program's rows: its file, its fields with their byte extents, its paragraphs in order and their statements."""
+"""One program's rows: its file, its fields with their byte extents, its procedure division as the generated tables hold it, and the units it runs in order."""
 
 from collections.abc import Mapping
 from itertools import groupby
@@ -7,14 +7,13 @@ from cobble.dataflow.layout import Cell, program_records
 from cobble.dataflow.srccfg.cfg import NO_SPAN, span_of
 from cobble.dataflow.srccfg.paragraphs import ParagraphRef, paragraph_order
 from cobble.experimental.codeql.label import Label
-from cobble.experimental.codeql.schema.ast_rows import AstWriter, Value
+from cobble.experimental.codeql.program_facts import ProgramFacts
+from cobble.experimental.codeql.schema.ast_rows import AstWriter, Rows, Value
 from cobble.experimental.codeql.schema.cobol_schema import cobol_schema
-from cobble.experimental.codeql.schema.schema import table_of
+from cobble.experimental.codeql.schema.schema import Schema, table_of
 from cobble.experimental.codeql.scope import Ends, Scope
-from cobble.experimental.codeql.slot import Slot
-from cobble.experimental.codeql.statement_rows import Rows, body_rows
 from cobble.experimental.codeql.trap_row import TrapRow, define
-from cobol_asg.asg_types import CobolASG
+from cobol_asg.asg_types import CobolASG, CobolSection
 from cobol_asg.pic_parser import parse_pic
 
 FILE = Label("file")
@@ -23,8 +22,10 @@ PROGRAM = Label("program")
 
 def program_rows(asg: CobolASG, source: str) -> Rows:
     cells = tuple(cell for record in program_records(asg) for cell in record.cells)
-    order = paragraph_order(asg)
-    scope = Scope(FILE, source, _named(cells), _paragraphs(order), _sections(order))
+    schema = cobol_schema()
+    units = tuple(zip(_unit_labels(asg, schema), paragraph_order(asg), strict=True))
+    scope = Scope(FILE, source, _named(cells), _paragraphs(units), _sections(units))
+    writer = AstWriter(schema, FILE, ProgramFacts(scope).rows)
     location, located = scope.location(PROGRAM, span_of(asg, source))
     return (
         define(FILE),
@@ -33,18 +34,36 @@ def program_rows(asg: CobolASG, source: str) -> Rows:
         *located,
         TrapRow("programs", (PROGRAM, asg.program_id, location)),
         *(row for n, cell in enumerate(cells) for row in _field_rows(scope, n, cell)),
-        *(row for n, p in enumerate(order) for row in _paragraph_rows(scope, n, p)),
-        *_procedure_rows(asg),
+        *_contained(writer, "program_statements", "e", tuple(asg.statements)),
+        *_contained(writer, "program_sections", "c", tuple(asg.sections)),
+        *_contained(writer, "program_paragraphs", "d", tuple(asg.paragraphs)),
+        *(
+            TrapRow("units", (PROGRAM, n, label, unit.name, unit.section))
+            for n, (label, unit) in enumerate(units)
+        ),
     )
 
 
-def _procedure_rows(asg: CobolASG) -> Rows:
-    """The procedure division in the generated tables: sections, then the
-    paragraphs outside any section."""
-    writer = AstWriter(cobol_schema(), FILE)
+def _unit_labels(asg: CobolASG, schema: Schema) -> tuple[Label, ...]:
+    """The node each unit of ``paragraph_order`` runs: the program for statements
+    before any section or paragraph, a section for those at its head, else the
+    paragraph."""
+    within = next(
+        i
+        for i, f in enumerate(schema.node_of(CobolSection).fields)
+        if f.name == "paragraphs"
+    )
     return (
-        *_contained(writer, "program_sections", "c", tuple(asg.sections)),
-        *_contained(writer, "program_paragraphs", "d", tuple(asg.paragraphs)),
+        *((PROGRAM,) if asg.statements else ()),
+        *(
+            label
+            for i, section in enumerate(asg.sections)
+            for label in (
+                *((Label(f"c{i}"),) if section.statements else ()),
+                *(Label(f"c{i}_{within}_{j}") for j in range(len(section.paragraphs))),
+            )
+        ),
+        *(Label(f"d{k}") for k in range(len(asg.paragraphs))),
     )
 
 
@@ -56,10 +75,15 @@ def _contained(
         for n, part in enumerate(parts)
         for label in (Label(f"{prefix}{n}"),)
         for row in (
-            *writer.rows(part, table_of(type(part).__name__), label),
+            *writer.rows(part, _table(part), label),
             TrapRow(table, (PROGRAM, n, label)),
         )
     )
+
+
+def _table(part: Value) -> str:
+    """A statement's table is named by its union; the walker finds its type."""
+    return table_of(type(part).__name__)
 
 
 def _field_rows(scope: Scope, n: int, cell: Cell) -> Rows:
@@ -75,17 +99,6 @@ def _field_rows(scope: Scope, n: int, cell: Cell) -> Rows:
 
 def _numeric(cell: Cell) -> bool:
     return bool(cell.pic) and parse_pic(cell.pic, cell.usage).is_numeric
-
-
-def _paragraph_rows(scope: Scope, n: int, paragraph: ParagraphRef) -> Rows:
-    label = Label(f"p{n}")
-    location, located = scope.location(label, paragraph.span)
-    row = TrapRow(
-        "paragraphs",
-        (label, PROGRAM, paragraph.name, paragraph.section, n, location),
-    )
-    body = body_rows(scope, paragraph.statements, label, Slot.BODY, str(n))
-    return (define(label), *located, row, *body)
 
 
 def _named(
@@ -106,20 +119,21 @@ def _named(
     }
 
 
-def _paragraphs(order: tuple[ParagraphRef, ...]) -> Mapping[str, Label]:
+Unit = tuple[Label, ParagraphRef]
+
+
+def _paragraphs(units: tuple[Unit, ...]) -> Mapping[str, Label]:
+    """The first unit of each name: a duplicate name is renamed in
+    ``paragraph_order`` and never shadows it."""
+    return {unit.name.upper(): label for label, unit in reversed(units)}
+
+
+def _sections(units: tuple[Unit, ...]) -> Mapping[str, Ends]:
     return {
-        p.name.upper(): Label(f"p{n}") for n, p in reversed(tuple(enumerate(order)))
+        section: _ends(tuple(label for label, _ in group))
+        for section, group in groupby(units, key=lambda one: one[1].section.upper())
     }
 
 
-def _sections(order: tuple[ParagraphRef, ...]) -> Mapping[str, Ends]:
-    return {
-        section: _ends(tuple(n for n, _ in group))
-        for section, group in groupby(
-            enumerate(order), key=lambda one: one[1].section.upper()
-        )
-    }
-
-
-def _ends(numbers: tuple[int, ...]) -> Ends:
-    return Label(f"p{numbers[0]}"), Label(f"p{numbers[-1]}")
+def _ends(labels: tuple[Label, ...]) -> Ends:
+    return labels[0], labels[-1]

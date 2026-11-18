@@ -57,15 +57,16 @@ each cell's qualification path, so QL resolves names the way COBOL does.
 
 1. Generator, emitter, committed schema and QL classes, staleness test. The current statement
    tables keep feeding `Cfg.qll` and `DataFlow.qll`.
-2. `Cfg.qll` and `DataFlow.qll` rewritten over the generated AST; name and PERFORM-target
-   resolution move into QL; the hand-written statement tables and their Python go.
+2. `Cfg.qll` and `DataFlow.qll` rewritten over the generated AST; the hand-written statement
+   tables and their Python go. Which cells an operand names, and which paragraphs a PERFORM or
+   GO TO reaches, stay cobble's answers, written as facts that link the generated nodes to the
+   layout cells and paragraphs (decided by the user: one copy of COBOL's naming rules).
 3. Statement by statement, the flow and control-flow semantics in QL (EVALUATE, arithmetic,
    STRING, INITIALIZE, file I/O, EXEC CICS, EXEC SQL, conditions as reads), each checked against
    cobble's fixpoint on CardDemo.
 
 ## Calls made without the user
 
-- Name resolution moves into QL (unit 2): which cell an operand names is COBOL semantics.
 - Labels are positions (parent label, field position, element index), not counters, so a
   label is stable across runs and readable in a TRAP file.
 - A map always gets a key table and a value table, whether or not its values are optional, so

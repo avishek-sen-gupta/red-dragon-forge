@@ -1,14 +1,12 @@
 # CodeQL facts (experimental)
 
-COBOL as a CodeQL language. Cobble supplies only facts: the parse, each field's byte extent, and
-the paragraphs in declaration order. CodeQL's shared libraries supply basic blocks, SSA and the
-dataflow solver. What stays COBOL-specific is the language model in QL: the control flow of
-PERFORM, and how fields map to the bytes the solver tracks.
-
-The parse is written as a syntax tree generated from the parser's types: a table per dataclass,
-so a statement the parser gains needs no extractor code (see [The generated AST](#the-generated-ast)).
-`Cfg.qll` and `DataFlow.qll` still read the hand-written statement tables below; moving them onto
-the generated tree is the next step.
+COBOL as a CodeQL language. Cobble supplies only facts: the parse, as a syntax tree generated from
+the parser's types, each field's byte extent, the units the program runs in order, and which cells
+each data name and which units each procedure name denotes. CodeQL's shared libraries supply
+basic blocks, SSA and the dataflow solver. What stays COBOL-specific is the language model in QL:
+the control flow of PERFORM and GO TO, what each statement reads and writes, and how fields map to
+the bytes the solver tracks. A statement the parser gains needs no extractor code (see
+[The generated AST](#the-generated-ast)); COBOL's naming rules stay in cobble alone.
 
 Two parts:
 
@@ -20,7 +18,7 @@ Two parts:
   no Python, so nothing imports cobble.
 
 Deleting the experiment means deleting both directories, the tests under
-`cobble/tests/experimental/codeql/`, the contract and the entry point.
+`cobble/tests/experimental/codeql/`, the contract and the entry points.
 
 ## The facts
 
@@ -32,18 +30,16 @@ skipped. `prefix.trap` holds the corpus directory.
 
 | table | one row per |
 |---|---|
-| `programs`, `files`, `locations_default` | program, its source file, a statement's or paragraph's lines |
+| `programs`, `files`, `locations_default` | program, its source file, a node's lines |
 | `fields(id, program, name, record, start, length, loc)` | layout cell: an occurrence of a field and its bytes in its record |
 | `numeric_fields` | cell whose PIC parses as numeric |
-| `paragraphs(id, program, name, section, index, loc)` | paragraph, in declaration order |
-| `stmts(id, kind, parent, slot, index, loc)` | statement; parent is a paragraph or the IF or inline PERFORM holding it; slot 0 body, 1 THEN or inline body, 2 ELSE |
-| `perform_ranges(stmt, first, last)`, `perform_repeats` | out-of-line PERFORM: its first and last paragraph (a section's are its first and last paragraph); TIMES, UNTIL or VARYING |
-| `goto_targets(stmt, target)` | GO TO target, every one for a DEPENDING ON |
-| `stmt_reads`, `stmt_writes`, `partial_accesses` | cell a statement reads or writes, and whether it does so through a reference modification or subscript |
+| `program_statements`, `program_sections`, `program_paragraphs` | the procedure division's statements before any section or paragraph, its sections, its paragraphs outside any section |
+| `units(program, index, unit, name, section)` | unit the program runs, in cobble's paragraph order: the program for the statements before any section or paragraph, a section for those at its head, each paragraph |
+| `names_cell(node, cell)` | cell a data name denotes, for a `RefModOperand` naming data, a `FieldRefNode`, `RefModNode`, `AddressOfNode`, `LengthOfNode` or `RefModReference` |
+| `perform_range(perform, first, last)` | out-of-line PERFORM: its first and last unit (a section's are its first and last unit) |
+| `procedure_unit(target, unit)` | procedure name: the paragraph so named, else the section's first unit |
 
-Labels name entities by position, so a file is readable without a counter: `#p3` is the fourth
-paragraph, `#s3_0_1_2_0` is the first statement in the ELSE of the second statement of that
-paragraph, `#f12` is the thirteenth cell.
+The rest of the tables are the generated tree.
 
 ## The generated AST
 
@@ -75,12 +71,14 @@ A test in cobble's suite regenerates both and fails when the committed files dif
 A union gets the name of the parser's alias for it (`Statement`, `ExprNode`, `Condition`, …), or
 `<Type><Field>Type` when it has none. A field named after a dbscheme keyword (`key`) gets a
 trailing underscore. A node's label is its parent's and the field's position, so `#c0_1_0_1_7` is
-section 0, field 1 (`paragraphs`), paragraph 0, field 1 (`statements`), statement 7.
-`program_sections` and `program_paragraphs` tie each program to its sections and to the
-paragraphs outside any section.
+section 0, field 1 (`paragraphs`), paragraph 0, field 1 (`statements`), statement 7; `#e`, `#c`
+and `#d` start the program's statements, sections and paragraphs, `#f12` is the thirteenth cell.
 
 ## What QL derives
 
+- **Reads and writes** (`Ast.qll`). A MOVE reads its source and writes its targets, an ACCEPT
+  writes its target, a DISPLAY reads its operands: each the cells `names_cell` gives. An access
+  through a reference modification or a subscript may touch only part of its cell.
 - **CFG** (`Cfg.qll`). Each PERFORM range is a scope with its own copy of every statement it can
   reach. Reaching the end of the range's last paragraph leaves the scope; the end of any other
   paragraph falls through to the next. The main scope starts at the first paragraph. A PERFORM
@@ -116,15 +114,18 @@ MOVE's source and first target from the generated tree.
 
 ## Limits
 
-- Facts cover MOVE, ACCEPT, DISPLAY, PERFORM, GO TO, IF, STOP RUN and GOBACK. Every other
-  statement is kind 0 with no reads, writes or nesting: EVALUATE and its bodies, COMPUTE and the
+- The tree holds every statement, but QL gives meaning only to MOVE, ACCEPT, DISPLAY, PERFORM,
+  GO TO, IF, STOP RUN and GOBACK. Every other statement reads and writes nothing and falls
+  through, and its nested statements are not in the CFG: EVALUATE and its bodies, COMPUTE and the
   other arithmetic, STRING, INITIALIZE, file I/O, EXEC CICS and EXEC SQL. Conditions and the
   DEPENDING ON index are not reads.
+- `names_cell` has no rows for a COMPUTE target, a SET operand or an EXEC CICS operand.
 - Each member's first program only. No CALL, LINK or XCTL between programs.
 - PERFORM ranges are assumed to nest.
 - A name resolves to every cell of that name whose qualification path contains the operand's
   qualifiers, so a subscripted name resolves to every occurrence.
 - Cells have no source location.
-- An online CardDemo program is about 133,000 rows and 4.5 s to extract.
+- An online CardDemo program is about 135,000 rows, most of them layout cells; all of CardDemo
+  extracts in about 77 s.
 - No commit hook or CI job runs the QL test: neither has the CodeQL CLI. The facts tests run in
   cobble's suite.

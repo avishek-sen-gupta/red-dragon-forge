@@ -3,3 +3,4 @@
 .codeql/
 *.testproj/
 codeql-pack.lock.yml
+*.actual

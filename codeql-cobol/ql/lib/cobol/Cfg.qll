@@ -1,13 +1,12 @@
 /**
- * The control-flow graph, derived from the paragraph and statement facts.
+ * The control-flow graph over the generated syntax tree.
  *
  * Every PERFORM range is a scope of its own, holding a copy of each statement it can
- * reach. The end of the range's last paragraph is that scope's exit; the end of any
- * other paragraph falls through to the next one. The main scope starts at the first
- * paragraph and has no exit but the end of the program. So a paragraph that is both
- * performed and reached by GO TO or fall-through returns in the first case and falls
- * through in the second. Ranges are assumed well nested: only a scope's own range end
- * returns.
+ * reach. The end of the range's last unit is that scope's exit; the end of any other
+ * unit falls through to the next one. The main scope starts at the first unit and has
+ * no exit but the end of the program. So a paragraph that is both performed and
+ * reached by GO TO or fall-through returns in the first case and falls through in the
+ * second. Ranges are assumed well nested: only a scope's own range end returns.
  */
 
 private import codeql.controlflow.SuccessorType
@@ -16,13 +15,13 @@ import cobol.Ast
 
 private newtype TPoint =
   TStmtPoint(Stmt s) or
-  TEndPoint(Paragraph p)
+  TEndPoint(ProcedureUnit p)
 
 /** A statement, or the end of a paragraph. */
 class Point extends TPoint {
   Stmt asStmt() { this = TStmtPoint(result) }
 
-  Paragraph asEnd() { this = TEndPoint(result) }
+  ProcedureUnit asEnd() { this = TEndPoint(result) }
 
   string toString() {
     result = this.asStmt().toString()
@@ -35,7 +34,7 @@ class Point extends TPoint {
   }
 }
 
-Point entryOf(Paragraph p) {
+Point entryOf(ProcedureUnit p) {
   result = TStmtPoint(p.getStmt(0))
   or
   not exists(p.getStmt(0)) and result = TEndPoint(p)
@@ -43,17 +42,32 @@ Point entryOf(Paragraph p) {
 
 /** Where control goes when `s` completes normally. */
 Point after(Stmt s) {
-  exists(@stmt_parent p, int slot, int i | s.hasParent(p, slot, i) |
-    exists(Stmt n | n.hasParent(p, slot, i + 1) and result = TStmtPoint(n))
+  exists(@cobol_body p, int slot, int i | inBody(s, p, slot, i) |
+    exists(Stmt n | inBody(n, p, slot, i + 1) and result = TStmtPoint(n))
     or
-    not exists(Stmt n | n.hasParent(p, slot, i + 1)) and
+    not inBody(_, p, slot, i + 1) and
     (
-      result = TEndPoint(p.(Paragraph))
+      result = TEndPoint(p.(ProcedureUnit))
       or
-      p.(Stmt).getKind() = 6 and result = after(p)
+      p instanceof Generated::IfStatement and result = after(p)
       or
-      p.(Stmt).getKind() = 9 and result = TStmtPoint(p)
+      isInlinePerform(p) and result = TStmtPoint(p)
     )
+  )
+}
+
+predicate isInlinePerform(Stmt s) { exists(s.(Generated::PerformStatement).getChildren(0)) }
+
+private predicate isOutOfLinePerform(Stmt s) {
+  s instanceof Generated::PerformStatement and not isInlinePerform(s)
+}
+
+/** A unit a GO TO can jump to: its target, or any of a DEPENDING ON's. */
+ProcedureUnit gotoTarget(Stmt s) {
+  exists(Generated::GotoStatementFormType form, Generated::ProcedureRef r |
+    form = s.(Generated::GotoStatement).getForm() and
+    (r = form.(Generated::SimpleGoto).getTarget() or r = form.(Generated::ComputedGoto).getTargets(_)) and
+    procedure_unit(r, result)
   )
 }
 
@@ -65,39 +79,45 @@ private Point bodyEntry(Stmt s, int slot) {
 
 /** Successors of a statement that do not depend on the scope. */
 private predicate stmtSucc(Stmt s, Point q) {
-  s.getKind() = 6 and (q = bodyEntry(s, 1) or q = bodyEntry(s, 2))
+  s instanceof Generated::IfStatement and (q = bodyEntry(s, 1) or q = bodyEntry(s, 2))
   or
-  s.getKind() = 9 and (q = bodyEntry(s, 1) or q = after(s))
+  isInlinePerform(s) and (q = bodyEntry(s, 1) or q = after(s))
   or
-  s.getKind() = 5 and exists(Paragraph t | goto_targets(s, t) and q = entryOf(t))
+  q = entryOf(gotoTarget(s))
   or
-  s.getKind() = 4 and (q = after(s) or perform_repeats(s) and q = TStmtPoint(s))
+  isOutOfLinePerform(s) and
+  (q = after(s) or exists(s.(Generated::PerformStatement).getSpec()) and q = TStmtPoint(s))
   or
-  not s.getKind() in [4, 5, 6, 7, 8, 9] and q = after(s)
+  not s instanceof Generated::PerformStatement and
+  not s instanceof Generated::GotoStatement and
+  not s instanceof Generated::IfStatement and
+  not s instanceof Generated::StopRunStatement and
+  not s instanceof Generated::GobackStatement and
+  q = after(s)
 }
 
 private newtype TScope =
   TMain(Program p) or
-  TRange(Paragraph first, Paragraph last) { perform_ranges(_, first, last) }
+  TRange(ProcedureUnit first, ProcedureUnit last) { perform_range(_, first, last) }
 
 /** The main line of a program, or one PERFORM range. */
 class Scope extends TScope {
   Program getProgram() {
-    this = TMain(result) or this = TRange(any(Paragraph f | f.getProgram() = result), _)
+    this = TMain(result) or this = TRange(any(ProcedureUnit f | f.getProgram() = result), _)
   }
 
-  Paragraph getFirst() {
+  ProcedureUnit getFirst() {
     this = TMain(result.getProgram()) and result.getIndex() = 0
     or
     this = TRange(result, _)
   }
 
-  predicate exitsAt(Paragraph p) { this = TRange(_, p) }
+  predicate exitsAt(ProcedureUnit p) { this = TRange(_, p) }
 
   string toString() {
     exists(Program p | this = TMain(p) and result = p.getName())
     or
-    exists(Paragraph f, Paragraph l | this = TRange(f, l) |
+    exists(ProcedureUnit f, ProcedureUnit l | this = TRange(f, l) |
       if f = l then result = f.getName() else result = f.getName() + " THRU " + l.getName()
     )
   }
@@ -110,7 +130,7 @@ private predicate reach(Scope sc, Point p) {
   or
   exists(Stmt s | reach(sc, TStmtPoint(s)) and stmtSucc(s, p))
   or
-  exists(Paragraph para |
+  exists(ProcedureUnit para |
     reach(sc, TEndPoint(para)) and not sc.exitsAt(para) and p = entryOf(para.getNext())
   )
 }
@@ -155,7 +175,7 @@ class CfgNode extends TNode {
         this = TPointNode(sc, TStmtPoint(s)) and stmtSucc(s, p) and result = TPointNode(sc, p)
       )
       or
-      exists(Paragraph para | this = TPointNode(sc, TEndPoint(para)) |
+      exists(ProcedureUnit para | this = TPointNode(sc, TEndPoint(para)) |
         sc.exitsAt(para) and result = TExitNode(sc)
         or
         not sc.exitsAt(para) and result = TPointNode(sc, entryOf(para.getNext()))
@@ -171,8 +191,8 @@ class PerformCall extends CfgNode {
   Scope callee;
 
   PerformCall() {
-    exists(Paragraph f, Paragraph l |
-      perform_ranges(this.getStmt(), f, l) and callee = TRange(f, l)
+    exists(ProcedureUnit f, ProcedureUnit l |
+      perform_range(this.getStmt(), f, l) and callee = TRange(f, l)
     )
   }
 
