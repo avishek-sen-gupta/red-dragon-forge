@@ -84,6 +84,8 @@ ORIGINS = """\
           05 G1 PIC X(2).
           05 FILLER PIC X(1).
           05 G2 PIC X(2).
+       01 MAPO.
+          05 FLD PIC X(4).
        PROCEDURE DIVISION.
        MAIN-PARA.
            READ IN-FILE.
@@ -92,6 +94,7 @@ ORIGINS = """\
            EXEC CICS RECEIVE MAP('MAP') RESP(RESP-CD) END-EXEC.
            EXEC CICS READ FILE('ACCTS') INTO(ACCT) RIDFLD(ARG) END-EXEC.
            INITIALIZE GRP.
+           EXEC CICS SEND MAP('MAP') END-EXEC.
            GOBACK.
 """
 
@@ -258,6 +261,11 @@ def test_a_member_is_written_as_its_fields_paragraphs_and_statements(
         },
         "cfg_resume": {("#n5", "#n6"), ("#n6", "#n7"), ("#n8", "#n7")},
     }
+    assert generated["cfg_consults"] == {
+        ("#n9", "#f9"),
+        ("#n11", "#f9"),
+        ("#n14", "#f9"),
+    }
     assert generated["cfg_site"] == {
         ("#n7", f"{main}_6", '"#loop"'),
         ("#n9", f"{main}_7", '"#loop#test"'),
@@ -320,8 +328,8 @@ def test_a_read_a_condition_set_a_call_and_cics_operands_name_their_cells(
 ) -> None:
     """READ fills its file's records, SET ... TO TRUE the field its condition tests,
     INITIALIZE its items but the FILLER; a CALL argument and a CICS operand that is
-    not a literal name cells, and a RECEIVE MAP with no INTO names its map's input
-    record."""
+    not a literal name cells, a RECEIVE MAP with no INTO names its map's input
+    record and a SEND MAP with no FROM its output record."""
     tables = _tables((corpus / "trap" / "ORIGINS.trap").read_text(encoding="utf-8"))
     main = "#d0_1"
     named = (
@@ -332,7 +340,7 @@ def test_a_read_a_condition_set_a_call_and_cics_operands_name_their_cells(
         "initialized_cell",
     )
     assert {table: tables[table] for table in named} == {
-        "file_record_cell": {(f"{main}_0", "#f11")},
+        "file_record_cell": {(f"{main}_0", "#f13")},
         "condition_set_cell": {(f"{main}_1", "#f0")},
         "names_cell": {
             (f"{main}_2_1_0", "#f1"),
@@ -341,7 +349,10 @@ def test_a_read_a_condition_set_a_call_and_cics_operands_name_their_cells(
             (f"{main}_4_1_2", "#f1"),
             (f"{main}_5_0_0", "#f6"),
         },
-        "field_names_cell": {(f"{main}_3", '"map_input"', "#f4")},
+        "field_names_cell": {
+            (f"{main}_3", '"map_input"', "#f4"),
+            (f"{main}_6", '"map_output"', "#f10"),
+        },
         "initialized_cell": {(f"{main}_5", "#f7"), (f"{main}_5", "#f9")},
     }
     assert {row[0]: row[2] for row in tables["fields"]} == {
@@ -355,8 +366,10 @@ def test_a_read_a_condition_set_a_call_and_cics_operands_name_their_cells(
         "#f7": '"G1"',
         "#f8": '"FILLER_1"',
         "#f9": '"G2"',
-        "#f10": '"%HANDLER[ANY]"',
-        "#f11": '"IN-REC"',
+        "#f10": '"MAPO"',
+        "#f11": '"FLD"',
+        "#f12": '"%HANDLER[ANY]"',
+        "#f13": '"IN-REC"',
     }
 
 

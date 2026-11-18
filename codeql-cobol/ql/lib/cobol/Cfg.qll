@@ -143,6 +143,9 @@ class PerformCall extends CfgNode {
   PerformCall() { cfg_call(this.getGraphNode(), _, _) }
 
   Scope getCallee() { result = callee(this.getGraphNode()) }
+
+  /** Some path through the range reaches its end, so what it leaves comes back here. */
+  predicate returns() { returns(this.getCallee()) }
 }
 
 private module BbInput implements BB::InputSig<Location> {

@@ -409,6 +409,39 @@ predicate loopOriginWrite(Stmt s, string site, string origin, Field dst) {
   )
 }
 
+/** A CICS command names `option`. */
+private predicate hasOption(Generated::ExecCicsStatement s, string option) { s.getOptionsKey(_) = option }
+
+/** The cells a CICS command sends from: its FROM, or for a SEND MAP without one the map's output record. */
+private Field cicsSent(Generated::ExecCicsStatement s) {
+  result = cellsOf(option(s, "FROM"))
+  or
+  s.getVerb() = "SEND MAP" and not hasOption(s, "FROM") and field_names_cell(s, "map_output", result)
+}
+
+/**
+ * `s` sends the bytes of `f` out of the program, to a sink of `kind`: a file (WRITE,
+ * REWRITE), a map (SEND MAP, unless MAPONLY), a queue (WRITEQ TS or TD) or a
+ * transaction (START), as cobble's fixpoint reads each verb.
+ */
+predicate sink(Stmt s, string kind, Field f) {
+  (s instanceof Generated::WriteStatement or s instanceof Generated::RewriteStatement) and
+  kind = "FILE" and
+  field_names_cell(s, "record_name", f)
+  or
+  exists(Generated::ExecCicsStatement c, string verb | c = s and verb = c.getVerb() |
+    verb in ["WRITE", "REWRITE"] and kind = "FILE" and f = cellsOf(option(c, "FROM"))
+    or
+    verb = "SEND MAP" and not hasOption(c, "MAPONLY") and kind = "MAP" and f = cicsSent(c)
+    or
+    verb = "WRITEQ TS" and kind = "TS_QUEUE" and f = cellsOf(option(c, "FROM"))
+    or
+    verb = "WRITEQ TD" and kind = "TD_QUEUE" and f = cellsOf(option(c, "FROM"))
+    or
+    verb = "START" and kind = "TRANSID" and f = cellsOf(option(c, "FROM"))
+  )
+}
+
 /** The unit a statement is written in, however deeply it is nested. */
 ProcedureUnit unitOf(Stmt s) {
   s = result.getStmt(_)

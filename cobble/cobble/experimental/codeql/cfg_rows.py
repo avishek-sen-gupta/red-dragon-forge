@@ -4,11 +4,14 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from itertools import groupby
 
+from cobble.dataflow.fields.extent import denoted_cells
 from cobble.dataflow.fixpoint.fallthrough import fallthroughs_pruned
 from cobble.dataflow.fixpoint.fixpoint import program_statements
 from cobble.dataflow.srccfg.cfg import Cfg, EdgeKind, Node
 from cobble.dataflow.srccfg.paragraphs import label_id, paragraph_order
 from cobble.dataflow.srccfg.program import program_cfg
+from cobble.dataflow.srccfg.read import names_of
+from cobble.dataflow.srccfg.read_kind import ReadKind
 from cobble.dataflow.srccfg.statements import statement_index
 from cobble.experimental.codeql.label import Label
 from cobble.experimental.codeql.schema.ast_rows import Rows
@@ -96,6 +99,7 @@ def cfg_rows(
             else ()
         ),
         *(row for node in cfg.nodes for row in _call_rows(node, cfg, facts)),
+        *(row for node in cfg.nodes for row in _consult_rows(node, facts, scope)),
         *(
             TrapRow("cfg_resume", (facts.nodes[node.id], facts.nodes[node.resume]))
             for node in cfg.nodes
@@ -127,6 +131,18 @@ def _call_rows(node: Node, cfg: Cfg, facts: CfgFacts) -> Rows:
                 ),
             ),
         )
+    )
+
+
+def _consult_rows(node: Node, facts: CfgFacts, scope: Scope) -> Rows:
+    """The cells a node consults -- a test's operands, a key, a subscript -- each
+    name resolved as cobble's fixpoint resolves it: by itself, unqualified."""
+    return tuple(
+        TrapRow("cfg_consults", (facts.nodes[node.id], scope.cells[cell]))
+        for name in names_of(
+            read for read in node.reads if read.kind is ReadKind.CONSULTED
+        )
+        for cell in denoted_cells(name, (), (), scope.index)
     )
 
 

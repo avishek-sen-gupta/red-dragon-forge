@@ -69,6 +69,9 @@ cfg_entry(unique int program: @program ref, int node: @cfg_node ref);
 cfg_call(int call: @cfg_node ref, int first: @cfg_node ref, int last: @cfg_node ref);
 /* Where control goes once a PERFORM's range returns: the call has no edge there. */
 cfg_resume(unique int call: @cfg_node ref, int resume: @cfg_node ref);
+/* The cells a node consults -- a test's operands, a key, a subscript -- each name
+   resolved by itself, unqualified, as cobble's fixpoint resolves it. */
+cfg_consults(int node: @cfg_node ref, int cell: @field ref);
 /* cobble's id for every statement, whether or not it lowers to a node of that id. */
 statement_ids(unique int statement: @cobol_statement ref, string id: string ref);
 cfg_statement(unique int node: @cfg_node ref, int statement: @cobol_statement ref);
@@ -87,7 +90,7 @@ names_clamped(unique int node: @cobol_ast_node ref);
 names_slice(int node: @cobol_ast_node ref, int cell: @field ref, int offset: int ref, int length: int ref);
 /* The cells a name a node holds as text denotes: a WRITE's record name, an XML
    GENERATE's names, the symbolic input record (`map_input`) a RECEIVE MAP with no
-   INTO fills. */
+   INTO fills, the output record (`map_output`) a SEND MAP with no FROM sends. */
 field_names_cell(int node: @cobol_ast_node ref, string field: string ref, int cell: @field ref);
 /* The cells a READ or RETURN fills besides INTO: every 01 record of its file, which
    share the record area. */

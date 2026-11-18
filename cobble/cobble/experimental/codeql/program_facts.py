@@ -39,7 +39,9 @@ from cobol_asg.set_operand import SetOperand
 from cobol_memory.field_extent import Precision
 
 RECEIVE_MAP = "RECEIVE MAP"
+SEND_MAP = "SEND MAP"
 MAP_INPUT_SUFFIX = "I"
+MAP_OUTPUT_SUFFIX = "O"
 
 _NAMED_SET_OPERANDS = frozenset(
     {OperandKind.REF, OperandKind.ADDRESS_OF, OperandKind.LENGTH_OF}
@@ -121,13 +123,22 @@ class ProgramFacts:
 
     @rows.register
     def _(self, value: ExecCicsStatement, label: Label) -> Rows:
-        """A RECEIVE MAP with no INTO fills the map's symbolic input record."""
-        if value.verb.upper() != RECEIVE_MAP or "INTO" in value.options:
-            return ()
+        """A RECEIVE MAP with no INTO fills the map's symbolic input record, a SEND MAP
+        with no FROM sends its output record."""
         named = value.options.get("MAP") or value.options.get("MAPNAME")
         if not isinstance(named, CicsOperand):
             return ()
-        return self._field_named(label, "map_input", named.text + MAP_INPUT_SUFFIX)
+        return self._map_record(label, value, named.text)
+
+    def _map_record(
+        self, label: Label, value: ExecCicsStatement, map_name: str
+    ) -> Rows:
+        verb = value.verb.upper()
+        if verb == RECEIVE_MAP and "INTO" not in value.options:
+            return self._field_named(label, "map_input", map_name + MAP_INPUT_SUFFIX)
+        if verb == SEND_MAP and "FROM" not in value.options:
+            return self._field_named(label, "map_output", map_name + MAP_OUTPUT_SUFFIX)
+        return ()
 
     @rows.register
     def _(self, value: ReadStatement | ReturnStatement, label: Label) -> Rows:

@@ -38,11 +38,12 @@ skipped. `prefix.trap` holds the corpus directory.
 | `program_statements`, `program_sections`, `program_paragraphs` | the procedure division's statements before any section or paragraph, its sections, its paragraphs outside any section |
 | `units(program, index, unit, name, section)` | unit the program runs, in cobble's paragraph order: the program for the statements before any section or paragraph, a section for those at its head, each paragraph |
 | `names_cell(node, cell)` | cell a data name denotes, as cobble's dataflow resolves it (`denoted_cells`): the occurrence constant subscripts select, else every occurrence. For a `RefModOperand` naming data, a `FieldRefNode`, `RefModNode`, `AddressOfNode`, `LengthOfNode`, `RefModReference`, `ComputeTarget`, a `SetOperand` naming data, a CALL argument or an EXEC CICS operand that is not a literal |
-| `field_names_cell(node, field, cell)` | cell a name held as text denotes: a WRITE, REWRITE or RELEASE's `record_name`, an XML GENERATE's `xml_document`, `from_record` and `count_in`, a RECEIVE MAP's `map_input` (the map's symbolic input record) when it has no INTO |
+| `field_names_cell(node, field, cell)` | cell a name held as text denotes: a WRITE, REWRITE or RELEASE's `record_name`, an XML GENERATE's `xml_document`, `from_record` and `count_in`, a RECEIVE MAP's `map_input` (the map's symbolic input record) when it has no INTO, a SEND MAP's `map_output` (its output record) when it has no FROM |
 | `names_slice(node, cell, offset, length)`, `names_clamped(node)` | how exactly a name locates its bytes, as `operand_extents` does: a constant reference modification's bytes of the cell; a computed subscript or bound, which locates them only approximately |
 | `initialized_cell(initialize, cell)` | elementary cell an INITIALIZE sets: its operands' items but FILLERs and the items under a REDEFINES below an operand (`initialized_extents`) |
 | `cfg_nodes(id, program, node, kind, loc)`, `cfg_edges(source, target, kind)`, `cfg_entry` | the control-flow graph cobble's fixpoint walks: `program_cfg`, with the fall-throughs no path takes pruned (`fallthroughs_pruned`), cobble's node ids and edge kinds, entered at the first unit's label |
 | `cfg_call(call, first, last)`, `cfg_resume(call, resume)` | a PERFORM: the nodes its range starts and ends at, and where control goes once it returns |
+| `cfg_consults(node, cell)` | cell a node consults: a test's operands, a key, a subscript, each name resolved by itself, unqualified, as cobble's fixpoint resolves it |
 | `statement_ids(statement, id)`, `cfg_statement(node, statement)`, `cfg_site(node, statement, suffix)` | cobble's id for every statement; the node it lowers to when it has one of its own; the further nodes it lowers to, named by a suffix on its id (`#init`, `#step`, `#loop`, `#test`, `#goto.<n>`) |
 | `file_record_cell(read, cell)` | cell a READ or RETURN fills besides INTO: each 01 record of its file |
 | `condition_set_cell(set, cell)` | cell a SET ... TO TRUE moves its conditions' first values into, as cobble's fixpoint rewrites it (`with_condition_sets`): only when every condition name resolves |
@@ -119,7 +120,12 @@ and `#d` start the program's statements, sections and paragraphs, `#f12` is the 
 - **Dataflow.** A MOVE flows from source atoms to target atoms at the same offset within their
   fields; a numeric field, or a partial access, flows from every source atom to every target
   atom. A PERFORM passes in and out only the atoms its range, or a range it performs, reads or
-  writes.
+  writes; a range that never returns writes nothing at the PERFORM, so where cobble's graph
+  goes on past it, what came in goes on unchanged, as in cobble's fixpoint.
+- **Sinks** (`Ast.qll`, `sink`). Where bytes leave the program, as cobble's fixpoint reads each
+  verb: a WRITE or REWRITE's record or FROM (FILE), a SEND MAP's FROM or else its output record,
+  unless MAPONLY (MAP), a WRITEQ TS or TD's FROM (TS_QUEUE, TD_QUEUE), a START's FROM (TRANSID).
+  A sink is a read of what it sends.
 
 ## Running it
 
@@ -138,11 +144,13 @@ The extractor's `autobuild.sh` runs `cobble-parse-corpus` and then this command.
 config's are. A QL test directory carries its own config; `ql/test/flows/` caches its ASG in
 `cobble/out-codeql-test/`.
 
-`ql/src/diagnostics/` holds four tables for comparing with cobble's fixpoint: `Transfers.ql`
+`ql/src/diagnostics/` holds five tables for comparing with cobble's fixpoint: `Transfers.ql`
 (each transfer at cobble's node id, with both cells' records and bytes), `OriginWrites.ql` (each
 origin write, with its origin and target cell), `ReachingDefinitions.ql` (for each node's copy
-from a cell, the nodes whose writes reach it, through CodeQL's dataflow with a barrier after
-every read) and `StatementPaths.ql` (every statement's node id and class).
+from a cell or consultation of one, the nodes whose writes reach it, through CodeQL's dataflow
+with no flow into another statement's write), `Sinks.ql` (each sink's cells, with the nodes whose
+writes they carry: the sink's own where it writes them, else what reaches it) and
+`StatementPaths.ql` (every statement's node id and class).
 
 `ql/test/flows/` checks one invented program for flow through a PERFORM called twice, through a
 REDEFINES, through a group MOVE, and for a value overwritten in full; `Ast.ql` there reads every
@@ -150,7 +158,6 @@ MOVE's source and first target from the generated tree.
 
 ## Limits
 
-- Conditions, keys and subscripts are not reads: what a test consults is not compared yet.
 - A computed subscript names every occurrence. cobble's fixpoint writes it as one span from the
   first occurrence to the last, which also covers the other fields between them, so it finds
   definers CodeQL does not (COCRDLIC's screen rows).

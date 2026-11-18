@@ -1,9 +1,9 @@
 /**
  * @name Reaching definitions
- * @description For each node's copy from a cell, the nodes whose writes it can see,
- *              by cobble's node ids, for comparison with cobble's fixpoint. A write
- *              reaches a read along SSA and through PERFORMs, never through another
- *              node's read: what a MOVE copies is a new definition.
+ * @description For each node's copy from a cell or consultation of one, the nodes whose
+ *              writes it can see, by cobble's node ids, for comparison with cobble's
+ *              fixpoint. A write reaches a read along SSA and through PERFORMs, never
+ *              into another node's write: what a MOVE copies is a new definition.
  * @kind table
  * @id cobol/reaching-definitions
  */
@@ -19,16 +19,20 @@ module Config implements DataFlow::ConfigSig {
 
   predicate isSink(DataFlow::Node n) { n.isRead() and atNode(n) }
 
-  predicate isBarrierOut(DataFlow::Node n) { isSink(n) }
+  predicate isBarrierIn(DataFlow::Node n) { n.isWrite() and atNode(n) }
 }
 
 module Flow = DataFlow::Global<Config>;
 
-from DataFlow::Node write, DataFlow::Node read, GraphNode at, Field f
+from DataFlow::Node write, DataFlow::Node read, GraphNode at, Field f, string kind
 where
   Flow::flow(write, read) and
   at = read.getCfgNode().getGraphNode() and
-  graphCopies(at, f) and
-  fieldAtom(f, read.getAtom())
-select f.getProgram().getName(), at.getId(), f.getName(), f.getRecord(), f.getStart(),
+  fieldAtom(f, read.getAtom()) and
+  (
+    graphCopies(at, f) and kind = "copied"
+    or
+    cfg_consults(at, f) and kind = "consulted"
+  )
+select f.getProgram().getName(), at.getId(), kind, f.getName(), f.getRecord(), f.getStart(),
   f.getLength(), write.getCfgNode().getGraphNode().getId()

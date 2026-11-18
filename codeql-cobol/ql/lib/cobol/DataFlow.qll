@@ -53,7 +53,7 @@ class Atom extends TAtom {
 
 /** An atom of `f` that `s` reaches: all of them, or those inside a constant slice of it. */
 predicate stmtAtom(Stmt s, Field f, Atom a) {
-  (f = s.getARead() or f = s.getAWrite() or originWrite(s, _, f)) and
+  (f = s.getARead() or f = s.getAWrite() or originWrite(s, _, f) or sink(s, _, f)) and
   fieldAtom(f, a) and
   if slicedAccess(s, f, _, _)
   then exists(int lo, int hi | slicedAccess(s, f, lo, hi) | lo <= a.getLo() and a.getHi() <= hi)
@@ -105,9 +105,13 @@ predicate graphCopies(GraphNode g, Field f) {
   exists(Stmt s, string site | s = g.getSiteOf(site) | loopTransfer(s, site, f, _))
 }
 
-/** The cells the node `g` reads. */
+/** The cells the node `g` reads: what it copies, consults or sends. */
 predicate graphReads(GraphNode g, Field f) {
   f = g.getStmt().getARead()
+  or
+  cfg_consults(g, f)
+  or
+  sink(g.getStmt(), _, f)
   or
   exists(Stmt s, string site | s = g.getSiteOf(site) | loopTransfer(s, site, f, _))
 }
@@ -120,6 +124,8 @@ private predicate graphAtom(GraphNode g, Field f, Atom a) {
     (loopTransfer(s, site, f, _) or loopTransfer(s, site, _, f) or loopOriginWrite(s, site, _, f)) and
     fieldAtom(f, a)
   )
+  or
+  cfg_consults(g, f) and fieldAtom(f, a)
 }
 
 predicate nodeWrites(CfgNode n, Atom a, boolean certain) {
@@ -130,7 +136,7 @@ predicate nodeWrites(CfgNode n, Atom a, boolean certain) {
   )
   or
   (
-    modRef(n.(PerformCall).getCallee(), a)
+    exists(PerformCall c | c = n and c.returns() | modRef(c.getCallee(), a))
     or
     n.isEntry() and modRef(n.getScope(), a)
   ) and
