@@ -16,3 +16,4 @@
 | VALS | MAIN/15 | SRC2 | SRC2 | 0 | 1 | value | Q |
 | VALS | MAIN/16 | DST2 | DST2 | 0 | 1 | reason | uninitialised |
 | VALS | MAIN/16 | DST2 | DST2 | 0 | 1 | value | Q |
+| VALS | MAIN/17 | LK | LK | 0 | 4 | reason | inbound-linkage |

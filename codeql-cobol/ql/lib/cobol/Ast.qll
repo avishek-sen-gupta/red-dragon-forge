@@ -450,3 +450,105 @@ ProcedureUnit unitOf(Stmt s) {
     result = unitOf(owner) or result = unitOf(any(Stmt o | Generated::childOf(o, _, _, owner)))
   )
 }
+
+/**
+ * `s` moves control or data to another program, as cobble's jumps read it: `kind` is
+ * CALL, LINK, XCTL, RETURN_TRANSID, START, RETRIEVE or EXIT, and `returns` says whether
+ * control comes back.
+ */
+predicate jump(Stmt s, string kind, boolean returns) {
+  s instanceof Generated::CallStatement and kind = "CALL" and returns = true
+  or
+  exists(Generated::ExecCicsStatement c, string verb | c = s and verb = c.getVerb() |
+    verb = "LINK" and exists(option(c, "PROGRAM")) and kind = verb and returns = true
+    or
+    verb = "XCTL" and exists(option(c, "PROGRAM")) and kind = verb and returns = false
+    or
+    verb = "RETURN" and
+    returns = false and
+    if hasOption(c, "TRANSID") then kind = "RETURN_TRANSID" else kind = "EXIT"
+    or
+    verb = ["START", "RETRIEVE"] and kind = verb and returns = false
+  )
+  or
+  (
+    s instanceof Generated::GobackStatement or
+    s instanceof Generated::ExitProgramStatement or
+    s instanceof Generated::StopRunStatement
+  ) and
+  kind = "EXIT" and
+  returns = false
+}
+
+/** The program `s` goes to, named by a literal. */
+predicate jumpTargetName(Stmt s, string name) {
+  name = s.(Generated::CallStatement).getTarget().getLiteral()
+  or
+  exists(Generated::CicsOperand o | jump(s, ["LINK", "XCTL"], _) and o = option(s, "PROGRAM") |
+    o.getIsLiteral() = true and name = o.getText().regexpReplaceAll("^['\"]+|['\"]+$", "")
+  )
+}
+
+/** Bytes `lo` up to `hi` of `f` hold the name of the program `s` goes to. */
+predicate jumpTarget(Stmt s, Field f, int lo, int hi) {
+  exists(Generated::AstNode o |
+    o = s.(Generated::CallStatement).getTarget().getIdentifier()
+    or
+    jump(s, ["LINK", "XCTL"], _) and o = option(s, "PROGRAM")
+  |
+    names_cell(o, f) and
+    if names_slice(o, f, _, _)
+    then
+      exists(int offset, int length | names_slice(o, f, offset, length) |
+        lo = f.getStart() + offset and hi = lo + length
+      )
+    else (
+      lo = f.getStart() and hi = f.getEnd()
+    )
+  )
+}
+
+/** The transaction `s` starts, named by a literal, quotes and all. */
+predicate jumpTransidText(Stmt s, string text) {
+  exists(Generated::CicsOperand o |
+    jump(s, ["RETURN_TRANSID", "START"], _) and o = option(s, "TRANSID")
+  |
+    o.getIsLiteral() = true and text = o.getText()
+  )
+}
+
+/** `f` holds the name of the transaction `s` starts. */
+predicate jumpTransid(Stmt s, Field f) {
+  jump(s, ["RETURN_TRANSID", "START"], _) and names_area(option(s, "TRANSID"), f)
+}
+
+private string areaOption(string kind) {
+  kind = ["LINK", "XCTL", "RETURN_TRANSID"] and result = "COMMAREA"
+  or
+  kind = "START" and result = "FROM"
+  or
+  kind = "RETRIEVE" and result = "INTO"
+}
+
+/** `s` hands `area` to another program as its parameter `param`. */
+predicate jumpArea(Stmt s, int param, Field area) {
+  names_area(s.(Generated::CallStatement).getUsing(param), area)
+  or
+  exists(string kind | jump(s, kind, _) | param = 0 and names_area(option(s, areaOption(kind)), area))
+}
+
+private predicate inside(Field area, Field f) {
+  f.getProgram() = area.getProgram() and
+  f.getRecord() = area.getRecord() and
+  area.getStart() <= f.getStart() and
+  f.getEnd() <= area.getEnd()
+}
+
+/** `f` is one of the cells an area is handed over as: each elementary cell inside it, or the area itself when it is elementary. */
+bindingset[area]
+predicate areaField(Field area, Field f) {
+  inside(area, f) and not group_field(f)
+  or
+  f = area and not exists(Field e | inside(area, e) and not group_field(e))
+}
+

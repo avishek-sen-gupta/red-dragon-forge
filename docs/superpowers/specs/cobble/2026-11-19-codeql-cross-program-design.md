@@ -97,4 +97,21 @@ Each lands as one commit with its facts test, its QL, its diagnostic and its com
   CodeQL's reasons, from a join that widens a stored entry's reasons over its whole extent
   (the mechanism checked by probing the fixpoint's state on COCRDUPC; the rest have the same
   shape: the same definers, more reasons), and one read is over budget.
+- **Jumps are read from the tree; only names are facts.** QL reads each verb's target,
+  transaction and areas from the generated tree, as it reads sinks. What an operand handing
+  storage over names (`area_cells`: unsubscripted, by name and qualifiers) and what a program
+  is entered with (`received_areas`) are cobble's resolution, so they are facts, as `names_cell`
+  is.
+- **A write lends a read its value only if it holds every byte.** A write a later MOVE
+  partly overwrote is split in the fixpoint's state, so a read across both parts finds no
+  value and says only that the bytes were written. QL first let such a write lend its literal
+  to the whole read, a value the bytes no longer hold (an area cell in COACTUPC showed it).
+- **A node nothing reaches is reported, not mimicked.** The fixpoint reads a jump in a
+  paragraph no PERFORM names against an empty state, so the 32,767 cells of each of four such
+  commareas say `inbound-linkage`. QL has no scope there and says nothing.
+- **Unit 2's differences are the fixpoint's bounds and its unreached nodes.** All 112 jumps
+  match in kind, return, line, transaction and areas. 103 targets and 99,325 area cells match
+  their facts. Looking MOVE sources up by exact extent turns the other 9 targets and 31 cells
+  into matches; of the 131,359 cells left, 131,068 are the unreached commareas and 291 are the
+  fixpoint giving a superset of CodeQL's reasons.
 

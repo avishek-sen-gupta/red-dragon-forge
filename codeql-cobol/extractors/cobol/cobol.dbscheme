@@ -29,6 +29,8 @@ fields(
   int location: @location_default ref
 );
 numeric_fields(unique int field: @field ref);
+/* A cell with cells under it. */
+group_field(unique int field: @field ref);
 
 /* The procedure division as the parser types it: statements before any section or
    paragraph, then the sections, then the paragraphs outside any section. The tables
@@ -104,6 +106,12 @@ names_slice(int node: @cobol_ast_node ref, int cell: @field ref, int offset: int
    GENERATE's names, the symbolic input record (`map_input`) a RECEIVE MAP with no
    INTO fills, the output record (`map_output`) a SEND MAP with no FROM sends. */
 field_names_cell(int node: @cobol_ast_node ref, string field: string ref, int cell: @field ref);
+/* The cells a CALL argument or a CICS operand hands to another program, named without
+   subscripts, as cobble's jumps read them. */
+names_area(int node: @cobol_ast_node ref, int cell: @field ref);
+/* The storage a program is entered with: its DFHCOMMAREA, else each USING record by
+   position. */
+received_area(int program: @program ref, int param: int ref, int cell: @field ref);
 /* The cells a READ or RETURN fills besides INTO: every 01 record of its file, which
    share the record area. */
 file_record_cell(int read: @cobol_statement ref, int cell: @field ref);

@@ -52,6 +52,9 @@ skipped. `prefix.trap` holds the corpus directory.
 | `field_region(cell, region)` | cell's storage region: `working_storage`, `linkage`, `file` and the rest |
 | `initial_value(cell, offset, length, value)` | bytes of an elementary cell the initial image (`initial_image`) gives a value before any statement runs |
 | `cfg_value(node, cell, offset, length, value)`, `cfg_value_reason(node, cell, offset, length, reason)` | what a node's write puts in the innermost cell holding its bytes, as `writes_of` gives it: a literal fitted to its target, or why it has none (`not-a-literal`, `from-file`, `from-callee`, `unmodelled`, ...); a MOVE from LINKAGE bytes no constant locates says `inbound-linkage`. A write through a computed subscript locates no bytes and says nothing |
+| `group_field(cell)` | cell with cells under it |
+| `names_area(node, cell)` | cell a CALL argument or a CICS operand hands to another program, as cobble's jumps resolve it (`area_cells`): by name and qualifiers, never subscripted |
+| `received_area(program, param, cell)` | storage the program is entered with (`received_areas`): its DFHCOMMAREA, else each USING record by position |
 | `cfg_carries(node, cell, offset, length, source, source_offset, source_length, right)` | a MOVE from a field: the target bytes it carries the source's values into, the source's bytes, and whether they land right-justified (`carried_moves`) |
 
 The rest of the tables are the generated tree.
@@ -134,13 +137,21 @@ and `#d` start the program's statements, sections and paragraphs, `#f12` is the 
   PERFORMs, never into another statement's write. And which reads can see storage as it was
   before any statement ran: along SSA from the program's start, and past each PERFORM whose
   range has a path that leaves the bytes alone.
+- **Jumps** (`Ast.qll`, `jump`; `DataFlow.qll`, `jumpExtent`). Where control or data goes to
+  another program, as cobble's fixpoint reads each verb: CALL (its target, literal or named,
+  and each USING argument by position), CICS LINK and XCTL (PROGRAM and COMMAREA), RETURN with
+  TRANSID (TRANSID and COMMAREA), START (TRANSID and FROM), RETRIEVE (INTO), and an exit
+  (GOBACK, EXIT PROGRAM, STOP RUN, RETURN without TRANSID) handing back what the program was
+  entered with. An area is handed over as its elementary cells. A jump reads its target, its
+  transaction and every cell it hands over, so each has values, writers and reasons there.
 - **Values** (`Values.qll`). A read is cut into pieces where the writes that can reach its
   bytes change and where a slice of it begins or ends, as cobble's fixpoint cuts it. A piece's
-  values come from each definer holding all of its bytes: a literal, sliced, or the values a MOVE
-  carries from its source at that node, refitted; from the start, the initial image. A definer
-  that does not hold the piece, or a MOVE that carries only doubt about its source, says the
-  bytes were written with no value (`not-a-literal`, or `inbound-linkage` in LINKAGE); the start
-  without an initial value says `uninitialised`, or `inbound-linkage` in LINKAGE.
+  values come from each definer that holds all of its bytes, none of them overwritten since: a
+  literal, sliced, or the values a MOVE carries from its source at that node, refitted; from
+  the start, the initial image. Any other definer, or a MOVE that carries only doubt about its
+  source, says the bytes were written with no value (`not-a-literal`, or `inbound-linkage` in
+  LINKAGE); the start without an initial value says `uninitialised`, or `inbound-linkage` in
+  LINKAGE.
 
 ## Running it
 
@@ -159,14 +170,15 @@ The extractor's `autobuild.sh` runs `cobble-parse-corpus` and then this command.
 config's are. A QL test directory carries its own config; `ql/test/flows/` caches its ASG in
 `cobble/out-codeql-test/`.
 
-`ql/src/diagnostics/` holds six tables for comparing with cobble's fixpoint: `Transfers.ql`
+`ql/src/diagnostics/` holds seven tables for comparing with cobble's fixpoint: `Transfers.ql`
 (each transfer at cobble's node id, with both cells' records and bytes), `OriginWrites.ql` (each
 origin write, with its origin and target cell), `ReachingDefinitions.ql` (for each node's copy
 from a cell or consultation of one, the nodes whose writes reach it, through CodeQL's dataflow
 with no flow into another statement's write), `Sinks.ql` (each sink's cells, with the nodes whose
 writes they carry: the sink's own where it writes them, else what reaches it), `Values.ql`
-(each piece of each read with its values and reasons) and `StatementPaths.ql` (every
-statement's node id and class).
+(each piece of each read with its values and reasons), `Jumps.ql` (each jump and each
+program's entry, with its target, transaction and areas, and what holds each cell it hands
+over) and `StatementPaths.ql` (every statement's node id and class).
 
 `ql/test/flows/` checks one invented program for flow through a PERFORM called twice, through a
 REDEFINES, through a group MOVE, and for a value overwritten in full; `Ast.ql` there reads every
@@ -174,6 +186,8 @@ MOVE's source and first target from the generated tree. `ql/test/values/` checks
 reasons: a literal fitted to its target, a MOVE into a JUSTIFIED field, a numeric literal, a MOVE
 from LINKAGE through a computed bound, a MOVE from bytes never written, a group read in two
 pieces, and the start seen past a PERFORM whose range may leave a field alone.
+`ql/test/jumps/` checks an XCTL to a named program, a CALL to a literal one and a RETURN with
+TRANSID, each with the area it hands over, before and after the CALL writes it back.
 
 ## Limits
 
@@ -185,6 +199,10 @@ pieces, and the start seen past a PERFORM whose range may leave a field alone.
   field read out of a record a file filled says `not-a-literal` there; a stored value's reasons,
   which a join widens over the whole stored extent, so a narrow read of it can inherit
   `uninitialised` from bytes it does not cover; and at most 32 values (`over-budget`).
+- A node nothing reaches holds nothing. cobble's fixpoint reads such a node against an empty
+  state, so a jump in a paragraph no PERFORM names (COACTVWC's, COCRDLIC's and COCRDSLC's
+  SEND-LONG-TEXT) hands over LINKAGE that says `inbound-linkage` there, and other storage that
+  says `uninitialised`.
 - Each member's first program only. No CALL, LINK or XCTL between programs.
 - PERFORM ranges are assumed to nest.
 - Cells have no source location.

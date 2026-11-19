@@ -40,9 +40,11 @@ predicate piece(GraphNode n, Field f, int lo, int hi) {
   )
 }
 
-/** Bytes `lo` up to `hi` of record `rec` that the node `n` reads: a piece, or a MOVE's carried source. */
+/** Bytes `lo` up to `hi` of record `rec` that the node `n` reads: a piece, what a jump reads whole, or a MOVE's carried source. */
 predicate readBytes(GraphNode n, string rec, int lo, int hi) {
   exists(Field f | piece(n, f, lo, hi) and rec = f.getRecord())
+  or
+  exists(Field f | jumpExtent(n, _, _, _, f, lo, hi) and rec = f.getRecord())
   or
   carriedWrite(n, _, _, _, rec, lo, hi, _)
 }
@@ -100,6 +102,24 @@ private predicate reaches(GraphNode n, string rec, int lo, int hi, GraphNode d) 
   exists(Atom a | definer(n, a, d) and readBytes(n, rec, lo, hi) and overlaps(a, rec, lo, hi))
 }
 
+private predicate readAtom(GraphNode n, string rec, int lo, int hi, Atom a) {
+  readBytes(n, rec, lo, hi) and
+  overlaps(a, rec, lo, hi) and
+  (definer(n, a, _) or startReaches(n, a))
+}
+
+/**
+ * The write at `d` can be what all of the bytes hold where `n` reads them: a write a later
+ * one partly overwrote holds none of them whole, so it lends them no value.
+ */
+private predicate holds(GraphNode n, string rec, int lo, int hi, GraphNode d) {
+  reaches(n, rec, lo, hi, d) and
+  not exists(Atom a | readAtom(n, rec, lo, hi, a) and not definer(n, a, d))
+}
+
+/** The write at `d` can be what some of the bytes hold where `n` reads them. */
+predicate writer(GraphNode n, string rec, int lo, int hi, GraphNode d) { reaches(n, rec, lo, hi, d) }
+
 private predicate fromStart(GraphNode n, string rec, int lo, int hi) {
   exists(Atom a | startReaches(n, a) and readBytes(n, rec, lo, hi) and overlaps(a, rec, lo, hi))
 }
@@ -129,7 +149,7 @@ private string fitted(string sv, int width, boolean right) {
 
 /** A value the bytes can hold where `n` reads them. */
 predicate value(GraphNode n, string rec, int lo, int hi, string v) {
-  exists(GraphNode d | reaches(n, rec, lo, hi, d) |
+  exists(GraphNode d | holds(n, rec, lo, hi, d) |
     exists(string wrec, int wlo, int whi, string w |
       literalWrite(d, wrec, wlo, whi, w) and covers(wrec, wlo, whi, rec, lo, hi)
     |
@@ -159,11 +179,12 @@ predicate value(GraphNode n, string rec, int lo, int hi, string v) {
 /** Why the bytes have no value of their own where `n` reads them, carried values aside. */
 private predicate ownReason(GraphNode n, string rec, int lo, int hi, string r) {
   exists(GraphNode d | reaches(n, rec, lo, hi, d) |
+    holds(n, rec, lo, hi, d) and
     exists(string wrec, int wlo, int whi |
       reasonWrite(d, wrec, wlo, whi, r) and covers(wrec, wlo, whi, rec, lo, hi)
     )
     or
-    not contains(d, rec, lo, hi) and
+    not (contains(d, rec, lo, hi) and holds(n, rec, lo, hi, d)) and
     written(n, rec, r)
   )
   or
@@ -181,7 +202,7 @@ private predicate ownReason(GraphNode n, string rec, int lo, int hi, string r) {
 private predicate carriedFrom(
   GraphNode n, string rec, int lo, int hi, GraphNode d, string srec, int slo, int shi
 ) {
-  reaches(n, rec, lo, hi, d) and
+  holds(n, rec, lo, hi, d) and
   exists(string wrec, int wlo, int whi |
     carriedWrite(d, wrec, wlo, whi, srec, slo, shi, _) and covers(wrec, wlo, whi, rec, lo, hi)
   )

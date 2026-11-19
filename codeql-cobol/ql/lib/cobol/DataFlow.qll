@@ -108,7 +108,30 @@ predicate graphCopies(GraphNode g, Field f) {
   exists(Stmt s, string site | s = g.getSiteOf(site) | loopTransfer(s, site, f, _))
 }
 
-/** The cells the node `g` reads: what it copies, consults or sends. */
+/**
+ * Bytes `lo` up to `hi` of `f` that the jump at `g` reads as one fact: its target
+ * (`part` "target"), its transaction ("transid"), or a cell of the area it hands over
+ * as parameter `param` ("field"), an exit's being what the program was entered with.
+ */
+predicate jumpExtent(GraphNode g, string part, int param, Field area, Field f, int lo, int hi) {
+  exists(Stmt s | s = g.getStmt() |
+    jumpTarget(s, f, lo, hi) and part = "target" and param = -1 and area = f
+    or
+    jumpTransid(s, f) and part = "transid" and param = -1 and area = f and lo = f.getStart() and hi = f.getEnd()
+    or
+    part = "field" and
+    lo = f.getStart() and
+    hi = f.getEnd() and
+    (
+      jumpArea(s, param, area)
+      or
+      jump(s, "EXIT", _) and received_area(g.getProgram(), param, area)
+    ) and
+    areaField(area, f)
+  )
+}
+
+/** The cells the node `g` reads: what it copies, consults, sends or hands to another program. */
 predicate graphReads(GraphNode g, Field f) {
   f = g.getStmt().getARead()
   or
@@ -117,6 +140,8 @@ predicate graphReads(GraphNode g, Field f) {
   sink(g.getStmt(), _, f)
   or
   exists(Stmt s, string site | s = g.getSiteOf(site) | loopTransfer(s, site, f, _))
+  or
+  jumpExtent(g, _, _, _, f, _, _)
 }
 
 /** An atom of `f` the node `g` reaches. */
@@ -128,7 +153,7 @@ private predicate graphAtom(GraphNode g, Field f, Atom a) {
     fieldAtom(f, a)
   )
   or
-  cfg_consults(g, f) and fieldAtom(f, a)
+  (cfg_consults(g, f) or jumpExtent(g, _, _, _, f, _, _)) and fieldAtom(f, a)
 }
 
 /** An atom of `f` that the node `g` reads. */

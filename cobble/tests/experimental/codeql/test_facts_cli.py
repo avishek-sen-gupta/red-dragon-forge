@@ -119,6 +119,25 @@ VALS = """\
            GOBACK.
 """
 
+JUMPS = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. JUMPS.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 PGM PIC X(8).
+       01 TID PIC X(4).
+       01 AREA-1.
+          05 A1 PIC X(2).
+          05 A2 PIC X(2).
+       LINKAGE SECTION.
+       01 DFHCOMMAREA PIC X(4).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           EXEC CICS XCTL PROGRAM(PGM) COMMAREA(AREA-1) END-EXEC.
+           CALL 'SUB' USING AREA-1 A2.
+           EXEC CICS RETURN TRANSID(TID) COMMAREA(AREA-1) END-EXEC.
+"""
+
 ROW = re.compile(r"^(\w+)\((.*)\)$")
 Tables = dict[str, set[tuple[str, ...]]]
 
@@ -144,7 +163,12 @@ def corpus(tmp_path_factory: pytest.TempPathFactory) -> Path:
     root = tmp_path_factory.mktemp("codeql")
     (root / "src").mkdir()
     (root / "asg").mkdir()
-    for name, text in (("SHAPES", SHAPES), ("ORIGINS", ORIGINS), ("VALS", VALS)):
+    for name, text in (
+        ("SHAPES", SHAPES),
+        ("ORIGINS", ORIGINS),
+        ("VALS", VALS),
+        ("JUMPS", JUMPS),
+    ):
         source = root / "src" / f"{name}.cbl"
         source.write_text(text, encoding="utf-8")
         parsed = parse_one(
@@ -233,6 +257,7 @@ def test_a_member_is_written_as_its_fields_paragraphs_and_statements(
             ("#f9", "#program", '"N"', '"N"', "0", "1", "#lf9"),
             ("#f10", "#program", '"IN-1"', '"IN-1"', "0", "4", "#lf10"),
         },
+        "group_field": {("#f0",), ("#f3",), ("#f5",)},
         "numeric_fields": {("#f2",), ("#f9",)},
         "units": {
             ("#program", "0", "#c0_1_0", '"MAIN-PARA"', '"MAIN-SECTION"'),
@@ -432,11 +457,34 @@ def test_storage_values_are_the_initial_image_and_what_each_write_puts(
     }
 
 
+def test_jumps_name_what_they_hand_over_and_what_a_program_is_entered_with(
+    corpus: Path,
+) -> None:
+    """A CICS operand or CALL argument names the storage it hands over, unsubscripted;
+    a program with a DFHCOMMAREA is entered with it; a cell with cells under it is a
+    group."""
+    tables = _tables((corpus / "trap" / "JUMPS.trap").read_text(encoding="utf-8"))
+    cells = {row[0]: row[2] for row in tables["fields"]}
+    assert sorted(cells[row[1]] for row in tables["names_area"]) == [
+        '"A2"',
+        '"AREA-1"',
+        '"AREA-1"',
+        '"AREA-1"',
+        '"PGM"',
+        '"TID"',
+    ]
+    assert {(row[1], cells[row[2]]) for row in tables["received_area"]} == {
+        ("0", '"DFHCOMMAREA"')
+    }
+    assert {cells[row[0]] for row in tables["group_field"]} == {'"AREA-1"'}
+
+
 def test_the_corpus_writes_its_prefix_skips_failures_and_archives_sources(
     corpus: Path,
 ) -> None:
     source = (corpus / "src" / "SHAPES.cbl").resolve()
     assert sorted(p.name for p in (corpus / "trap").iterdir()) == [
+        "JUMPS.trap",
         "ORIGINS.trap",
         "SHAPES.trap",
         "VALS.trap",

@@ -3,6 +3,7 @@
 from collections.abc import Mapping
 from itertools import groupby
 
+from cobble.dataflow.fields.aliases import received_areas
 from cobble.dataflow.fields.extent import cell_index
 from cobble.dataflow.fields.undeclared import with_undeclared
 from cobble.dataflow.fixpoint.fixpoint import program_statements
@@ -71,6 +72,7 @@ def program_rows(parsed: CobolASG, source: str) -> Rows:
             for n, (label, unit) in enumerate(units)
         ),
         *cfg_rows(asg, cfg, lowered, scope, PROGRAM),
+        *_received_rows(asg, scope),
         *initial_rows(records, scope),
         *value_rows(program_statements(asg, cfg), lowered.nodes, scope),
     )
@@ -126,7 +128,18 @@ def _field_rows(scope: Scope, n: int, cell: Cell) -> Rows:
         (label, PROGRAM, cell.name, cell.record, cell.start, cell.length, location),
     )
     numeric = (TrapRow("numeric_fields", (label,)),) if _numeric(cell) else ()
-    return (define(label), *located, row, *numeric)
+    group = (TrapRow("group_field", (label,)),) if cell.is_group else ()
+    return (define(label), *located, row, *numeric, *group)
+
+
+def _received_rows(asg: CobolASG, scope: Scope) -> Rows:
+    """The storage the program is entered with: its DFHCOMMAREA, else each USING record."""
+    return tuple(
+        TrapRow("received_area", (PROGRAM, param, scope.cells[cell]))
+        for param, extent in received_areas(asg, scope.index)
+        for cell in scope.cells
+        if scope.index.extent_of(cell) == extent
+    )
 
 
 def _numeric(cell: Cell) -> bool:

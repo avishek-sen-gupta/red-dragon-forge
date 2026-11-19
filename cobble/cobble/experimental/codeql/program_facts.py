@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from functools import singledispatchmethod
 
 from cics.statements import CicsOperand, ExecCicsStatement, operand_reference
+from cobble.dataflow.fields.aliases import area_cells
 from cobble.dataflow.fields.condition_set import ConditionSet
 from cobble.dataflow.fields.extent import denoted_cells, operand_extents
 from cobble.dataflow.fields.initialized import initialized_extents
@@ -109,7 +110,10 @@ class ProgramFacts:
     def _(self, value: CallUsingParam, label: Label) -> Rows:
         if value.is_literal:
             return ()
-        return self._named(label, value.name, value.qualifiers, value.subscripts)
+        return (
+            *self._named(label, value.name, value.qualifiers, value.subscripts),
+            *self._area(label, "" if value.omitted else value.name),
+        )
 
     @rows.register
     def _(self, value: CicsOperand, label: Label) -> Rows:
@@ -119,6 +123,7 @@ class ProgramFacts:
         return (
             *self._named(label, reference.name, (), reference.subscripts),
             *self._exactness(label, reference),
+            *self._area(label, value.text),
         )
 
     @rows.register
@@ -230,6 +235,13 @@ class ProgramFacts:
         return tuple(
             TrapRow("field_names_cell", (label, field, cell))
             for cell in self.scope.cells_named(name, (), ())
+        )
+
+    def _area(self, label: Label, operand: str) -> Rows:
+        """The storage an operand hands to another program, as cobble's jumps read it."""
+        return tuple(
+            TrapRow("names_area", (label, self.scope.cells[cell]))
+            for cell in area_cells(operand, self.scope.index)
         )
 
     def _named(

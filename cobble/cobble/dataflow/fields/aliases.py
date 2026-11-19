@@ -31,7 +31,7 @@ from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_regis
 from cobble.dataflow.fields.extent import CellIndex, cell_index
 from cobble.dataflow.fields.extent_text import extent_text
 from cobble.dataflow.fields.side_tables import CommareaAlias
-from cobble.dataflow.layout import UnsizeableFieldError, section_records
+from cobble.dataflow.layout import Cell, UnsizeableFieldError, section_records
 from cobble.dataflow.srccfg.argument_mode import ArgumentMode
 from cobble.dataflow.srccfg.desugar import CALL_TRANSFER, LINK_TRANSFER
 from cobble.dataflow.srccfg.link import COMMAREA_RECORD, CallSite, call_sites
@@ -365,11 +365,14 @@ def _record_named(index: CellIndex, name: str) -> _Callee:
 
 
 def area_extents(operand: str, index: CellIndex) -> tuple[FieldExtent, ...]:
+    return tuple(index.extent_of(cell) for cell in area_cells(operand, index))
+
+
+def area_cells(operand: str, index: CellIndex) -> tuple[Cell, ...]:
+    """The cells an operand handing storage to another program names, written
+    without subscripts."""
     reference = _reference(operand)
-    return tuple(
-        index.extent_of(cell)
-        for cell in index.cells_named(reference.name, reference.qualifiers, 0)
-    )
+    return index.cells_named(reference.name, reference.qualifiers, 0)
 
 
 def receives_commarea(index: CellIndex) -> bool:

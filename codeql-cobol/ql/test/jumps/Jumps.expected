@@ -1,0 +1,31 @@
+| JMP |  | 0 | ENTRY | false | area | 0 | DFHCOMMAREA\|0\|4 |  | at |  |
+| JMP |  | 0 | ENTRY | false | jump | -1 |  |  | at |  |
+| JMP | MAIN/2.then.0 | 17 | XCTL | false | area | 0 | AREA-1\|0\|4 |  | at |  |
+| JMP | MAIN/2.then.0 | 17 | XCTL | false | field | 0 | AREA-1\|0\|4 | AREA-1\|0\|2 | at |  |
+| JMP | MAIN/2.then.0 | 17 | XCTL | false | field | 0 | AREA-1\|0\|4 | AREA-1\|0\|2 | reason | not-a-literal |
+| JMP | MAIN/2.then.0 | 17 | XCTL | false | field | 0 | AREA-1\|0\|4 | AREA-1\|0\|2 | writer | MAIN/0 |
+| JMP | MAIN/2.then.0 | 17 | XCTL | false | field | 0 | AREA-1\|0\|4 | AREA-1\|0\|2 | writer | MAIN/1 |
+| JMP | MAIN/2.then.0 | 17 | XCTL | false | field | 0 | AREA-1\|0\|4 | AREA-1\|2\|2 | at |  |
+| JMP | MAIN/2.then.0 | 17 | XCTL | false | field | 0 | AREA-1\|0\|4 | AREA-1\|2\|2 | reason | uninitialised |
+| JMP | MAIN/2.then.0 | 17 | XCTL | false | jump | -1 |  |  | at |  |
+| JMP | MAIN/2.then.0 | 17 | XCTL | false | target | -1 |  | PGM\|0\|8 | at |  |
+| JMP | MAIN/2.then.0 | 17 | XCTL | false | target | -1 |  | PGM\|0\|8 | value | NEXTPGM  |
+| JMP | MAIN/3 | 19 | CALL | true | area | 0 | AREA-1\|0\|4 |  | at |  |
+| JMP | MAIN/3 | 19 | CALL | true | field | 0 | AREA-1\|0\|4 | AREA-1\|0\|2 | at |  |
+| JMP | MAIN/3 | 19 | CALL | true | field | 0 | AREA-1\|0\|4 | AREA-1\|0\|2 | reason | not-a-literal |
+| JMP | MAIN/3 | 19 | CALL | true | field | 0 | AREA-1\|0\|4 | AREA-1\|0\|2 | writer | MAIN/0 |
+| JMP | MAIN/3 | 19 | CALL | true | field | 0 | AREA-1\|0\|4 | AREA-1\|0\|2 | writer | MAIN/1 |
+| JMP | MAIN/3 | 19 | CALL | true | field | 0 | AREA-1\|0\|4 | AREA-1\|2\|2 | at |  |
+| JMP | MAIN/3 | 19 | CALL | true | field | 0 | AREA-1\|0\|4 | AREA-1\|2\|2 | reason | uninitialised |
+| JMP | MAIN/3 | 19 | CALL | true | jump | -1 |  |  | at |  |
+| JMP | MAIN/3 | 19 | CALL | true | target | -1 |  |  | literal | SUB |
+| JMP | MAIN/4 | 20 | RETURN_TRANSID | false | area | 0 | AREA-1\|0\|4 |  | at |  |
+| JMP | MAIN/4 | 20 | RETURN_TRANSID | false | field | 0 | AREA-1\|0\|4 | AREA-1\|0\|2 | at |  |
+| JMP | MAIN/4 | 20 | RETURN_TRANSID | false | field | 0 | AREA-1\|0\|4 | AREA-1\|0\|2 | reason | from-callee |
+| JMP | MAIN/4 | 20 | RETURN_TRANSID | false | field | 0 | AREA-1\|0\|4 | AREA-1\|0\|2 | writer | MAIN/3 |
+| JMP | MAIN/4 | 20 | RETURN_TRANSID | false | field | 0 | AREA-1\|0\|4 | AREA-1\|2\|2 | at |  |
+| JMP | MAIN/4 | 20 | RETURN_TRANSID | false | field | 0 | AREA-1\|0\|4 | AREA-1\|2\|2 | reason | from-callee |
+| JMP | MAIN/4 | 20 | RETURN_TRANSID | false | field | 0 | AREA-1\|0\|4 | AREA-1\|2\|2 | writer | MAIN/3 |
+| JMP | MAIN/4 | 20 | RETURN_TRANSID | false | jump | -1 |  |  | at |  |
+| JMP | MAIN/4 | 20 | RETURN_TRANSID | false | transid | -1 |  | TID\|0\|4 | at |  |
+| JMP | MAIN/4 | 20 | RETURN_TRANSID | false | transid | -1 |  | TID\|0\|4 | value | T001 |
