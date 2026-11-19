@@ -180,6 +180,10 @@ def corpus(tmp_path_factory: pytest.TempPathFactory) -> Path:
         assert parsed.ok, parsed.error
     (root / "src" / "BROKEN.cbl").write_text("not cobol\n", encoding="utf-8")
     (root / "asg" / "BROKEN.fail").write_text("parse failed\n", encoding="utf-8")
+    (root / "app.csd").write_text(
+        " DEFINE TRANSACTION(T001) GROUP(APP)\n        PROGRAM(JUMPS)\n",
+        encoding="utf-8",
+    )
     config = root / "corpus.toml"
     config.write_text(
         "[corpus]\n"
@@ -188,7 +192,8 @@ def corpus(tmp_path_factory: pytest.TempPathFactory) -> Path:
         f'jcl_dir = "{root}"\n'
         "jcl_globs = []\n"
         f'asg_dir = "{root / "asg"}"\n'
-        "copybook_dirs = []\n",
+        "copybook_dirs = []\n"
+        f'csd_files = ["{root / "app.csd"}"]\n',
         encoding="utf-8",
     )
     assert (
@@ -492,6 +497,7 @@ def test_the_corpus_writes_its_prefix_skips_failures_and_archives_sources(
     ]
     assert (corpus / "trap" / "prefix.trap").read_text(encoding="utf-8") == (
         f'sourceLocationPrefix("{(corpus / "src").resolve()}")\n'
+        'csd_transaction("T001", "JUMPS")\n'
     )
     assert (corpus / "archive" / str(source).lstrip("/")).read_text(
         encoding="utf-8"

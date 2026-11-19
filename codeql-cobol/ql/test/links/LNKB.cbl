@@ -1,0 +1,17 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. LNKB.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 WS-TID        PIC X(4) VALUE 'T002'.
+       LINKAGE SECTION.
+       01 DFHCOMMAREA.
+          05 LK-NEXT    PIC X(8).
+          05 LK-DATA    PIC X(4).
+       PROCEDURE DIVISION.
+       MAIN.
+           IF LK-DATA = 'Y'
+               EXEC CICS XCTL PROGRAM(LK-NEXT) COMMAREA(DFHCOMMAREA)
+               END-EXEC
+           END-IF.
+           EXEC CICS RETURN TRANSID(WS-TID) COMMAREA(DFHCOMMAREA)
+           END-EXEC.

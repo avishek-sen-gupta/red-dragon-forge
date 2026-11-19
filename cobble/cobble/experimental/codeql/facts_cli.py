@@ -6,6 +6,7 @@ import shutil
 import sys
 from pathlib import Path
 
+from cics.csd_parse import parse_csd
 from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import CorpusConfig, load_corpus_config
 from cobble.experimental.codeql.program_rows import program_rows
@@ -42,6 +43,15 @@ def _member(config: CorpusConfig, source: Path, trap_dir: Path, archive: Path) -
     logger.info("codeql: %s, %d rows", source.name, len(rows))
 
 
+def _transactions(config: CorpusConfig) -> tuple[TrapRow, ...]:
+    """Each CSD transaction and the program it starts, as cobble's combine reads them."""
+    return tuple(
+        TrapRow("csd_transaction", (transid, program))
+        for path in config.csd_files
+        for transid, program in parse_csd(path).items()
+    )
+
+
 def cli(argv: tuple[str, ...] = ()) -> int:
     configure_cli_logging()
     args = _parser().parse_args(argv if argv else None)
@@ -50,7 +60,9 @@ def cli(argv: tuple[str, ...] = ()) -> int:
     sources = matching_files(config.cobol_dir, config.cobol_globs)
     tuple(_member(config, s, args.trap_dir, args.archive_dir) for s in sources)
     prefix = TrapRow("sourceLocationPrefix", (str(config.cobol_dir.resolve()),))
-    (args.trap_dir / "prefix.trap").write_text(trap_text((prefix,)), encoding="utf-8")
+    (args.trap_dir / "prefix.trap").write_text(
+        trap_text((prefix, *_transactions(config))), encoding="utf-8"
+    )
     return 0
 
 

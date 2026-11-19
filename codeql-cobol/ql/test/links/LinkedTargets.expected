@@ -1,0 +1,10 @@
+| LNKA | MAIN/4.then.0 | program | CICS_XCTL | WS-BACK | candidate | LNKD |
+| LNKA | MAIN/4.then.0 | program | CICS_XCTL | WS-BACK | site |  |
+| LNKA | MAIN/6 | program | CICS_XCTL | WS-PGM | candidate | LNKB |
+| LNKA | MAIN/6 | program | CICS_XCTL | WS-PGM | site |  |
+| LNKB | MAIN/0.then.0 | program | CICS_XCTL | LK-NEXT | candidate | LNKD |
+| LNKB | MAIN/0.then.0 | program | CICS_XCTL | LK-NEXT | site |  |
+| LNKD | MAIN/1.then.0 | program | CICS_XCTL | WS-SELF | candidate | LNKD |
+| LNKD | MAIN/1.then.0 | program | CICS_XCTL | WS-SELF | site |  |
+| LNKE | MAIN/1 | program | CICS_XCTL | WS-IN-PGM | candidate | LNKD |
+| LNKE | MAIN/1 | program | CICS_XCTL | WS-IN-PGM | site |  |

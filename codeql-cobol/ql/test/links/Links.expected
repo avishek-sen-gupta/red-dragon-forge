@@ -1,0 +1,5 @@
+| LNKA | MAIN/3 | CALL | LNKC | WS-BACK\|0\|8 | LS-OUT\|0\|8 | true | false |
+| LNKA | MAIN/5.then.0 | START | LNKE | WS-AREA\|0\|12 | WS-IN\|0\|12 | false | false |
+| LNKA | MAIN/6 | XCTL | LNKB | WS-AREA\|0\|12 | DFHCOMMAREA\|0\|12 | false | false |
+| LNKB | MAIN/0.then.0 | XCTL | LNKD | DFHCOMMAREA\|0\|12 | DFHCOMMAREA\|0\|12 | false | true |
+| LNKB | MAIN/1 | RETURN_TRANSID | LNKA | DFHCOMMAREA\|0\|12 | DFHCOMMAREA\|0\|12 | false | false |

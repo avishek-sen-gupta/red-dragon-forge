@@ -603,3 +603,10 @@ predicate areaField(Field area, Field f) {
   f = area and not exists(Field e | inside(area, e) and not group_field(e))
 }
 
+/** `name` could name a program, or a CICS file, as cobble's `TargetKind.can_name` reads it. */
+bindingset[kind, name]
+predicate canName(string kind, string name) {
+  name != "" and
+  not name.regexpMatch("(?s).*[\\x00-\\x1f\\x7f-\\x9f].*") and
+  (kind = "program" or name.length() <= 8)
+}

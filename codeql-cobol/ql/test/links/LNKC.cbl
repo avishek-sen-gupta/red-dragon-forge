@@ -1,0 +1,9 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. LNKC.
+       DATA DIVISION.
+       LINKAGE SECTION.
+       01 LS-OUT        PIC X(8).
+       PROCEDURE DIVISION USING LS-OUT.
+       MAIN.
+           MOVE 'LNKD' TO LS-OUT.
+           GOBACK.

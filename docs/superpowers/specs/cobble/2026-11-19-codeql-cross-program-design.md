@@ -120,3 +120,18 @@ Each lands as one commit with its facts test, its QL, its diagnostic and its com
   paragraph no PERFORM names (COCRDSLC's 9150-GETCARD-BYACCT), which the fixpoint reads against
   an empty state.
 
+- **Links are one fixpoint over every program.** cobble's combine splits programs into call
+  groups first and links each alone, so a link the grouping missed reaches a callee whose own
+  group was linked without it; it logs such a link. QL links every program at once. On a
+  test where an XCTL found only by linking enters a program reading its own name, combine run
+  as one group (its `link` over every program) gives the name, and so does QL; grouped, combine
+  says `inbound-linkage`. On CardDemo grouped and one-group runs write the same rows.
+- **A caller's bytes naming the callee are a column of the link.** Whether the caller's
+  area covers the jump's target extent (combine's `named_by`) depends on the link alone, so QL
+  carries that range on each link row rather than testing it against the recursion, which
+  would negate a predicate the links are built from.
+- **Unit 4's differences are unit 3's.** All 94 links match combine with no hop limit in
+  caller, node, verb, callee, both areas, return and `discovered`. All 75 sites match in
+  candidates and dropped values; 69 match in reasons. The 5 XCTL targets that differ are 5 of
+  unit 3's 9 exact-extent sites, where the fixpoint's `not-a-literal` stays after linking and
+  QL's `inbound-linkage` crosses to the callers; the sixth is COCRDSLC's unreached file site.

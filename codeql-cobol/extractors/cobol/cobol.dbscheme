@@ -16,6 +16,9 @@ locations_default(
   int endColumn: int ref
 );
 
+/* A CICS transaction and the program it starts, from the corpus's CSD files. */
+csd_transaction(string transid: string ref, string program: string ref);
+
 programs(unique int id: @program, string name: string ref, int location: @location_default ref);
 
 /* One row per storage cell: an occurrence of a declared item, placed in its record. */

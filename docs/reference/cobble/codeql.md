@@ -28,7 +28,7 @@ program uses but never declares, as cobble's extents lay them out (`with_undecla
 not parse, so
 `cobble-parse-corpus` must have run. For each member it writes one TRAP file in
 `cobol.dbscheme` and copies the source into the archive. A member with a parse-failure marker is
-skipped. `prefix.trap` holds the corpus directory.
+skipped. `prefix.trap` holds the corpus directory and the CSD's transactions.
 
 | table | one row per |
 |---|---|
@@ -55,6 +55,7 @@ skipped. `prefix.trap` holds the corpus directory.
 | `group_field(cell)` | cell with cells under it |
 | `names_area(node, cell)` | cell a CALL argument or a CICS operand hands to another program, as cobble's jumps resolve it (`area_cells`): by name and qualifiers, never subscripted |
 | `received_area(program, param, cell)` | storage the program is entered with (`received_areas`): its DFHCOMMAREA, else each USING record by position |
+| `csd_transaction(transid, program)` | transaction in the config's CSD files and the program it starts, as cobble's combine reads them (`parse_csd`) |
 | `cfg_carries(node, cell, offset, length, source, source_offset, source_length, right)` | a MOVE from a field: the target bytes it carries the source's values into, the source's bytes, and whether they land right-justified (`carried_moves`) |
 
 The rest of the tables are the generated tree.
@@ -150,6 +151,17 @@ and `#d` start the program's statements, sections and paragraphs, `#f12` is the 
   values, trimmed, are the candidates, those no program or file could be named by (blank,
   unprintable, a file name over 8 characters) are dropped, and its reasons say why the
   candidates may be short.
+- **Links** (`Combine.qll`). cobble's combine, over CodeQL's own values. A target, a
+  transaction or a file operand held by one extent is walked back through the writers that copy
+  into it, taking each node's values and reasons. The walk crosses programs where it reaches
+  bytes the program was entered with (to each caller's area), bytes a CALL or LINK got back (to
+  each of the callee's exits), and bytes a RETRIEVE filled (to each START's FROM). A jump links
+  to each program its target names, or its transaction's program in the CSD, area to received
+  area, cut to the shorter; a START links to its program's first RETRIEVE. Links and answers
+  are one least fixpoint, so a link found only through another link is `discovered`. A caller's
+  bytes that hold the jump's own target read as the callee's name, padded. Reasons are read off
+  the settled walk: `inbound-linkage` where no link brings the bytes in, `from-callee` where no
+  link takes them back, `not-a-literal` where no START fills them.
 - **Values** (`Values.qll`). A read is cut into pieces where the writes that can reach its
   bytes change and where a slice of it begins or ends, as cobble's fixpoint cuts it. A piece's
   values come from each definer that holds all of its bytes, none of them overwritten since: a
@@ -176,7 +188,7 @@ The extractor's `autobuild.sh` runs `cobble-parse-corpus` and then this command.
 config's are. A QL test directory carries its own config; `ql/test/flows/` caches its ASG in
 `cobble/out-codeql-test/`.
 
-`ql/src/diagnostics/` holds eight tables for comparing with cobble's fixpoint: `Transfers.ql`
+`ql/src/diagnostics/` holds ten tables for comparing with cobble's fixpoint and combine: `Transfers.ql`
 (each transfer at cobble's node id, with both cells' records and bytes), `OriginWrites.ql` (each
 origin write, with its origin and target cell), `ReachingDefinitions.ql` (for each node's copy
 from a cell or consultation of one, the nodes whose writes reach it, through CodeQL's dataflow
@@ -185,7 +197,10 @@ writes they carry: the sink's own where it writes them, else what reaches it), `
 (each piece of each read with its values and reasons), `Jumps.ql` (each jump and each
 program's entry, with its target, transaction and areas, and what holds each cell it hands
 over), `Targets.ql` (each site naming its program or file by a data item, with its candidates,
-dropped values and reasons, and a file site's operand) and `StatementPaths.ql` (every statement's node id and class).
+dropped values and reasons, and a file site's operand), `Links.ql` (each link between
+programs, with both areas, whether control comes back and whether only linking found it),
+`LinkedTargets.ql` (each site's candidates, dropped values and reasons once programs are
+linked) and `StatementPaths.ql` (every statement's node id and class).
 
 `ql/test/flows/` checks one invented program for flow through a PERFORM called twice, through a
 REDEFINES, through a group MOVE, and for a value overwritten in full; `Ast.ql` there reads every
@@ -196,6 +211,10 @@ pieces, and the start seen past a PERFORM whose range may leave a field alone.
 `ql/test/jumps/` checks an XCTL to a named program, a CALL to a literal one and a RETURN with
 TRANSID, each with the area it hands over, before and after the CALL writes it back, a cell
 partly overwritten, and two file sites, one naming a file and one holding spaces.
+`ql/test/links/` checks five invented programs and a CSD: an XCTL whose target is found only
+through its caller's area, a CALL whose argument the callee writes back, a RETURN with TRANSID
+and a START reaching their programs through the CSD, and a callee reading its own name from the
+bytes its caller named it by.
 
 ## Limits
 
@@ -211,10 +230,15 @@ partly overwritten, and two file sites, one naming a file and one holding spaces
   state, so a jump or a file site in a paragraph no PERFORM names (COACTVWC's, COCRDLIC's and
   COCRDSLC's SEND-LONG-TEXT, COCRDSLC's 9150-GETCARD-BYACCT) reads LINKAGE that says
   `inbound-linkage` there, and other storage that says `uninitialised`.
-- Each member's first program only. No CALL, LINK or XCTL between programs.
+- The fixpoint's `not-a-literal` from a MOVE source looked up under its own extent survives
+  linking, so five CardDemo XCTL targets keep it in combine where QL's reasons have crossed to
+  the callers.
+- Each member's first program only.
+- Links are one fixpoint over every program. cobble's combine links each call group on its
+  own and logs a link into another group, which is its bound, not a rule.
 - PERFORM ranges are assumed to nest.
 - Cells have no source location.
 - An online CardDemo program is about 135,000 rows, most of them layout cells; all of CardDemo
-  extracts in about 77 s.
+  extracts in about 77 s. `Links.ql` and `LinkedTargets.ql` each evaluate in about 15 minutes there.
 - No commit hook or CI job runs the QL test: neither has the CodeQL CLI. The facts tests run in
   cobble's suite.

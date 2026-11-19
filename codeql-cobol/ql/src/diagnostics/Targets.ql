@@ -15,14 +15,6 @@ private string part(string kind) {
   kind = "program" and result = "target" or kind = "file" and result = "file"
 }
 
-/** `name` could name a program, or a CICS file, as cobble's `TargetKind.can_name` reads it. */
-bindingset[kind, name]
-private predicate canName(string kind, string name) {
-  name != "" and
-  not name.regexpMatch("(?s).*[\\x00-\\x1f\\x7f-\\x9f].*") and
-  (kind = "program" or name.length() <= 8)
-}
-
 private predicate held(GraphNode n, string kind, string attr, string text) {
   exists(Field f, int lo, int hi | factExtent(n, part(kind), _, _, f, lo, hi) |
     attr = "value" and value(n, f.getRecord(), lo, hi, text)

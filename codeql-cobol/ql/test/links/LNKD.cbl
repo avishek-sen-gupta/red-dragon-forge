@@ -1,0 +1,16 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. LNKD.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 WS-SELF       PIC X(8).
+       LINKAGE SECTION.
+       01 DFHCOMMAREA.
+          05 LK-NAME    PIC X(8).
+          05 LK-REST    PIC X(4).
+       PROCEDURE DIVISION.
+       MAIN.
+           MOVE LK-NAME TO WS-SELF.
+           IF LK-REST = 'Z'
+               EXEC CICS XCTL PROGRAM(WS-SELF) END-EXEC
+           END-IF.
+           EXEC CICS RETURN END-EXEC.
