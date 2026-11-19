@@ -44,7 +44,7 @@ predicate piece(GraphNode n, Field f, int lo, int hi) {
 predicate readBytes(GraphNode n, string rec, int lo, int hi) {
   exists(Field f | piece(n, f, lo, hi) and rec = f.getRecord())
   or
-  exists(Field f | jumpExtent(n, _, _, _, f, lo, hi) and rec = f.getRecord())
+  exists(Field f | factExtent(n, _, _, _, f, lo, hi) and rec = f.getRecord())
   or
   carriedWrite(n, _, _, _, rec, lo, hi, _)
 }

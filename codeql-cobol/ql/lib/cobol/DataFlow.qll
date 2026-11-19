@@ -109,13 +109,16 @@ predicate graphCopies(GraphNode g, Field f) {
 }
 
 /**
- * Bytes `lo` up to `hi` of `f` that the jump at `g` reads as one fact: its target
- * (`part` "target"), its transaction ("transid"), or a cell of the area it hands over
- * as parameter `param` ("field"), an exit's being what the program was entered with.
+ * Bytes `lo` up to `hi` of `f` that the node `g` reads whole, as one fact: a jump's
+ * target (`part` "target"), its transaction ("transid"), or a cell of the area it hands
+ * over as parameter `param` ("field"), an exit's being what the program was entered
+ * with; or the file a CICS command names by a data item ("file").
  */
-predicate jumpExtent(GraphNode g, string part, int param, Field area, Field f, int lo, int hi) {
+predicate factExtent(GraphNode g, string part, int param, Field area, Field f, int lo, int hi) {
   exists(Stmt s | s = g.getStmt() |
     jumpTarget(s, f, lo, hi) and part = "target" and param = -1 and area = f
+    or
+    fileTarget(s, f, lo, hi) and part = "file" and param = -1 and area = f
     or
     jumpTransid(s, f) and part = "transid" and param = -1 and area = f and lo = f.getStart() and hi = f.getEnd()
     or
@@ -141,7 +144,7 @@ predicate graphReads(GraphNode g, Field f) {
   or
   exists(Stmt s, string site | s = g.getSiteOf(site) | loopTransfer(s, site, f, _))
   or
-  jumpExtent(g, _, _, _, f, _, _)
+  factExtent(g, _, _, _, f, _, _)
 }
 
 /** An atom of `f` the node `g` reaches. */
@@ -153,7 +156,7 @@ private predicate graphAtom(GraphNode g, Field f, Atom a) {
     fieldAtom(f, a)
   )
   or
-  (cfg_consults(g, f) or jumpExtent(g, _, _, _, f, _, _)) and fieldAtom(f, a)
+  (cfg_consults(g, f) or factExtent(g, _, _, _, f, _, _)) and fieldAtom(f, a)
 }
 
 /** An atom of `f` that the node `g` reads. */

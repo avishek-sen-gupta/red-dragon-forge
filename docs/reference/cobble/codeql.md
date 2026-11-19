@@ -144,6 +144,12 @@ and `#d` start the program's statements, sections and paragraphs, `#f12` is the 
   (GOBACK, EXIT PROGRAM, STOP RUN, RETURN without TRANSID) handing back what the program was
   entered with. An area is handed over as its elementary cells. A jump reads its target, its
   transaction and every cell it hands over, so each has values, writers and reasons there.
+- **Targets** (`Ast.qll`, `dynamicSite`). A CALL, LINK or XCTL naming its program by a data
+  item, and a CICS file command (READ, STARTBR, READNEXT, READPREV, WRITE, REWRITE, DELETE,
+  ENDBR) naming its file so (FILE, else DATASET). The operand is read whole at the site; its
+  values, trimmed, are the candidates, those no program or file could be named by (blank,
+  unprintable, a file name over 8 characters) are dropped, and its reasons say why the
+  candidates may be short.
 - **Values** (`Values.qll`). A read is cut into pieces where the writes that can reach its
   bytes change and where a slice of it begins or ends, as cobble's fixpoint cuts it. A piece's
   values come from each definer that holds all of its bytes, none of them overwritten since: a
@@ -170,7 +176,7 @@ The extractor's `autobuild.sh` runs `cobble-parse-corpus` and then this command.
 config's are. A QL test directory carries its own config; `ql/test/flows/` caches its ASG in
 `cobble/out-codeql-test/`.
 
-`ql/src/diagnostics/` holds seven tables for comparing with cobble's fixpoint: `Transfers.ql`
+`ql/src/diagnostics/` holds eight tables for comparing with cobble's fixpoint: `Transfers.ql`
 (each transfer at cobble's node id, with both cells' records and bytes), `OriginWrites.ql` (each
 origin write, with its origin and target cell), `ReachingDefinitions.ql` (for each node's copy
 from a cell or consultation of one, the nodes whose writes reach it, through CodeQL's dataflow
@@ -178,7 +184,8 @@ with no flow into another statement's write), `Sinks.ql` (each sink's cells, wit
 writes they carry: the sink's own where it writes them, else what reaches it), `Values.ql`
 (each piece of each read with its values and reasons), `Jumps.ql` (each jump and each
 program's entry, with its target, transaction and areas, and what holds each cell it hands
-over) and `StatementPaths.ql` (every statement's node id and class).
+over), `Targets.ql` (each site naming its program or file by a data item, with its candidates,
+dropped values and reasons, and a file site's operand) and `StatementPaths.ql` (every statement's node id and class).
 
 `ql/test/flows/` checks one invented program for flow through a PERFORM called twice, through a
 REDEFINES, through a group MOVE, and for a value overwritten in full; `Ast.ql` there reads every
@@ -187,7 +194,8 @@ reasons: a literal fitted to its target, a MOVE into a JUSTIFIED field, a numeri
 from LINKAGE through a computed bound, a MOVE from bytes never written, a group read in two
 pieces, and the start seen past a PERFORM whose range may leave a field alone.
 `ql/test/jumps/` checks an XCTL to a named program, a CALL to a literal one and a RETURN with
-TRANSID, each with the area it hands over, before and after the CALL writes it back.
+TRANSID, each with the area it hands over, before and after the CALL writes it back, a cell
+partly overwritten, and two file sites, one naming a file and one holding spaces.
 
 ## Limits
 
@@ -200,9 +208,9 @@ TRANSID, each with the area it hands over, before and after the CALL writes it b
   which a join widens over the whole stored extent, so a narrow read of it can inherit
   `uninitialised` from bytes it does not cover; and at most 32 values (`over-budget`).
 - A node nothing reaches holds nothing. cobble's fixpoint reads such a node against an empty
-  state, so a jump in a paragraph no PERFORM names (COACTVWC's, COCRDLIC's and COCRDSLC's
-  SEND-LONG-TEXT) hands over LINKAGE that says `inbound-linkage` there, and other storage that
-  says `uninitialised`.
+  state, so a jump or a file site in a paragraph no PERFORM names (COACTVWC's, COCRDLIC's and
+  COCRDSLC's SEND-LONG-TEXT, COCRDSLC's 9150-GETCARD-BYACCT) reads LINKAGE that says
+  `inbound-linkage` there, and other storage that says `uninitialised`.
 - Each member's first program only. No CALL, LINK or XCTL between programs.
 - PERFORM ranges are assumed to nest.
 - Cells have no source location.

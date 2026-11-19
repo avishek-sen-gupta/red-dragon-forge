@@ -114,4 +114,9 @@ Each lands as one commit with its facts test, its QL, its diagnostic and its com
   their facts. Looking MOVE sources up by exact extent turns the other 9 targets and 31 cells
   into matches; of the 131,359 cells left, 131,068 are the unreached commareas and 291 are the
   fixpoint giving a superset of CodeQL's reasons.
+- **Unit 3's differences are the same two.** 65 of the 75 sites match in candidates, dropped
+  values, reasons and a file site's operand. The 9 XCTL targets that differ in reasons are
+  the ones the exact-extent lookup turns into matches in unit 2; the last is a file site in a
+  paragraph no PERFORM names (COCRDSLC's 9150-GETCARD-BYACCT), which the fixpoint reads against
+  an empty state.
 

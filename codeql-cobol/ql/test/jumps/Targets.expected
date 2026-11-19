@@ -1,0 +1,10 @@
+| JMP | MAIN/2.then.0 | file | CICS_READ | FNAME | candidate | ACCTS |
+| JMP | MAIN/2.then.0 | file | CICS_READ | FNAME | operand-extent | FNAME\|0\|8 |
+| JMP | MAIN/2.then.0 | file | CICS_READ | FNAME | operand-value | ACCTS    |
+| JMP | MAIN/2.then.0 | file | CICS_READ | FNAME | site |  |
+| JMP | MAIN/2.then.1 | file | CICS_STARTBR | FNAME2 | dropped |  |
+| JMP | MAIN/2.then.1 | file | CICS_STARTBR | FNAME2 | operand-extent | FNAME2\|0\|8 |
+| JMP | MAIN/2.then.1 | file | CICS_STARTBR | FNAME2 | operand-value |          |
+| JMP | MAIN/2.then.1 | file | CICS_STARTBR | FNAME2 | site |  |
+| JMP | MAIN/2.then.2 | program | CICS_XCTL | PGM | candidate | NEXTPGM |
+| JMP | MAIN/2.then.2 | program | CICS_XCTL | PGM | site |  |

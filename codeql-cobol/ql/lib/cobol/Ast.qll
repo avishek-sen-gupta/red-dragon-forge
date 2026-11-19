@@ -489,22 +489,73 @@ predicate jumpTargetName(Stmt s, string name) {
   )
 }
 
-/** Bytes `lo` up to `hi` of `f` hold the name of the program `s` goes to. */
-predicate jumpTarget(Stmt s, Field f, int lo, int hi) {
-  exists(Generated::AstNode o |
-    o = s.(Generated::CallStatement).getTarget().getIdentifier()
-    or
-    jump(s, ["LINK", "XCTL"], _) and o = option(s, "PROGRAM")
-  |
-    names_cell(o, f) and
-    if names_slice(o, f, _, _)
-    then
-      exists(int offset, int length | names_slice(o, f, offset, length) |
-        lo = f.getStart() + offset and hi = lo + length
-      )
-    else (
-      lo = f.getStart() and hi = f.getEnd()
+/** Bytes `lo` up to `hi` of `f` that the operand `o` names, one occurrence at a time. */
+private predicate operandBytes(Generated::AstNode o, Field f, int lo, int hi) {
+  names_cell(o, f) and
+  if names_slice(o, f, _, _)
+  then
+    exists(int offset, int length | names_slice(o, f, offset, length) |
+      lo = f.getStart() + offset and hi = lo + length
     )
+  else (
+    lo = f.getStart() and hi = f.getEnd()
+  )
+}
+
+/** The data item naming the program `s` goes to. */
+private Generated::AstNode targetOperand(Stmt s) {
+  result = s.(Generated::CallStatement).getTarget().getIdentifier()
+  or
+  jump(s, ["LINK", "XCTL"], _) and
+  result = option(s, "PROGRAM") and
+  result.(Generated::CicsOperand).getIsLiteral() = false
+}
+
+/** Bytes `lo` up to `hi` of `f` hold the name of the program `s` goes to. */
+predicate jumpTarget(Stmt s, Field f, int lo, int hi) { operandBytes(targetOperand(s), f, lo, hi) }
+
+private string indexText(Generated::AstNode e) {
+  result = e.(Generated::FieldRefNode).getName() or result = e.(Generated::LiteralNode).getValue()
+}
+
+/** A CICS operand as the source spells it, subscripts and all. */
+private string spelled(Generated::CicsOperand o) {
+  if exists(o.getSubscripts(_))
+  then
+    result =
+      o.getText() + "(" + concat(int i | | indexText(o.getSubscripts(i)), ", " order by i) + ")"
+  else result = o.getText()
+}
+
+/** The data item a CICS file command names its file by: FILE, else DATASET. */
+private Generated::CicsOperand fileOperand(Generated::ExecCicsStatement c) {
+  c.getVerb() = ["READ", "STARTBR", "READNEXT", "READPREV", "WRITE", "REWRITE", "DELETE", "ENDBR"] and
+  (
+    result = option(c, "FILE")
+    or
+    not exists(option(c, "FILE")) and result = option(c, "DATASET")
+  ) and
+  result.getIsLiteral() = false
+}
+
+/** Bytes `lo` up to `hi` of `f` hold the name of the file the CICS command `s` touches. */
+predicate fileTarget(Stmt s, Field f, int lo, int hi) { operandBytes(fileOperand(s), f, lo, hi) }
+
+/**
+ * `s` names what it reaches by a data item, spelled `expression`: a program it goes to
+ * (`kind` "program") or a CICS file it touches ("file"), through `transfer`.
+ */
+predicate dynamicSite(Stmt s, string kind, string transfer, string expression) {
+  kind = "program" and
+  exists(Generated::AstNode o, string verb | o = targetOperand(s) and jump(s, verb, _) |
+    transfer = "CALL" and verb = "CALL" and expression = o.(Generated::RefModOperand).getName()
+    or
+    transfer = "CICS_" + verb and verb = ["LINK", "XCTL"] and expression = spelled(o)
+  )
+  or
+  kind = "file" and
+  exists(Generated::CicsOperand o | o = fileOperand(s) |
+    transfer = "CICS_" + s.(Generated::ExecCicsStatement).getVerb() and expression = spelled(o)
   )
 }
 

@@ -19,7 +19,7 @@ private string whole(Field f) { result = bytes(f, f.getStart(), f.getEnd()) }
 
 private predicate fact(GraphNode n, string part, int param, string area, string extent, string attr, string text) {
   exists(Field a, Field f, int lo, int hi, string rec |
-    jumpExtent(n, part, param, a, f, lo, hi) and
+    factExtent(n, part, param, a, f, lo, hi) and
     rec = f.getRecord() and
     (if part = "field" then area = whole(a) else area = "") and
     extent = bytes(f, lo, hi)
