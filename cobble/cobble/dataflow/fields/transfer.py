@@ -296,6 +296,23 @@ def _move_writes(
     )
 
 
+def carried_moves(
+    statement: Statement, index: CellIndex
+) -> tuple[tuple[FieldExtent, tuple[FieldExtent, ...], bool], ...]:
+    """Each extent a MOVE carries its source's values into, with the source's
+    extents and whether they land right-justified, as ``_move_writes`` carries
+    them: none from a FUNCTION or a literal."""
+    if not isinstance(statement, MoveStatement) or _function_reads(statement):
+        return ()
+    sources = operand_extents(statement.source, index).extents
+    return tuple(
+        (target, sources, _fit(operand, index) is fitted_right)
+        for operand in _move_targets(statement)
+        for target in operand_extents(operand, index).extents
+        if sources
+    )
+
+
 def _takes_digits(
     source: RefModOperand, target: RefModOperand, index: CellIndex
 ) -> bool:

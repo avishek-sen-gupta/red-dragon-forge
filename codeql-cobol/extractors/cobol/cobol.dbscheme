@@ -71,6 +71,19 @@ cfg_resume(unique int call: @cfg_node ref, int resume: @cfg_node ref);
 /* The cells a node consults -- a test's operands, a key, a subscript -- each name
    resolved by itself, unqualified, as cobble's fixpoint resolves it. */
 cfg_consults(int node: @cfg_node ref, int cell: @field ref);
+/* The storage a cell lies in: working_storage, linkage, file and the rest of cobble's regions. */
+field_region(unique int cell: @field ref, string region: string ref);
+/* What WORKING-STORAGE holds before any statement runs: `length` bytes from `offset`
+   within `cell`, as cobble's initial image gives them. */
+initial_value(int cell: @field ref, int offset: int ref, int length: int ref, string value: string ref);
+/* A literal a node writes, fitted to the bytes it lands in, as cobble's fixpoint fits it. */
+cfg_value(int node: @cfg_node ref, int cell: @field ref, int offset: int ref, int length: int ref, string value: string ref);
+/* Why a node's write has no value of its own: not-a-literal, from-file, from-callee and
+   the rest of cobble's reasons. */
+cfg_value_reason(int node: @cfg_node ref, int cell: @field ref, int offset: int ref, int length: int ref, string reason: string ref);
+/* A MOVE that carries its source's values into its target: the target's bytes, the
+   source's, and whether they land right-justified. */
+cfg_carries(int node: @cfg_node ref, int cell: @field ref, int offset: int ref, int length: int ref, int source: @field ref, int source_offset: int ref, int source_length: int ref, boolean right: boolean ref);
 /* cobble's id for every statement, whether or not it lowers to a node of that id. */
 statement_ids(unique int statement: @cobol_statement ref, string id: string ref);
 cfg_statement(unique int node: @cfg_node ref, int statement: @cobol_statement ref);

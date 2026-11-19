@@ -49,6 +49,10 @@ skipped. `prefix.trap` holds the corpus directory.
 | `condition_set_cell(set, cell)` | cell a SET ... TO TRUE moves its conditions' first values into, as cobble's fixpoint rewrites it (`with_condition_sets`): only when every condition name resolves |
 | `perform_range(perform, first, last)` | out-of-line PERFORM: its first and last unit (a section's are its first and last unit) |
 | `procedure_unit(target, unit)` | procedure name: the paragraph so named, else the section's first unit |
+| `field_region(cell, region)` | cell's storage region: `working_storage`, `linkage`, `file` and the rest |
+| `initial_value(cell, offset, length, value)` | bytes of an elementary cell the initial image (`initial_image`) gives a value before any statement runs |
+| `cfg_value(node, cell, offset, length, value)`, `cfg_value_reason(node, cell, offset, length, reason)` | what a node's write puts in the innermost cell holding its bytes, as `writes_of` gives it: a literal fitted to its target, or why it has none (`not-a-literal`, `from-file`, `from-callee`, `unmodelled`, ...); a MOVE from LINKAGE bytes no constant locates says `inbound-linkage`. A write through a computed subscript locates no bytes and says nothing |
+| `cfg_carries(node, cell, offset, length, source, source_offset, source_length, right)` | a MOVE from a field: the target bytes it carries the source's values into, the source's bytes, and whether they land right-justified (`carried_moves`) |
 
 The rest of the tables are the generated tree.
 
@@ -126,6 +130,17 @@ and `#d` start the program's statements, sections and paragraphs, `#f12` is the 
   verb: a WRITE or REWRITE's record or FROM (FILE), a SEND MAP's FROM or else its output record,
   unless MAPONLY (MAP), a WRITEQ TS or TD's FROM (TS_QUEUE, TD_QUEUE), a START's FROM (TRANSID).
   A sink is a read of what it sends.
+- **Definers** (`Definers.qll`). The writes each read can see, by dataflow over SSA and through
+  PERFORMs, never into another statement's write. And which reads can see storage as it was
+  before any statement ran: along SSA from the program's start, and past each PERFORM whose
+  range has a path that leaves the bytes alone.
+- **Values** (`Values.qll`). A read is cut into pieces where the writes that can reach its
+  bytes change and where a slice of it begins or ends, as cobble's fixpoint cuts it. A piece's
+  values come from each definer holding all of its bytes: a literal, sliced, or the values a MOVE
+  carries from its source at that node, refitted; from the start, the initial image. A definer
+  that does not hold the piece, or a MOVE that carries only doubt about its source, says the
+  bytes were written with no value (`not-a-literal`, or `inbound-linkage` in LINKAGE); the start
+  without an initial value says `uninitialised`, or `inbound-linkage` in LINKAGE.
 
 ## Running it
 
@@ -144,23 +159,32 @@ The extractor's `autobuild.sh` runs `cobble-parse-corpus` and then this command.
 config's are. A QL test directory carries its own config; `ql/test/flows/` caches its ASG in
 `cobble/out-codeql-test/`.
 
-`ql/src/diagnostics/` holds five tables for comparing with cobble's fixpoint: `Transfers.ql`
+`ql/src/diagnostics/` holds six tables for comparing with cobble's fixpoint: `Transfers.ql`
 (each transfer at cobble's node id, with both cells' records and bytes), `OriginWrites.ql` (each
 origin write, with its origin and target cell), `ReachingDefinitions.ql` (for each node's copy
 from a cell or consultation of one, the nodes whose writes reach it, through CodeQL's dataflow
 with no flow into another statement's write), `Sinks.ql` (each sink's cells, with the nodes whose
-writes they carry: the sink's own where it writes them, else what reaches it) and
-`StatementPaths.ql` (every statement's node id and class).
+writes they carry: the sink's own where it writes them, else what reaches it), `Values.ql`
+(each piece of each read with its values and reasons) and `StatementPaths.ql` (every
+statement's node id and class).
 
 `ql/test/flows/` checks one invented program for flow through a PERFORM called twice, through a
 REDEFINES, through a group MOVE, and for a value overwritten in full; `Ast.ql` there reads every
-MOVE's source and first target from the generated tree.
+MOVE's source and first target from the generated tree. `ql/test/values/` checks values and
+reasons: a literal fitted to its target, a MOVE into a JUSTIFIED field, a numeric literal, a MOVE
+from LINKAGE through a computed bound, a MOVE from bytes never written, a group read in two
+pieces, and the start seen past a PERFORM whose range may leave a field alone.
 
 ## Limits
 
 - A computed subscript names every occurrence. cobble's fixpoint writes it as one span from the
   first occurrence to the last, which also covers the other fields between them, so it finds
   definers CodeQL does not (COCRDLIC's screen rows).
+- Values are more exact than cobble's fixpoint's in three ways, which are its bounds, not
+  rules: a MOVE source the fixpoint looks up only under its own extent (`exact_values`), so a
+  field read out of a record a file filled says `not-a-literal` there; a stored value's reasons,
+  which a join widens over the whole stored extent, so a narrow read of it can inherit
+  `uninitialised` from bytes it does not cover; and at most 32 values (`over-budget`).
 - Each member's first program only. No CALL, LINK or XCTL between programs.
 - PERFORM ranges are assumed to nest.
 - Cells have no source location.

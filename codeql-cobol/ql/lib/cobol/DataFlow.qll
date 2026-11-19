@@ -60,12 +60,15 @@ predicate stmtAtom(Stmt s, Field f, Atom a) {
   else any()
 }
 
+pragma[nomagic]
+private predicate fieldAtomIndex(Field f, Program p, string rec, int i) {
+  p = f.getProgram() and
+  rec = f.getRecord() and
+  i = [boundaryRank(p, rec, f.getStart()) .. boundaryRank(p, rec, f.getEnd()) - 1]
+}
+
 predicate fieldAtom(Field f, Atom a) {
-  exists(Program p, string rec |
-    p = f.getProgram() and
-    rec = f.getRecord() and
-    a = TAtomC(p, rec, [boundaryRank(p, rec, f.getStart()) .. boundaryRank(p, rec, f.getEnd()) - 1])
-  )
+  exists(Program p, string rec, int i | fieldAtomIndex(f, p, rec, i) and a = TAtomC(p, rec, i))
 }
 
 private predicate directAccess(Scope sc, Atom a) {
@@ -127,6 +130,9 @@ private predicate graphAtom(GraphNode g, Field f, Atom a) {
   or
   cfg_consults(g, f) and fieldAtom(f, a)
 }
+
+/** An atom of `f` that the node `g` reads. */
+predicate readAtom(GraphNode g, Field f, Atom a) { graphReads(g, f) and graphAtom(g, f, a) }
 
 predicate nodeWrites(CfgNode n, Atom a, boolean certain) {
   exists(Field f, boolean weak, GraphNode g |

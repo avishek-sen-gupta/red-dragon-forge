@@ -98,6 +98,27 @@ ORIGINS = """\
            GOBACK.
 """
 
+VALS = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. VALS.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 PGM PIC X(8) VALUE 'SUBPGM'.
+       01 NAME PIC X(4).
+       01 RIGHT-NAME PIC X(10) JUSTIFIED RIGHT.
+       01 N PIC 9(2).
+       01 COPY-LK PIC X(4).
+       LINKAGE SECTION.
+       01 LK PIC X(4).
+       PROCEDURE DIVISION USING LK.
+       MAIN-PARA.
+           MOVE 'AB' TO NAME.
+           MOVE PGM TO RIGHT-NAME.
+           MOVE 1 TO N.
+           MOVE LK(1:N) TO COPY-LK.
+           GOBACK.
+"""
+
 ROW = re.compile(r"^(\w+)\((.*)\)$")
 Tables = dict[str, set[tuple[str, ...]]]
 
@@ -123,18 +144,16 @@ def corpus(tmp_path_factory: pytest.TempPathFactory) -> Path:
     root = tmp_path_factory.mktemp("codeql")
     (root / "src").mkdir()
     (root / "asg").mkdir()
-    source = root / "src" / "SHAPES.cbl"
-    source.write_text(SHAPES, encoding="utf-8")
-    parsed = parse_one(
-        Job(source, root / "asg" / "SHAPES.json"), str(_bridge_jar()), (), ("cpy",)
-    )
-    assert parsed.ok, parsed.error
-    origins = root / "src" / "ORIGINS.cbl"
-    origins.write_text(ORIGINS, encoding="utf-8")
-    parsed = parse_one(
-        Job(origins, root / "asg" / "ORIGINS.json"), str(_bridge_jar()), (), ("cpy",)
-    )
-    assert parsed.ok, parsed.error
+    for name, text in (("SHAPES", SHAPES), ("ORIGINS", ORIGINS), ("VALS", VALS)):
+        source = root / "src" / f"{name}.cbl"
+        source.write_text(text, encoding="utf-8")
+        parsed = parse_one(
+            Job(source, root / "asg" / f"{name}.json"),
+            str(_bridge_jar()),
+            (),
+            ("cpy",),
+        )
+        assert parsed.ok, parsed.error
     (root / "src" / "BROKEN.cbl").write_text("not cobol\n", encoding="utf-8")
     (root / "asg" / "BROKEN.fail").write_text("parse failed\n", encoding="utf-8")
     config = root / "corpus.toml"
@@ -183,6 +202,7 @@ def test_a_member_is_written_as_its_fields_paragraphs_and_statements(
     source = str((corpus / "src" / "SHAPES.cbl").resolve())
     main = "#c0_1_0_1"
     locations = tables.pop("locations_default")
+    assert {row[1] for row in tables.pop("field_region")} == {'"working_storage"'}
     generated = {
         table: tables.pop(table)
         for table in tuple(tables)
@@ -373,6 +393,45 @@ def test_a_read_a_condition_set_a_call_and_cics_operands_name_their_cells(
     }
 
 
+def test_storage_values_are_the_initial_image_and_what_each_write_puts(
+    corpus: Path,
+) -> None:
+    """A VALUE is the initial image; a quoted literal lands fitted in its target, a
+    MOVE from a field carries the source's values, right-justified into a JUSTIFIED
+    field, and a numeric literal is not a literal; a MOVE from LINKAGE bytes no
+    constant locates carries only that a caller owns them; each cell says its
+    region."""
+    tables = _tables((corpus / "trap" / "VALS.trap").read_text(encoding="utf-8"))
+    cells = {row[0]: row[2] for row in tables["fields"]}
+    named = {
+        "initial_value": {(cells[row[0]], *row[1:]) for row in tables["initial_value"]},
+        **{
+            table: {(cells[row[1]], *row[2:]) for row in tables[table]}
+            for table in ("cfg_value", "cfg_value_reason")
+        },
+    }
+    assert named == {
+        "initial_value": {('"PGM"', "0", "8", '"SUBPGM  "')},
+        "cfg_value": {('"NAME"', "0", "4", '"AB  "')},
+        "cfg_value_reason": {
+            ('"N"', "0", "2", '"not-a-literal"'),
+            ('"COPY-LK"', "0", "4", '"inbound-linkage"'),
+        },
+    }
+    assert {
+        (cells[row[1]], row[2], row[3], cells[row[4]], row[5], row[6], row[7])
+        for row in tables["cfg_carries"]
+    } == {('"RIGHT-NAME"', "0", "10", '"PGM"', "0", "8", "true")}
+    assert {(cells[row[0]], row[1]) for row in tables["field_region"]} == {
+        ('"PGM"', '"working_storage"'),
+        ('"NAME"', '"working_storage"'),
+        ('"RIGHT-NAME"', '"working_storage"'),
+        ('"N"', '"working_storage"'),
+        ('"COPY-LK"', '"working_storage"'),
+        ('"LK"', '"linkage"'),
+    }
+
+
 def test_the_corpus_writes_its_prefix_skips_failures_and_archives_sources(
     corpus: Path,
 ) -> None:
@@ -380,6 +439,7 @@ def test_the_corpus_writes_its_prefix_skips_failures_and_archives_sources(
     assert sorted(p.name for p in (corpus / "trap").iterdir()) == [
         "ORIGINS.trap",
         "SHAPES.trap",
+        "VALS.trap",
         "prefix.trap",
     ]
     assert (corpus / "trap" / "prefix.trap").read_text(encoding="utf-8") == (

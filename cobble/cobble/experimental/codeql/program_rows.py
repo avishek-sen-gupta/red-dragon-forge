@@ -5,6 +5,7 @@ from itertools import groupby
 
 from cobble.dataflow.fields.extent import cell_index
 from cobble.dataflow.fields.undeclared import with_undeclared
+from cobble.dataflow.fixpoint.fixpoint import program_statements
 from cobble.dataflow.layout import Cell, program_records
 from cobble.dataflow.srccfg.cfg import NO_SPAN, span_of
 from cobble.dataflow.srccfg.conditions import declared_conditions
@@ -17,6 +18,7 @@ from cobble.experimental.codeql.schema.cobol_schema import cobol_schema
 from cobble.experimental.codeql.schema.schema import Schema, table_of
 from cobble.experimental.codeql.scope import Ends, Scope
 from cobble.experimental.codeql.trap_row import TrapRow, define
+from cobble.experimental.codeql.value_rows import initial_rows, value_rows
 from cobol_asg.asg_types import CobolASG, CobolSection
 from cobol_asg.pic_parser import parse_pic
 
@@ -69,6 +71,8 @@ def program_rows(parsed: CobolASG, source: str) -> Rows:
             for n, (label, unit) in enumerate(units)
         ),
         *cfg_rows(asg, cfg, lowered, scope, PROGRAM),
+        *initial_rows(records, scope),
+        *value_rows(program_statements(asg, cfg), lowered.nodes, scope),
     )
 
 

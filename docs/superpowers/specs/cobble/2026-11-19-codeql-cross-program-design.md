@@ -1,0 +1,100 @@
+# CodeQL COBOL across programs: values, jumps, targets and links
+
+The user chose (2026-11-19) to port cobble's `combine` to QL rather than take its targets as
+facts: CodeQL works out which program a `CALL WS-PGM` or `XCTL PROGRAM(CDEMO-TO-PROGRAM)`
+reaches, and which bytes cross, so its answer is a check on cobble's, not a copy of it.
+
+## What parity means
+
+Against cobble on CardDemo, freshly parsed, `combine` run with no hop limit (it finishes in
+about a second; with `--max-hops 5` nine targets also say `hop-limit`):
+
+| cobble output | rows | compared per |
+|---|---|---|
+| fixpoint `defs.jsonl` `values`, `reasons` | 5,958 reads | program, node, cell |
+| fixpoint `jumps.jsonl` | 112 jumps (ENTRY, EXIT, CALL, XCTL, RETURN_TRANSID) | program, node, kind |
+| fixpoint `targets.jsonl` | 75 sites | program, node, kind: candidates, reasons |
+| combine `targets.jsonl` | 75 sites | the same, after crossing programs |
+| combine `links.jsonl` | 94 crossings | caller, node, transfer, callee: both windows, returns |
+
+## How cobble gets there
+
+`combine` reads no source. It reads what the fixpoint wrote per program: each jump with its
+areas (`jumps.jsonl`), and what the settled state holds at each node: a `Fact` of values,
+writers and reasons. It walks back from a target's operand through the writers that copy into
+it until it reaches a value, or a stop: bytes received from a caller (`inbound-linkage`),
+returned by a CALL or LINK, or retrieved. Each stop is answered from the other programs: the
+callers' areas over every link into the program, the callee's state at its exit. New targets
+add new links, so it runs in rounds until no edge is new.
+
+The fixpoint's values are per write. A MOVE of a quoted literal writes it fitted to the target
+(`fitted`, or `fitted_right` for JUSTIFIED); a MOVE from a field carries the source's values,
+refitted. A figurative constant or a numeric literal in a MOVE is `not-a-literal`; a VALUE
+clause, figuratives included, is the initial image (`initial_image`). A read takes its value
+from a valued extent that contains it, sliced; a read straddling two valued extents has none.
+A read with no value says why: `inbound-linkage` in LINKAGE, else `not-a-literal` where a
+write without a value reached it and `uninitialised` where some path has it never written;
+`from-file`, `from-callee`, `unmodelled` come from the verbs that write that way.
+
+## Units, in order
+
+Each lands as one commit with its facts test, its QL, its diagnostic and its comparison.
+
+1. **Values within a program.** Facts: `initial_value(cell, bytes)` from `initial_image`, and
+   the bytes a literal write puts in its cell as `transfer.py` fits them. QL: a read's values
+   from its definers, recursively through copies; reasons as above. `Values.ql` against
+   `defs.jsonl`.
+2. **Jumps.** QL reads each CALL, LINK, XCTL, RETURN TRANSID, START, RETRIEVE, ENTRY and EXIT
+   with its target and transid operands and its areas (USING, COMMAREA, FROM, INTO, LINKAGE),
+   as `jumps/facts.py` reads them, verb by verb, as sinks are read. `Jumps.ql` against
+   `jumps.jsonl`.
+3. **Targets within a program.** A target's candidates are its operand's values, trimmed; a
+   file site's too. `Targets.ql` against the fixpoint's `targets.jsonl`.
+4. **Across programs.** Facts: the CSD's transaction-to-program map. QL: a stop's values from
+   the other programs -- received from every caller's area, returned from the callee's exit,
+   retrieved from a START -- over links whose callees are themselves resolved targets.
+   `Links.ql` and `LinkedTargets.ql` against `combine`.
+
+## Rulings
+
+- **Plain recursion, not the dataflow library, for values.** A target's callee depends on
+  values, and values cross programs over callees, so the call graph and the values are one
+  least fixpoint. QL's positive recursion states that directly, with no rounds and no hop
+  count; the shared dataflow library cannot take a call graph that depends on its own flow.
+  Within a program, values follow the definers `ReachingDefinitions.ql` already matches, which
+  carry PERFORM context. Cost if wrong: unit 1 measures the result against the fixpoint, so an
+  imprecision shows there before anything builds on it.
+- **COBOL's value rules stay in cobble.** How a literal lands in a cell (fitting, JUSTIFIED,
+  figurative repetition, numeric digits) and what VALUE puts in storage are cobble's facts, as
+  names and the CFG are.
+- **The fixpoint's bounds are reported, not mimicked.** `MAX_VALUES` (32, `over-budget`: one
+  CardDemo read) and the `exact_values` shortcut in MOVE chains (a source read through another
+  name than the one its value was declared under reports a reason, not the value) are
+  engineering bounds. Where CodeQL is more exact, the difference is listed, as COCRDLIC's
+  clamped spans are.
+- **Compared against `combine` with no hop limit.** The least fixpoint has no hop count;
+  `--max-hops` is cobble's bound for corpora where the exact run does not finish.
+- **What a read can see before any statement ran is plain recursion, not a dataflow source.**
+  A start source writing every atom made the shared library's local-flow step a cross product
+  of all flow nodes: reaching definitions went from about a minute to 45 on CardDemo, values to
+  71. The start passes a PERFORM only when the range has a path that leaves the atom alone,
+  which is a fact about the range wherever it is called from, so no call context is needed.
+  The rows are identical on eight CardDemo programs; the whole cycle runs in about 9 minutes.
+- **Reads are compared piece by piece.** The fixpoint cuts a read where the entries holding
+  its bytes begin and end; CodeQL cuts where the set of definers changes from one atom to the
+  next, and at slice edges. Every fixpoint piece but one table read through computed
+  subscripts (COCRDLIC) has a CodeQL piece of the same bytes.
+- **A MOVE carrying only doubt lands as written bytes.** The fixpoint stores no entry for a
+  carried set with no value whose reasons are only `not-a-literal` and `uninitialised`, so the
+  target reads back as written; a set with a value or any other reason is stored whole,
+  `uninitialised` included. QL decides which a set is from its reasons with carried ones
+  taken unchanged, a stratum below the reasons it reports, since negating the reasons
+  themselves would recurse through loops. 59 CardDemo MOVEs carry `uninitialised` beside
+  another reason.
+- **Unit 1's remaining differences are the fixpoint's bounds.** Looking a MOVE source up by
+  its exact extent, as `exact_values` does, in a scratch query turns 338 of the 499
+  differences into matches. Every one of the 160 left is the fixpoint giving a superset of
+  CodeQL's reasons, from a join that widens a stored entry's reasons over its whole extent
+  (the mechanism checked by probing the fixpoint's state on COCRDUPC; the rest have the same
+  shape: the same definers, more reasons), and one read is over budget.
+

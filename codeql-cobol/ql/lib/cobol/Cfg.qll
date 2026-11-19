@@ -61,6 +61,8 @@ class Scope extends TScope {
 
   predicate exitsAt(GraphNode n) { this = TRange(_, n) }
 
+  predicate isMain() { this = TMain(_) }
+
   string toString() {
     exists(Program p | this = TMain(p) and result = p.getName())
     or
