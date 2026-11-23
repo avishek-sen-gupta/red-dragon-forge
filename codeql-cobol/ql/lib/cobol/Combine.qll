@@ -16,6 +16,7 @@ private predicate linkageRecord(Program p, string rec) {
 }
 
 /** The bytes of `f` an operand of `s` names: its constant slice, else the cell. */
+bindingset[s, f]
 private predicate accessed(Stmt s, Field f, int lo, int hi) {
   if slicedAccess(s, f, _, _)
   then slicedAccess(s, f, lo, hi)

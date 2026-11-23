@@ -179,8 +179,12 @@ cd codeql-cobol
 ./tools/codeql/codeql test run ql/test --search-path=extractors --additional-packs=tools/ql:ql
 COBOL_CORPUS_CONFIG=$PWD/../cobble/config/carddemo.toml ./tools/codeql/codeql database create db-carddemo \
   --language=cobol --search-path=extractors --source-root=../vendor/carddemo/app/cbl --build-mode=none
-./tools/codeql/codeql query run ql/src/Flows.ql --database=db-carddemo --additional-packs=tools/ql:ql
+./tools/codeql/codeql query run ql/src/Flows.ql --database=db-carddemo --additional-packs=tools/ql:ql --threads=0
+./tools/codeql/codeql database run-queries db-carddemo ql/src --additional-packs=tools/ql:ql --threads=0
 ```
+
+`--threads=0` uses every core; CodeQL's default is one thread. `database run-queries` evaluates
+every query in one run, so what they share is evaluated once.
 
 The extractor's `autobuild.sh` runs `cobble-parse-corpus` and then this command. Both need
 `bridge-env.sh`. The config is `COBOL_CORPUS_CONFIG`, an absolute path, or else
@@ -239,6 +243,14 @@ bytes its caller named it by.
 - PERFORM ranges are assumed to nest.
 - Cells have no source location.
 - An online CardDemo program is about 135,000 rows, most of them layout cells; all of CardDemo
-  extracts in about 77 s. `Links.ql` and `LinkedTargets.ql` each evaluate in about 15 minutes there.
+  extracts in about 15 s. On 18 cores every query in `ql/src` evaluates in about 28 s from a cold
+  cache in one run.
+- The shared dataflow library's `localFlowExit` joins every node with every other on the access
+  path, which in COBOL is always empty, so its cost grows with the square of the dataflow nodes in
+  the database: 19 billion rows on CardDemo. Joining the step first takes the run above to about
+  11 s, and eight renamed copies of CardDemo to about 97 s; that change is to the library, not
+  to this pack.
+- `Combine.qll` joins a record name across programs, and copybooks give many programs the same
+  record names: its recursion takes 0.3 s on CardDemo and 23 s on eight copies.
 - No commit hook or CI job runs the QL test: neither has the CodeQL CLI. The facts tests run in
   cobble's suite.

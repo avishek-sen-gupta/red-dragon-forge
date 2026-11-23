@@ -37,8 +37,10 @@ and one with a variable subscript -- ``WS-IDX`` above -- picks every cell sharin
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass, replace
 from functools import reduce
+from itertools import accumulate, chain
 from operator import attrgetter
 from types import MappingProxyType
 
@@ -273,65 +275,67 @@ class Record:
 _Cells = tuple[Cell, ...]
 
 
+def _span(node: _Sized) -> int:
+    """How many cells one occurrence of ``node`` emits: itself and every occurrence below it."""
+    return 1 + sum(max(kid.field.occurs, 1) * _span(kid) for kid in node.children)
+
+
 def _occurrence(
-    cells: _Cells,
     node: _Sized,
     record: str,
     path: tuple[str, ...],
     start: int,
     index: tuple[int, ...],
     parent: int,
-) -> _Cells:
+    ordinal: int,
+) -> Iterator[Cell]:
     """One occurrence of ``node``, followed by its children under that occurrence.
 
     The children have to be walked per occurrence rather than once, because each
     occurrence puts them at different offsets -- that is the whole content of
     OCCURS.
     """
-    ordinal = len(cells)
-    here = (
-        *cells,
-        Cell(
-            record=record,
-            name=node.field.name,
-            path=path,
-            start=start,
-            length=node.unit,
-            level=node.field.level,
-            pic=node.field.pic,
-            usage=node.field.usage,
-            redefines=node.field.redefines,
-            occurs=node.field.occurs,
-            value=node.field.value,
-            value_is_figurative=node.field.value_is_figurative,
-            justified=node.field.justified_right,
-            sign_leading=node.field.sign_leading,
-            sign_separate=node.field.sign_separate,
-            filler=node.field.filler,
-            index=index,
-            decl=node.decl,
-            ordinal=ordinal,
-            parent=parent,
-        ),
+    yield Cell(
+        record=record,
+        name=node.field.name,
+        path=path,
+        start=start,
+        length=node.unit,
+        level=node.field.level,
+        pic=node.field.pic,
+        usage=node.field.usage,
+        redefines=node.field.redefines,
+        occurs=node.field.occurs,
+        value=node.field.value,
+        value_is_figurative=node.field.value_is_figurative,
+        justified=node.field.justified_right,
+        sign_leading=node.field.sign_leading,
+        sign_separate=node.field.sign_separate,
+        filler=node.field.filler,
+        index=index,
+        decl=node.decl,
+        ordinal=ordinal,
+        parent=parent,
     )
-    return reduce(
-        lambda seen, kid: _walk(
-            seen, kid, record, path, start + kid.offset, index, ordinal
-        ),
-        node.children,
-        here,
+    firsts = accumulate(
+        (max(kid.field.occurs, 1) * _span(kid) for kid in node.children),
+        initial=ordinal + 1,
+    )
+    yield from chain.from_iterable(
+        _walk(kid, record, path, start + kid.offset, index, ordinal, first)
+        for kid, first in zip(node.children, firsts, strict=False)
     )
 
 
 def _walk(
-    cells: _Cells,
     node: _Sized,
     record: str,
     path: tuple[str, ...],
     base: int,
     index: tuple[int, ...],
     parent: int,
-) -> _Cells:
+    ordinal: int,
+) -> Iterator[Cell]:
     """``node`` materialised: one cell per occurrence, each with its own subtree.
 
     Occurrence ``i`` starts ``i * unit`` past the first, one row's width and the
@@ -343,18 +347,18 @@ def _walk(
     so it needs no separate path through here.
     """
     here = (*path, node.field.name)
-    return reduce(
-        lambda seen, i: _occurrence(
-            seen,
+    span = _span(node)
+    return chain.from_iterable(
+        _occurrence(
             node,
             record,
             here,
             base + i * node.unit,
             (*index, i + 1) if node.field.occurs else index,
             parent,
-        ),
-        range(max(node.field.occurs, 1)),
-        cells,
+            ordinal + i * span,
+        )
+        for i in range(max(node.field.occurs, 1))
     )
 
 
@@ -364,7 +368,7 @@ def record_cells(root: CobolField) -> _Cells:
     In declaration order, depth first, with each occurrence's subtree following it,
     so a cell's ``parent`` is always already present when it is emitted.
     """
-    return _walk((), _declared(_sized(root)), root.name, (), 0, (), -1)
+    return tuple(_walk(_declared(_sized(root)), root.name, (), 0, (), -1, 0))
 
 
 _Cluster = tuple[CobolField, ...]

@@ -588,7 +588,12 @@ predicate jumpArea(Stmt s, int param, Field area) {
   exists(string kind | jump(s, kind, _) | param = 0 and names_area(option(s, areaOption(kind)), area))
 }
 
+/** A field some jump hands over, or some program is entered with. */
+private predicate handedOver(Field area) { jumpArea(_, _, area) or received_area(_, _, area) }
+
+pragma[nomagic]
 private predicate inside(Field area, Field f) {
+  handedOver(area) and
   f.getProgram() = area.getProgram() and
   f.getRecord() = area.getRecord() and
   area.getStart() <= f.getStart() and

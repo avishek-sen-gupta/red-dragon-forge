@@ -15,13 +15,21 @@ private string definersOf(GraphNode n, Atom a) {
   readAtom(n, _, a) and result = concat(GraphNode d | definer(n, a, d) | d.getId(), " ")
 }
 
+pragma[nomagic]
+private predicate endsAt(GraphNode n, Field f, int b, string defs) {
+  exists(Atom a | readAtom(n, f, a) and b = a.getHi() and defs = definersOf(n, a))
+}
+
+pragma[nomagic]
+private predicate startsAt(GraphNode n, Field f, int b, string defs) {
+  exists(Atom a | readAtom(n, f, a) and b = a.getLo() and defs = definersOf(n, a))
+}
+
 private predicate cut(GraphNode n, Field f, int b) {
   exists(Atom a | readAtom(n, f, a) |
-    b = a.getLo() and
-    not exists(Atom p | readAtom(n, f, p) and p.getHi() = b and definersOf(n, p) = definersOf(n, a))
+    b = a.getLo() and not endsAt(n, f, b, definersOf(n, a))
     or
-    b = a.getHi() and
-    not exists(Atom q | readAtom(n, f, q) and q.getLo() = b and definersOf(n, q) = definersOf(n, a))
+    b = a.getHi() and not startsAt(n, f, b, definersOf(n, a))
     or
     exists(int lo, int hi | slicedAccess(n.getStmt(), f, lo, hi) | b = [lo, hi] and a.getLo() = b)
   )
@@ -52,6 +60,15 @@ predicate readBytes(GraphNode n, string rec, int lo, int hi) {
 bindingset[c, offset, length]
 private predicate placed(Field c, int offset, int length, string rec, int lo, int hi) {
   rec = c.getRecord() and lo = c.getStart() + offset and hi = lo + length
+}
+
+/** The initial image puts `iv` in bytes `lo` up to `hi` of record `rec` of program `p`. */
+private predicate initialImage(Program p, string rec, int lo, int hi, string iv) {
+  exists(Field c, int offset, int length |
+    initial_value(c, offset, length, iv) and
+    p = c.getProgram() and
+    placed(c, offset, length, rec, lo, hi)
+  )
 }
 
 private predicate literalWrite(GraphNode d, string rec, int lo, int hi, string v) {
@@ -166,11 +183,9 @@ predicate value(GraphNode n, string rec, int lo, int hi, string v) {
   )
   or
   fromStart(n, rec, lo, hi) and
-  exists(Field c, int offset, int length, string iv, string wrec, int wlo, int whi |
-    initial_value(c, offset, length, iv) and
-    c.getProgram() = n.getProgram() and
-    placed(c, offset, length, wrec, wlo, whi) and
-    covers(wrec, wlo, whi, rec, lo, hi)
+  exists(string iv, int wlo, int whi |
+    initialImage(n.getProgram(), rec, wlo, whi, iv) and
+    covers(rec, wlo, whi, rec, lo, hi)
   |
     v = iv.substring(lo - wlo, hi - wlo)
   )
@@ -189,11 +204,9 @@ private predicate ownReason(GraphNode n, string rec, int lo, int hi, string r) {
   )
   or
   fromStart(n, rec, lo, hi) and
-  not exists(Field c, int offset, int length, string wrec, int wlo, int whi |
-    initial_value(c, offset, length, _) and
-    c.getProgram() = n.getProgram() and
-    placed(c, offset, length, wrec, wlo, whi) and
-    covers(wrec, wlo, whi, rec, lo, hi)
+  not exists(int wlo, int whi |
+    initialImage(n.getProgram(), rec, wlo, whi, _) and
+    covers(rec, wlo, whi, rec, lo, hi)
   ) and
   if inLinkage(n, rec) then r = "inbound-linkage" else r = "uninitialised"
 }
