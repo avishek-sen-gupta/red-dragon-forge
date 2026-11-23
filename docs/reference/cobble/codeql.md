@@ -134,8 +134,11 @@ and `#d` start the program's statements, sections and paragraphs, `#f12` is the 
   verb: a WRITE or REWRITE's record or FROM (FILE), a SEND MAP's FROM or else its output record,
   unless MAPONLY (MAP), a WRITEQ TS or TD's FROM (TS_QUEUE, TD_QUEUE), a START's FROM (TRANSID).
   A sink is a read of what it sends.
-- **Definers** (`Definers.qll`). The writes each read can see, by dataflow over SSA and through
-  PERFORMs, never into another statement's write. And which reads can see storage as it was
+- **Definers** (`Definers.qll`). The writes each read can see, by recursion over SSA and through
+  PERFORMs, never into another statement's write. A range's exit is read once per PERFORM of it,
+  so what the range passes through comes back only to the PERFORM that brought it in. Not the
+  shared dataflow library: with every write a source and every read a sink, its `localFlowExit`
+  joins every node with every other, since the access path in COBOL is always empty. And which reads can see storage as it was
   before any statement ran: along SSA from the program's start, and past each PERFORM whose
   range has a path that leaves the bytes alone.
 - **Jumps** (`Ast.qll`, `jump`; `DataFlow.qll`, `jumpExtent`). Where control or data goes to
@@ -243,14 +246,10 @@ bytes its caller named it by.
 - PERFORM ranges are assumed to nest.
 - Cells have no source location.
 - An online CardDemo program is about 135,000 rows, most of them layout cells; all of CardDemo
-  extracts in about 15 s. On 18 cores every query in `ql/src` evaluates in about 28 s from a cold
-  cache in one run.
-- The shared dataflow library's `localFlowExit` joins every node with every other on the access
-  path, which in COBOL is always empty, so its cost grows with the square of the dataflow nodes in
-  the database: 19 billion rows on CardDemo. Joining the step first takes the run above to about
-  11 s, and eight renamed copies of CardDemo to about 97 s; that change is to the library, not
-  to this pack.
+  extracts in about 15 s. On 18 cores every query in `ql/src` evaluates in about 9 s from a cold
+  cache in one run (110 core-seconds), and on eight renamed copies of CardDemo in about 76 s (930
+  core-seconds).
 - `Combine.qll` joins a record name across programs, and copybooks give many programs the same
-  record names: its recursion takes 0.3 s on CardDemo and 23 s on eight copies.
+  record names: its recursion takes 0.3 s on CardDemo and 30 s on eight copies.
 - No commit hook or CI job runs the QL test: neither has the CodeQL CLI. The facts tests run in
   cobble's suite.

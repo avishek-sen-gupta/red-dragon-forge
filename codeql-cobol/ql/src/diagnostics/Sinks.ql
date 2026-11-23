@@ -8,23 +8,7 @@
  * @id cobol/sinks
  */
 
-import cobol.DataFlow
-
-private predicate atNode(DataFlow::Node n) {
-  exists(n.getCfgNode().getGraphNode()) and not n.getCfgNode() instanceof PerformCall
-}
-
-module Config implements DataFlow::ConfigSig {
-  predicate isSource(DataFlow::Node n) { n.isWrite() and atNode(n) }
-
-  predicate isSink(DataFlow::Node n) {
-    n.isRead() and sink(n.getCfgNode().getStmt(), _, _)
-  }
-
-  predicate isBarrierIn(DataFlow::Node n) { n.isWrite() and atNode(n) }
-}
-
-module Flow = DataFlow::Global<Config>;
+import cobol.Definers
 
 private predicate selfWritten(GraphNode g, Atom a) {
   exists(Field w | graphWrites(g, w, false) and fieldAtom(w, a))
@@ -39,12 +23,7 @@ where
     selfWritten(at, a) and definer = at.getId()
     or
     not selfWritten(at, a) and
-    exists(DataFlow::Node write, DataFlow::Node read |
-      Flow::flow(write, read) and
-      read.getCfgNode().getGraphNode() = at and
-      read.getAtom() = a and
-      definer = write.getCfgNode().getGraphNode().getId()
-    )
+    exists(GraphNode writer | definer(at, a, writer) and definer = writer.getId())
   )
 select f.getProgram().getName(), at.getId(), kind, f.getName(), f.getRecord(), f.getStart(),
   f.getLength(), definer
