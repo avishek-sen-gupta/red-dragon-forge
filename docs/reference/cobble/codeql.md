@@ -246,10 +246,12 @@ bytes its caller named it by.
 - PERFORM ranges are assumed to nest.
 - Cells have no source location.
 - An online CardDemo program is about 135,000 rows, most of them layout cells; all of CardDemo
-  extracts in about 15 s. On 18 cores every query in `ql/src` evaluates in about 9 s from a cold
-  cache in one run (110 core-seconds), and on eight renamed copies of CardDemo in about 76 s (930
-  core-seconds).
-- `Combine.qll` joins a record name across programs, and copybooks give many programs the same
-  record names: its recursion takes 0.3 s on CardDemo and 30 s on eight copies.
+  extracts in about 15 s. On 18 cores every query in `ql/src` evaluates in about 12 s from a cold
+  cache in one run (130 core-seconds), on eight renamed copies of CardDemo in about 67 s (790), and
+  on sixteen in about 165 s (1,640): the work grows with the corpus.
+- Copybooks give many programs the same record names, so a join on a record name alone grows
+  with the square of the corpus. `Combine.qll` keys each such join on the program or the node.
+- `Flows.ql` runs the shared dataflow library, whose `parameterValueFlowCand` is a third of the
+  suite's evaluation time.
 - No commit hook or CI job runs the QL test: neither has the CodeQL CLI. The facts tests run in
   cobble's suite.

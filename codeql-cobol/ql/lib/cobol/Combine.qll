@@ -87,26 +87,42 @@ private predicate receivedFact(GraphNode n, string rec, int flo, int fhi) {
   )
 }
 
+/** The program `p` was entered with bytes `start` up to `end` of `rec` as parameter `param`. */
+pragma[nomagic]
+private predicate receivedBytes(Program p, string rec, int param, int start, int end) {
+  exists(Field a |
+    received_area(p, param, a) and rec = a.getRecord() and start = a.getStart() and end = a.getEnd()
+  )
+}
+
 /** The first parameter the program was entered with whose area holds the bytes. */
 bindingset[lo, hi]
 private int receivedParam(Program p, string rec, int lo, int hi) {
   result =
-    min(int param, Field a |
-      received_area(p, param, a) and a.getRecord() = rec and a.getStart() <= lo and hi <= a.getEnd()
+    min(int param, int start, int end |
+      receivedBytes(p, rec, param, start, end) and start <= lo and hi <= end
     |
       param
     )
+}
+
+/** The CALL or LINK at `w` hands over bytes `start` up to `end` of `rec` as parameter `param`. */
+pragma[nomagic]
+private predicate handedBytes(GraphNode w, string rec, int param, int start, int end) {
+  exists(Field a |
+    jumpArea(w.getStmt(), param, a) and
+    rec = a.getRecord() and
+    start = a.getStart() and
+    end = a.getEnd()
+  )
 }
 
 /** The first parameter of the CALL or LINK at `w` whose area holds the bytes. */
 bindingset[lo, hi]
 private int returnedParam(GraphNode w, string rec, int lo, int hi) {
   result =
-    min(int param, Field a |
-      jumpArea(w.getStmt(), param, a) and
-      a.getRecord() = rec and
-      a.getStart() <= lo and
-      hi <= a.getEnd()
+    min(int param, int start, int end |
+      handedBytes(w, rec, param, start, end) and start <= lo and hi <= end
     |
       param
     )
@@ -309,10 +325,11 @@ predicate answerValue(GraphNode n, string part, string v) {
   or
   part = "transid" and jumpTransidText(n.getStmt(), v)
   or
+  exists(string rec, int lo, int hi | question(n, part, rec, lo, hi) | heldValue(n, rec, lo, hi, v))
+  or
+  not question(n, part, _, _, _) and
   exists(Field f, int lo, int hi | factExtent(n, part, _, _, f, lo, hi) |
-    if question(n, part, _, _, _)
-    then heldValue(n, f.getRecord(), lo, hi, v)
-    else value(n, f.getRecord(), lo, hi, v)
+    value(n, f.getRecord(), lo, hi, v)
   )
 }
 
