@@ -85,6 +85,7 @@ cobble-experimental-aggregate-decompose = "cobble.experimental.aggregates.decomp
 cobble-experimental-aggregate-class-share = "cobble.experimental.aggregates.class_share_cli:main"
 cobble-experimental-aggregate-scorecard = "cobble.experimental.aggregates.scorecard_cli:main"
 cobble-experimental-datalog-facts = "cobble.experimental.datalog.facts_cli:main"
+cobble-experimental-codeql-demo = "cobble.experimental.codeql.demo.demo_cli:main"
 cobble-experimental-codeql-facts = "cobble.experimental.codeql.facts_cli:main"
 cobble-experimental-codeql-schema = "cobble.experimental.codeql.schema.schema_cli:main"
 cobble-experimental-reaching-conditions = "cobble.experimental.horn.reaching_conditions_cli:main"

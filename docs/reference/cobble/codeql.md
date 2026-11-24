@@ -10,12 +10,12 @@ the bytes the solver tracks. A statement the parser gains needs no extractor cod
 
 Two parts:
 
-- `cobble/experimental/codeql/` holds the commands `cobble-experimental-codeql-facts` and
-  `cobble-experimental-codeql-schema`. The `.importlinter` contract `codeql-is-a-leaf` lets
-  nothing outside the package import it.
+- `cobble/experimental/codeql/` holds the commands `cobble-experimental-codeql-facts`,
+  `cobble-experimental-codeql-schema` and `cobble-experimental-codeql-demo`. The `.importlinter`
+  contract `codeql-is-a-leaf` lets nothing outside the package import it.
 - `codeql-cobol/` holds the extractor pack (`extractors/cobol/`), the QL library
-  (`ql/lib/`, `forge/cobol-all`), the queries (`ql/src/`) and the QL tests (`ql/test/`). It has
-  no Python, so nothing imports cobble.
+  (`ql/lib/`, `forge/cobol-all`), the queries (`ql/src/`), the demo pack (`ql/demo/`), the QL
+  tests (`ql/test/`) and `demo.sh`. It has no Python, so nothing imports cobble.
 
 Deleting the experiment means deleting both directories, the tests under
 `cobble/tests/experimental/codeql/`, the contract and the entry points.
@@ -208,6 +208,27 @@ dropped values and reasons, and a file site's operand), `Links.ql` (each link be
 programs, with both areas, whether control comes back and whether only linking found it),
 `LinkedTargets.ql` (each site's candidates, dropped values and reasons once programs are
 linked) and `StatementPaths.ql` (every statement's node id and class).
+
+`ql/demo/` asks two questions of a database and draws its graph. `DemoPaths.qll` holds the two
+dataflow configurations, from a READ to a WRITE and from a READ to a DISPLAY, and answers each
+twice. `ReadToWriteFindings.ql` and `ReadToDisplayFindings.ql` give one row per READ and the
+statement its data reaches, with the file read, the record written or the fields displayed, and
+both paragraphs. `ReadToWriteSteps.ql` and `ReadToDisplaySteps.ql` give the steps of those paths,
+each joining the graph nodes of two consecutive path nodes, a range's entry and exit standing at
+its first and last node. `CfgNodes.ql` gives each node the kind it is drawn as (its graph kind, or
+READ, WRITE, REWRITE or DISPLAY) and a label; `CfgEdges.ql` gives every edge.
+
+```bash
+codeql-cobol/demo.sh codeql-cobol/db-carddemo out-demo-<date>-codeql
+```
+
+The script runs the pack and writes into the directory each findings table as text
+(`ReadToWriteFindings.txt`, `ReadToDisplayFindings.txt`), the other results decoded to JSON
+(`results/`), and `graph.html` from `cobble-experimental-codeql-demo --results DIR --output PAGE`.
+The page is the WebGL corpus view (`sfdp` positions, sigma.js): each question's steps are an edge
+kind of their own, so the edge-kind checkboxes show the flows with or without the control flow.
+On CardDemo the pack takes about 10 s and the layout about 2 s; there are 40 flows from a READ to
+a WRITE and 36 to a DISPLAY.
 
 `ql/test/flows/` checks one invented program for flow through a PERFORM called twice, through a
 REDEFINES, through a group MOVE, and for a value overwritten in full; `Ast.ql` there reads every

@@ -1,0 +1,4 @@
+name: forge/cobol-demo
+version: 0.0.1
+dependencies:
+  forge/cobol-all: "*"
